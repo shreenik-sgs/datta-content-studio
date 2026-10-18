@@ -1,0 +1,36 @@
+{
+  "importers": [
+    ".",
+    "apps/distribution-web",
+    "apps/distribution-worker",
+    "apps/distribution-links",
+    "packages/distribution-domain",
+    "packages/distribution-assets",
+    "packages/distribution-contracts",
+    "packages/distribution-db"
+  ],
+  "reachablePackages": 377,
+  "missing": [],
+  "patches": [
+    {
+      "name": "braces@3.0.3",
+      "reachable": []
+    },
+    {
+      "name": "decode-uri-component@0.5.0",
+      "reachable": []
+    },
+    {
+      "name": "http-cache-semantics@4.3.0",
+      "reachable": []
+    },
+    {
+      "name": "image-size@1.2.1",
+      "reachable": []
+    },
+    {
+      "name": "node-forge@1.4.0",
+      "reachable": []
+    }
+  ]
+}

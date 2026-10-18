@@ -1,0 +1,248 @@
+"use client";
+import {
+  type StudioChannel,
+  studioChannelLabel,
+  studioWorkflow,
+  unconfiguredStudioClosingChannels,
+} from "@satsang/distribution-domain";
+import { useState } from "react";
+import { STUDIO_PUBLICATION_LABELS, type StudioDetail, studioMessage } from "../lib/studio-model";
+
+/** Show delivery readiness before approval, and keep the next action above the files. */
+export function StudioPublishing({
+  detail,
+  canPublish,
+  canManage,
+  busy,
+  onPublish,
+  onRefresh,
+}: {
+  detail: StudioDetail;
+  canPublish: boolean;
+  canManage: boolean;
+  busy: boolean;
+  onPublish: (accounts: Partial<Record<StudioChannel, string>>) => void;
+  onRefresh: () => void;
+}) {
+  const { package: value, readiness, publications, blockers } = detail;
+  const [chosen, setChosen] = useState<Partial<Record<StudioChannel, string>>>({});
+  const approved = value.status === "APPROVED";
+  const included = value.outputs.filter((output) => output.included);
+  const unconfiguredClosingChannels = unconfiguredStudioClosingChannels(value.outputs);
+  const channels = [...new Set(included.map((output) => output.channel))];
+  const current = publications.filter((p) => p.packageRevision === value.revision);
+  const complete = studioWorkflow({ package: value, publications }).complete;
+  const pending = current.some((p) => ["QUEUED", "RUNNING", "PROCESSING"].includes(p.status));
+  const uncertain = current.some((p) => p.status === "UNCERTAIN");
+  function destination(channel: StudioChannel) {
+    const connection = readiness.channels.find((item) => item.channel === channel);
+    const pinned = current.find(
+      (p) => p.channel === channel && p.selectedAccountId,
+    )?.selectedAccountId;
+    const id =
+      pinned ?? chosen[channel] ?? connection?.accounts?.find((account) => account.isDefault)?.id;
+    const account = connection?.accounts?.find((account) => account.id === id);
+    return { connection, account, id, pinned };
+  }
+  const configured = channels.every((channel) => {
+    const { connection, account } = destination(channel);
+    return connection?.accounts?.length ? account?.ready : connection?.ready;
+  });
+  const selectionValid = channels.every((channel) => {
+    const { connection, account, id } = destination(channel);
+    return id ? Boolean(account) : !connection?.accounts?.length;
+  });
+  const disabled =
+    busy ||
+    !canPublish ||
+    !selectionValid ||
+    !included.length ||
+    unconfiguredClosingChannels.length > 0 ||
+    blockers.length > 0 ||
+    complete ||
+    pending ||
+    uncertain ||
+    (!value.isTest && !configured);
+  return (
+    <section
+      className="panel"
+      id={`package-publishing-${value.id}`}
+      tabIndex={-1}
+      aria-label="Publishing"
+      style={{ marginBlock: 16, scrollMarginTop: 100 }}
+    >
+      <h3>{approved ? "Step 6 · Publish approved content" : "Publishing after approval"}</h3>
+      <p>
+        {approved
+          ? `Approval saved. ${included.length} approved file${included.length === 1 ? " is" : "s are"} locked for publishing.`
+          : "The generated files still need package approval. Approving the master permissions alone does not approve these files."}
+      </p>
+      {value.isTest ? (
+        <p className="notice" style={{ display: "block" }}>
+          <strong>Test workspace — no videos will be posted to YouTube or other channels.</strong>{" "}
+          You can test the publishing workflow here. Real posting requires a live workspace with
+          publishing enabled and its own verified channel connection; saving credentials here does
+          not turn this test package into a live post.
+        </p>
+      ) : (
+        <p>
+          Approval does not post automatically. Use the publish button below to send the approved
+          files.
+        </p>
+      )}
+      {unconfiguredClosingChannels.length > 0 && (
+        <p>
+          Before publishing, configure the YouTube destination for{" "}
+          {unconfiguredClosingChannels.join(", ")} and update its subscription description. The
+          closing card must match the intended channel.
+        </p>
+      )}
+      <ul>
+        {channels.map((channel) => {
+          const { connection, account, id, pinned } = destination(channel);
+          const outputs = included.filter((output) => output.channel === channel);
+          return (
+            <li key={channel} style={{ marginBlock: 12 }}>
+              <strong>
+                {studioChannelLabel(channel)} · {outputs.length} file
+                {outputs.length === 1 ? "" : "s"}
+              </strong>
+              {channel !== "website" && Boolean(connection?.accounts?.length || id) && (
+                <label>
+                  {studioChannelLabel(channel)} account
+                  <select
+                    value={id ?? ""}
+                    disabled={busy || !canPublish || Boolean(pinned)}
+                    onChange={(event) =>
+                      setChosen((previous) => ({ ...previous, [channel]: event.target.value }))
+                    }
+                  >
+                    {!account && (
+                      <option value={id ?? ""}>
+                        {id ? "Selected account is no longer configured" : "Choose an account"}
+                      </option>
+                    )}
+                    {connection?.accounts?.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.label}
+                        {a.isDefault ? " · Default" : ""}
+                        {!value.isTest && !a.ready ? " · Setup required" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {account?.privacy && (
+                <p>
+                  YouTube visibility: <strong>{account.privacy}</strong>
+                </p>
+              )}
+              {pinned && <p>This destination is locked to the saved publishing request.</p>}
+              {!selectionValid && id && !account && (
+                <p>
+                  Refresh the saved connections. This destination cannot be replaced automatically.
+                </p>
+              )}
+              <p>
+                {value.isTest
+                  ? connection?.accountId
+                    ? "A connection is saved for testing. External posting remains disabled."
+                    : "No publishing account is saved in this test workspace. A simulation does not need one."
+                  : (account?.ready ?? connection?.ready)
+                    ? "Connection configured. The channel will confirm delivery when you publish."
+                    : studioMessage(
+                        account?.reason ?? connection?.reason ?? "CHANNEL_NOT_CONNECTED",
+                      )}
+              </p>
+              {connection?.transport === "buffer" && !connection.accountId && (
+                <p>
+                  Connect the intended channel in Buffer, then save its channel ID and API token in
+                  Curation &amp; Publishing.
+                </p>
+              )}
+              {current
+                .filter((p) => outputs.some((output) => output.id === p.outputId))
+                .map((p) => (
+                  <p key={p.id}>
+                    {outputs.find((output) => output.id === p.outputId)?.title}:{" "}
+                    {STUDIO_PUBLICATION_LABELS[p.status]}
+                    {p.error && <> — {studioMessage(p.error)}</>}
+                    {p.remoteUrl && (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <a href={p.remoteUrl} target="_blank" rel="noreferrer">
+                          Open published content
+                        </a>
+                      </>
+                    )}
+                  </p>
+                ))}
+            </li>
+          );
+        })}
+      </ul>
+      {canManage ? (
+        <a href="/distribution/settings" target="_blank" rel="noreferrer">
+          Open Admin → Settings → Curation &amp; Publishing ↗
+        </a>
+      ) : (
+        <p>
+          Ask an Admin to check Admin → Settings → Curation &amp; Publishing. The Content Approver
+          role alone cannot change channel credentials.
+        </p>
+      )}
+      {approved && blockers.length > 0 && (
+        <div aria-live="polite">
+          <strong>Resolve before publishing:</strong>
+          <ul>
+            {blockers.map((blocker) => (
+              <li key={blocker}>{studioMessage(blocker)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {approved && !canPublish && (
+        <p>A Content Approver with publishing permission must post this package.</p>
+      )}
+      {complete && (
+        <p aria-live="polite">
+          {value.isTest
+            ? "Publication test completed. Nothing was posted externally."
+            : "All included files have been published."}
+        </p>
+      )}
+      {pending && (
+        <p aria-live="polite">Publishing is in progress. Results update here automatically.</p>
+      )}
+      {uncertain && (
+        <p aria-live="polite">
+          Check the channel for the existing post before retrying; its delivery could not be
+          confirmed.
+        </p>
+      )}
+      <div className="actions wrap" style={{ marginTop: 16 }}>
+        {approved && canPublish && (
+          <button
+            type="button"
+            className="button primary"
+            disabled={disabled}
+            onClick={() => {
+              const accounts: Partial<Record<StudioChannel, string>> = {};
+              for (const channel of channels) {
+                const { id } = destination(channel);
+                if (id && channel !== "website") accounts[channel] = id;
+              }
+              onPublish(accounts);
+            }}
+          >
+            {value.isTest ? "Run test publication" : "Publish approved channels"}
+          </button>
+        )}
+        <button type="button" className="button" disabled={busy} onClick={onRefresh}>
+          Refresh publishing status
+        </button>
+      </div>
+    </section>
+  );
+}

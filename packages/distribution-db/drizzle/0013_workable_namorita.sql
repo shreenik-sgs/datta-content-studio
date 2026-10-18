@@ -1,0 +1,2 @@
+ALTER TABLE "distribution"."content_version" DROP CONSTRAINT "content_version_bytes";--> statement-breakpoint
+ALTER TABLE "distribution"."content_version" ADD CONSTRAINT "content_version_bytes" CHECK ("distribution"."content_version"."byte_size" > 0 AND "distribution"."content_version"."byte_size" <= 262144000);

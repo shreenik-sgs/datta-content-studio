@@ -1,0 +1,2 @@
+ALTER TABLE "distribution"."activation_revision" DROP CONSTRAINT "activation_revision_action";--> statement-breakpoint
+ALTER TABLE "distribution"."activation_revision" ADD CONSTRAINT "activation_revision_action" CHECK ("distribution"."activation_revision"."action" IN ('CREATED','EDITED','DESTINATION_VALIDATED','APPROVED','STOPPED','INVALIDATED'));

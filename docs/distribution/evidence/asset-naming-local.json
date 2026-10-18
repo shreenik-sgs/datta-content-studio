@@ -1,0 +1,308 @@
+{
+  "schemaVersion": 1,
+  "world": "TEST",
+  "publishAllowed": false,
+  "sourceId": "fNyMZjjzMZ0",
+  "sourceSha256": "8f6f1dce810ad04b77f237ad0a93210ed9e5123d036e98661dc38b7669161e43",
+  "packageDirectory": "outputs/ashrama-episode-249-named",
+  "artifactCount": 35,
+  "integrityFiles": 52,
+  "channels": ["youtube", "x", "facebook", "instagram", "reddit"],
+  "kinds": ["short", "poster", "reel", "post", "blog", "copy"],
+  "gallery": [
+    {
+      "width": 320,
+      "scroll": 320
+    },
+    {
+      "width": 390,
+      "scroll": 390
+    },
+    {
+      "width": 1440,
+      "scroll": 1440
+    }
+  ],
+  "files": [
+    {
+      "file": "videos/sgs-fNyMZjjzMZ0-8f6f1dce810a-youtube-short-te-9x16-contentment-fbabe17ccf513072.mp4",
+      "channel": "youtube",
+      "kind": "short",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "638ea20008066be88889920bf60329df9e6a0431d208fa5daf97d860d27801c0",
+      "byteSize": 6388920
+    },
+    {
+      "file": "videos/sgs-fNyMZjjzMZ0-8f6f1dce810a-youtube-poster-te-9x16-contentment-fbabe17ccf513072.png",
+      "channel": "youtube",
+      "kind": "poster",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "56930973f7b09798537b797ef8a115a6543b16528a46ce4700e4272c86b6471c",
+      "byteSize": 947274
+    },
+    {
+      "file": "videos/sgs-fNyMZjjzMZ0-8f6f1dce810a-x-short-te-9x16-contentment-fbabe17ccf513072.mp4",
+      "channel": "x",
+      "kind": "short",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "f4ae5ca3b1a92e60b17f0b9fa0425356d74ce83e6331101b1a505b97f6f42e8a",
+      "byteSize": 3637238
+    },
+    {
+      "file": "videos/sgs-fNyMZjjzMZ0-8f6f1dce810a-x-poster-te-9x16-contentment-fbabe17ccf513072.png",
+      "channel": "x",
+      "kind": "poster",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "cf0c97ff5f36e428fa9cab83db21a17e8cae9befdb8949de2647ce0a5c3770ba",
+      "byteSize": 510993
+    },
+    {
+      "file": "videos/sgs-fNyMZjjzMZ0-8f6f1dce810a-facebook-reel-te-9x16-steadfastnes-b6bedbd3f896835d.mp4",
+      "channel": "facebook",
+      "kind": "reel",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "163eee74315d13913377d7f5ee32b4ca9de2fbdc2af29e0e4326c45f32b0fd69",
+      "byteSize": 3278725
+    },
+    {
+      "file": "videos/sgs-fNyMZjjzMZ0-8f6f1dce810a-facebook-poster-te-9x16-steadfastnes-b6bedbd3f896835d.png",
+      "channel": "facebook",
+      "kind": "poster",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "6f77a6143cb244abc8f37b5223db78aff5d31c60fc745ac2ca861823c9f4a8e0",
+      "byteSize": 962193
+    },
+    {
+      "file": "videos/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-reel-te-9x16-kinship-63d8206563c1b18f.mp4",
+      "channel": "instagram",
+      "kind": "reel",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "2765ca8db77348254cf6046d37cf5cce34007a71d8451e1948eba6c358dbcd3f",
+      "byteSize": 11744906
+    },
+    {
+      "file": "videos/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-poster-te-9x16-kinship-63d8206563c1b18f.png",
+      "channel": "instagram",
+      "kind": "poster",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "c670174ba45008bac5a9f70a5bbbd9f0874e8eb150955d5666683c69f4d8cedc",
+      "byteSize": 946786
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-facebook-post-en-4x5-contentment--f1e7c04585a23a87.png",
+      "channel": "facebook",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "605ee7ad40bb204c0a66323620517ca484e7083dddf853d4f5a0b23bfedc56bf",
+      "byteSize": 722647
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-4x5-contentment--f1e7c04585a23a87.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "605ee7ad40bb204c0a66323620517ca484e7083dddf853d4f5a0b23bfedc56bf",
+      "byteSize": 722647
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-x-post-en-4x5-contentment--f1e7c04585a23a87.png",
+      "channel": "x",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "605ee7ad40bb204c0a66323620517ca484e7083dddf853d4f5a0b23bfedc56bf",
+      "byteSize": 722647
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-facebook-post-en-1x1-contentment--f1e7c04585a23a87.png",
+      "channel": "facebook",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "0c7f4f0f4a417310469eecdb007abcc74389b53b539567707cb6931389dfbd0d",
+      "byteSize": 478210
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-1x1-contentment--f1e7c04585a23a87.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "0c7f4f0f4a417310469eecdb007abcc74389b53b539567707cb6931389dfbd0d",
+      "byteSize": 478210
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-x-post-en-1x1-contentment--f1e7c04585a23a87.png",
+      "channel": "x",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "0c7f4f0f4a417310469eecdb007abcc74389b53b539567707cb6931389dfbd0d",
+      "byteSize": 478210
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-facebook-post-en-16x9-contentment--f1e7c04585a23a87.png",
+      "channel": "facebook",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "c25d967a40b479c09a50ac9bc90a53576409094ab5305cf70143638c76fba1d7",
+      "byteSize": 634733
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-16x9-contentment--f1e7c04585a23a87.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "c25d967a40b479c09a50ac9bc90a53576409094ab5305cf70143638c76fba1d7",
+      "byteSize": 634733
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-x-post-en-16x9-contentment--f1e7c04585a23a87.png",
+      "channel": "x",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "c25d967a40b479c09a50ac9bc90a53576409094ab5305cf70143638c76fba1d7",
+      "byteSize": 634733
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-4x5-steadfastnes-cb81ccf687ada00e.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "05603be823d79a16d8dcb882a4157adefaeaa6f661a59529795a29b5fffb1d84",
+      "byteSize": 708692
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-1x1-steadfastnes-cb81ccf687ada00e.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "1dae2b68be798a420ee815ad59070141de19d65f3601aa1a38cba724d332b718",
+      "byteSize": 473943
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-16x9-steadfastnes-cb81ccf687ada00e.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "420e5f012ef208ba5914bb17280d1d2478af1aec0ad32f88eb2fcad85ef2601b",
+      "byteSize": 631277
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-4x5-kinship-card-4f905985f30ca894.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "d24ac70085483d6ac6933256daac6dae84b01afd50cf552f6c51f620071dfa62",
+      "byteSize": 718070
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-reddit-post-en-4x5-kinship-card-4f905985f30ca894.png",
+      "channel": "reddit",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "d24ac70085483d6ac6933256daac6dae84b01afd50cf552f6c51f620071dfa62",
+      "byteSize": 718070
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-1x1-kinship-card-4f905985f30ca894.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "ed6a7bb32244514e7e744e1154e6da1de4dc4a37fdac1d3fca0c68eb252bd483",
+      "byteSize": 475851
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-reddit-post-en-1x1-kinship-card-4f905985f30ca894.png",
+      "channel": "reddit",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "ed6a7bb32244514e7e744e1154e6da1de4dc4a37fdac1d3fca0c68eb252bd483",
+      "byteSize": 475851
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-post-en-16x9-kinship-card-4f905985f30ca894.png",
+      "channel": "instagram",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "ba9139494d6b0ec03e2fa070d40a6dfb01d517656b77f1e035129041d653ec58",
+      "byteSize": 630272
+    },
+    {
+      "file": "posts/sgs-fNyMZjjzMZ0-8f6f1dce810a-reddit-post-en-16x9-kinship-card-4f905985f30ca894.png",
+      "channel": "reddit",
+      "kind": "post",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "ba9139494d6b0ec03e2fa070d40a6dfb01d517656b77f1e035129041d653ec58",
+      "byteSize": 630272
+    },
+    {
+      "file": "blogs/sgs-fNyMZjjzMZ0-8f6f1dce810a-facebook-blog-en-prose-contentment--f85530d909ea8b9b.html",
+      "channel": "facebook",
+      "kind": "blog",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "2ff038b58a6d8720901bbc0ec93f110e5f0cc65cb394d52ccf8c071b8b6277aa",
+      "byteSize": 2647218
+    },
+    {
+      "file": "blogs/sgs-fNyMZjjzMZ0-8f6f1dce810a-facebook-blog-en-prose-contentment--f85530d909ea8b9b.md",
+      "channel": "facebook",
+      "kind": "blog",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "64ce948c7fd88479fc4651290ccb0af066b7f50c4df6dbf2b5bcd186941bd7a5",
+      "byteSize": 2211
+    },
+    {
+      "file": "blogs/sgs-fNyMZjjzMZ0-8f6f1dce810a-reddit-blog-en-prose-listening-in-94cd22fd2e990bf0.html",
+      "channel": "reddit",
+      "kind": "blog",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "474b4c8c100dac4ac22e1b53b4f5b066fff4a2cf1c7bf0829e87c23d090ab28b",
+      "byteSize": 2609462
+    },
+    {
+      "file": "blogs/sgs-fNyMZjjzMZ0-8f6f1dce810a-reddit-blog-en-prose-listening-in-94cd22fd2e990bf0.md",
+      "channel": "reddit",
+      "kind": "blog",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "4366878a82a887ef511e06907f33eb19c13357a6f8093fa2b5c9b8a71aece893",
+      "byteSize": 2162
+    },
+    {
+      "file": "copy/sgs-fNyMZjjzMZ0-8f6f1dce810a-youtube-copy-en-prose-platform-cop-1be77caaf3edab8c.txt",
+      "channel": "youtube",
+      "kind": "copy",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "0982627bbd63b8c6117db516cbb1f914ce7b55aa46f338d68661d70c428f3bd5",
+      "byteSize": 1083
+    },
+    {
+      "file": "copy/sgs-fNyMZjjzMZ0-8f6f1dce810a-facebook-copy-en-prose-platform-cop-1be77caaf3edab8c.txt",
+      "channel": "facebook",
+      "kind": "copy",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "94ddc7a7585e3e9865e4734843c72b6b820e6c1f4065df92aed645dbaac392ab",
+      "byteSize": 1617
+    },
+    {
+      "file": "copy/sgs-fNyMZjjzMZ0-8f6f1dce810a-instagram-copy-en-prose-platform-cop-1be77caaf3edab8c.txt",
+      "channel": "instagram",
+      "kind": "copy",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "03464716a2c34299f39cd877b32097d94fb19086da7b0cc0f3ce3b9ab1302a21",
+      "byteSize": 1865
+    },
+    {
+      "file": "copy/sgs-fNyMZjjzMZ0-8f6f1dce810a-x-copy-en-prose-platform-cop-1be77caaf3edab8c.txt",
+      "channel": "x",
+      "kind": "copy",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "3c1ffe8f96b50bdd9870bdc6c4d7c6da2d21944d6fcc6ec2ee44a33fbd0fcfba",
+      "byteSize": 1102
+    },
+    {
+      "file": "copy/sgs-fNyMZjjzMZ0-8f6f1dce810a-reddit-copy-en-prose-platform-cop-1be77caaf3edab8c.txt",
+      "channel": "reddit",
+      "kind": "copy",
+      "masterId": "fNyMZjjzMZ0",
+      "sha256": "d4d7877f693a4837146f644a84159934cfe69578035976442474133ad1ad4463",
+      "byteSize": 1941
+    }
+  ]
+}

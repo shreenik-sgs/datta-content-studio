@@ -1,0 +1,64 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "files": {
+    "ignore": [
+      "**/dist",
+      "outputs/**",
+      "**/cdk.out/**",
+      "**/.next",
+      "**/.next-*/**",
+      "**/.next-credit-parity",
+      "**/.next-strict-end",
+      "**/node_modules",
+      "**/drizzle/**/*.sql",
+      "apps/mobile/google-services.json",
+      "apps/mobile/GoogleService-Info.plist",
+      "**/test-results/**",
+      "**/playwright-report/**",
+      "**/.last-run.json",
+      "**/.claude/skills/**",
+      "**/.next-prod",
+      "**/.next-prod-*",
+      "**/.next-buildcheck",
+      "**/.next-e2e",
+      "**/.next-mobile-review",
+      "**/.next-profile-review",
+      "**/.next-evening-review",
+      "packages/db/drizzle/**",
+      "**/.expo/**",
+      "apps/mobile/expo-env.d.ts",
+      "apps/mobile/android/**",
+      "apps/mobile/modules/*/android/build/**",
+      "apps/mobile/ios/**",
+      "dist-mobile/**",
+      "**/.next-name-review",
+      "**/.next-merge-review",
+      "**/.next-hh-test",
+      "**/.next-visual-audit",
+      "**/.next-invite-review",
+      "migration/**"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noConsoleLog": "warn"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "useHookAtTopLevel": "error"
+      }
+    }
+  },
+  "organizeImports": {
+    "enabled": true
+  }
+}

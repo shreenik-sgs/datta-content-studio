@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "scope": "Circle role UI and guidance author/reviewer local acceptance",
+  "world": "TEST",
+  "origin": "http://localhost:3020",
+  "baseCommit": "722dc0ae2091b46a0e9d1af21bb6b0cf91ffea1a",
+  "stats": {
+    "startTime": "2026-10-05T05:58:02.882Z",
+    "duration": 89159.838,
+    "expected": 4,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "cases": [
+    {
+      "engine": "chromium",
+      "test": "Content Coordinator authors and independent Admin reviews guidance",
+      "status": "passed",
+      "durationMs": 6020,
+      "receipts": [
+        {
+          "project": "chromium",
+          "collectionId": "c3d1aafb-4386-4a84-9c07-ccc32a9af381",
+          "authorEditable": true,
+          "adminReadOnly": true,
+          "independentApproval": true,
+          "approvedHere": false,
+          "widths": [320, 390, 1440],
+          "published": false,
+          "externalNetworkBlocked": true
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "test": "Content Coordinator authors and independent Admin reviews guidance",
+      "status": "passed",
+      "durationMs": 2410,
+      "receipts": [
+        {
+          "project": "webkit",
+          "collectionId": "c3d1aafb-4386-4a84-9c07-ccc32a9af381",
+          "authorEditable": true,
+          "adminReadOnly": true,
+          "independentApproval": true,
+          "approvedHere": false,
+          "widths": [320, 390, 1440],
+          "published": false,
+          "externalNetworkBlocked": true
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "test": "Admin, scoped coordinators, member consent, legacy centre and guest Circle workflow",
+      "status": "passed",
+      "durationMs": 59013,
+      "receipts": [
+        {
+          "project": "chromium",
+          "circleId": "30cd982b-41e8-4f73-9db5-38aa8f0d1276",
+          "rolesChecked": [
+            "Admin",
+            "Circle A coordinator",
+            "Circle B coordinator",
+            "Member",
+            "Legacy centre coordinator",
+            "Guest"
+          ],
+          "keyboard": true,
+          "widths": [320, 390, 1440],
+          "revocation": true,
+          "crossCircleDenied": true,
+          "externalNetworkBlocked": true,
+          "noNotifications": true
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "test": "Admin, scoped coordinators, member consent, legacy centre and guest Circle workflow",
+      "status": "passed",
+      "durationMs": 21022,
+      "receipts": [
+        {
+          "project": "webkit",
+          "circleId": "f2dcbee1-e482-4be7-9c6c-c0e02d3f377b",
+          "rolesChecked": [
+            "Admin",
+            "Circle A coordinator",
+            "Circle B coordinator",
+            "Member",
+            "Legacy centre coordinator",
+            "Guest"
+          ],
+          "keyboard": true,
+          "widths": [320, 390, 1440],
+          "revocation": true,
+          "crossCircleDenied": true,
+          "externalNetworkBlocked": true,
+          "noNotifications": true
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "path": "docs/distribution/evidence/circles/circles-admin-chromium-1440.png",
+      "sha256": "b55926f86dd4609b166596f23fb9351997a93566655e02e5b2d77db732fb54bf"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/circles-coordinator-chromium-1440.png",
+      "sha256": "020b4b136e58fd4d1f6b6e7b9a219fe7ae6f49976236efefe3362bae39084592"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/circles-member-chromium-1440.png",
+      "sha256": "ea87e33336bf878c9b932c43805b22e176e1b12136264e9bc937b1d1c76b26d3"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/circles-legacy-chromium-1440.png",
+      "sha256": "68d4dc1762096c31a572de1bf372e7bf181666defa22b2aa5341853d8707153b"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/guidance-author-chromium-1440.png",
+      "sha256": "830a3a445a478f5a4fc6d0a32a48e12a110ddcf5ce9d800e417ba089d262f5d7"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/guidance-reviewer-chromium-1440.png",
+      "sha256": "eab10c181bcc5f40544be2e9fff14e577476c7b57f54bdf2b1966b7b0b8ff73c"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/circles-admin-webkit-320.png",
+      "sha256": "fac9b14e53c75e47421638a164f300a9043c62e72443af5c161593e74df23027"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/circles-coordinator-webkit-320.png",
+      "sha256": "ff940a0b1d39f2227ba2e81709fe42eb85901c6d69f755d01f41f19b4ea79119"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/circles-member-webkit-320.png",
+      "sha256": "4bc05d4e9a2dca25fe305916ab9ec5f4c511345248e05cf6043260ebe5447bdd"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/circles-legacy-webkit-320.png",
+      "sha256": "6bfd5d4730597f87f34207fcb670b9811efe54e8a806c29400f1ac74577032d2"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/guidance-author-webkit-320.png",
+      "sha256": "775162e0d0765d3ec5b93e39cf41de566192cd62f3b869afaa21e6d60cc6744c"
+    },
+    {
+      "path": "docs/distribution/evidence/circles/guidance-reviewer-webkit-320.png",
+      "sha256": "5722f05752e63327536f4ca35b53675838fda995bb01e631454bd0c57d3c512d"
+    }
+  ],
+  "sourceSha256": {
+    "apps/web/src/components/circles-panel.tsx": "12c5e973c125374973eec1d56427421a7d299adcfc9bd3b78b8cd38699cfbe7d",
+    "apps/web/src/components/circles-page.tsx": "36c4136d67d5b770be6058222a8c9049003b3692ab715810e4233ffa80ba62e6",
+    "apps/web/src/app/circles/page.tsx": "c5413c3fbd100232efc167f313ebcd5b3ddeea5f59e0679a15b32e9001f35cf0",
+    "apps/web/src/app/circles/[id]/page.tsx": "27bd9c8e8b00894a0b1ea45090934d042e77f6b61a2692ec1d1ccb1a0dd62819",
+    "apps/web/src/app/admin/circles/page.tsx": "8fd2425dda3429e05c288c1410d5ff03db81f4c92f471df370582c2bac131b12",
+    "apps/mobile/src/circles-api.ts": "61206381c7199f137f4d0a5b35db17bef9ffe42a3c84a4165dbf02531c1747d1",
+    "apps/mobile/src/circles-screen.tsx": "9287eac08e3f7fc504bacdceb3014af492eda145b3d2cc18956cb45c364d5d95",
+    "apps/mobile/app/circles/index.tsx": "0d9de154083ffc8ac5d0868dfb1793f38ba2b6aba4641bdae6c88078d9a71b48",
+    "apps/mobile/app/circles/[id].tsx": "2999c3614364c4a5795d475ee3ead8f7ebfc0f07127cfed79a78bd9a395f8111",
+    "apps/mobile/app/community.tsx": "917d813b1828c0fd5eb80c1dedec2a3314a556c994fd621504cc2323123a8b0d",
+    "apps/mobile/src/tabs.ts": "4b9068011504717d2f128010aeaf56b44f4ce5f5915ddad16344689c8d7b0607",
+    "apps/web/src/app/admin/weekly-guidance/manager.tsx": "2c04dc5d0c756e7cbec4e8f8c67d02425e29641327663d604de809cc59f3aafa",
+    "packages/domain/src/admin-map.ts": "5b7d3581cc58cbe471d658eb5632c683c69b3b2d9faffb391628889543604bbb",
+    "tests/e2e/circles.spec.ts": "9ea363195228d35cc50d2347154832305421f1f5e1495db442397b041912f9b1",
+    "tests/e2e/circle-guidance-roles.spec.ts": "b7f990f2cd91ad725b4691dc4e2a3c4efba73b93be8c8b6de822caa3cdffbdf3"
+  },
+  "focusedTests": {
+    "files": 3,
+    "passed": 29,
+    "webCircle": 9,
+    "nativeCircle": 6,
+    "mobileNavigation": 14
+  },
+  "typechecks": {
+    "web": "PASS",
+    "mobile": "PASS"
+  },
+  "staticUiChecks": {
+    "tool": "Biome",
+    "files": 18,
+    "status": "PASS"
+  },
+  "viewportWidths": [320, 390, 1440],
+  "keyboardActions": [
+    "Admin create circle",
+    "Coordinator publish circle update",
+    "Member affirmative join",
+    "Independent Admin approve exact guidance version (initial run)"
+  ],
+  "guidanceApproval": {
+    "initialUiApprovalPerformed": true,
+    "engine": "chromium",
+    "published": false,
+    "finalRunReusedApprovedVersion": true
+  },
+  "safety": {
+    "syntheticFixturesOnly": true,
+    "browserExternalNetworkBlocked": true,
+    "noNotificationsOrProviderPublishInvoked": true,
+    "credentialsCopied": false
+  },
+  "limits": {
+    "nativeCircleSimulatorRun": false,
+    "nativeCircleAndroidEmulatorRun": false,
+    "physicalDeviceRun": false,
+    "spokenScreenReaderRun": false,
+    "priorNativeReceiptDoesNotCoverCircleDelta": true,
+    "flagRestorationOwner": "parent integration run"
+  },
+  "priorRunDiagnostic": "One repeat recorded WebKit incoming-call fetch access-control diagnostic during navigation. No assertion filter was added. Final run strict pageerror assertions passed.",
+  "flagRestoration": {
+    "weekly_guidance_admin": "OFF",
+    "confirmedBy": "parent integration run after browser acceptance"
+  }
+}

@@ -1,0 +1,146 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+.next/
+.next-prod/
+.next-prod-b/
+out/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+*.p12
+*.mobileprovision
+*.jks
+AuthKey_*.p8
+
+# test & tooling output
+coverage/
+playwright-report/
+test-results/
+.vitest/
+
+# local Claude overrides
+.claude/settings.local.json
+
+# os / editor
+.DS_Store
+*.log
+
+# reference material — local only, never pushed (owner rule, 2 Sep 2026)
+satsang-app-tech-stack.md
+greenfield-claude-code-playbook.md
+docs/inherited/
+MVP_Plus_Foundation_and_Cutover_Package_*/
+Datta_Sannidhi_Add_On_Features_Post_Cutover_Package_*/
+references/
+
+# Expo generates these on every start; they are not ours to keep or format.
+apps/mobile/.expo/
+apps/mobile/expo-env.d.ts
+
+# SGS production dumps — real devotee data, never in git (BRD §7.3).
+#
+# NOT a blanket `*.sql`. That was added with this block on 5 Sep 2026 and it
+# silently swallowed every Drizzle migration: `packages/db/drizzle/*.sql` is
+# generated, committed, and applied as a pre-deploy step, so an ignored
+# migration is a schema change that reaches no environment. Two had already
+# been lost (0023, 0024) before it was noticed. The dumps are `.sql.gz` and
+# live at the root or in `dumps/`, so they are named precisely instead.
+*.sql.gz
+/*.sql
+dumps/
+.next-buildcheck/
+# the production build the e2e suite runs against on :3010 (compile latency
+# under `next dev` was timing out whole suites, 10 Sep 2026)
+.next-e2e/
+
+# Owner-supplied reference drops at the root — screen recordings of the legacy
+# app, Word notes, one-off HTML. They are how a requirement arrives, not code,
+# and the .mp4 alone is tens of megabytes (owner rule, 2 Sep 2026).
+/*.mp4
+/*.docx
+/datta-sannidhi-dev-architecture.html
+
+# python bytecode from ops/ scripts (docs-check.py imports docs-render.py)
+ops/__pycache__/
+__pycache__/
+
+# Throwaway browser-verification scripts. They must live at the repo root so
+# `@playwright/test` resolves from node_modules, and one of them once reached
+# main and broke CI. Name them `.verify-*.mjs` and git will never see them.
+.verify-*.mjs
+
+# Isolated preview builds from the front-end design review (codex/frontend-design).
+.next-mobile-review/
+.next-profile-review/
+.next-evening-review/
+.next-name-review/
+.next-merge-review/
+.next-hh-test/
+.next-visual-audit/
+.next-invite-review/
+
+# Colour and layout studies from the front-end design review (10 Sep 2026).
+# Hand-built HTML belongs ONLY in docs/interactive/ — these are reference
+# drops from the review, not project documentation, so they stay local.
+outputs/
+
+# The native iOS and Android projects are GENERATED from apps/mobile/app.json
+# by `expo prebuild` (Continuous Native Generation), exactly as the Drizzle
+# migrations are generated from the schema. app.json is the one source of
+# truth; a committed copy would drift from it the first time a plugin or a
+# permission changed, and nobody would notice until a build shipped the old
+# one. `bash ops/mobile-build.sh <platform>` regenerates them in seconds.
+apps/mobile/ios/
+apps/mobile/android/
+dist-mobile/
+
+# Isolated completion verification builds.
+.next-credit-parity/
+.next-strict-end/
+
+# All isolated Next.js preview/build directories.
+.next-*/
+
+# the local worker, started by ops/dev.sh so background jobs stay current
+.worker.pid
+.worker.log
+
+# Cutover metadata exports carry whatever the source environment holds,
+# including `provider_credentials.secrets` (owner, 18 Sep 2026: staging's keys
+# are the ones that will support production). The fingerprint and the crosswalk
+# are safe to commit — hashes and slug mappings, no values — the .sql is not.
+ops/cutover/*.sql
+
+# The gold metadata itself carries staging's provider secrets. Its FINGERPRINT
+# and MANIFEST are committed — hashes and row counts, no values — so any
+# environment can be proved against it without the file being in git.
+ops/cutover/gold/*.sql
+
+# THE DEVOTEE FILE IS 1,558 REAL PEOPLE — e-mail addresses and bcrypt password
+# hashes carried over from the old system. It must never reach the remote.
+#
+# `make-devotee-sql.sh` writes it to ops/cutover/out/, which the generic `out/`
+# rule near the top of this file already happens to cover. That is luck rather
+# than a decision: rename the directory or pass a different out-dir and the
+# generic rule stops applying, with nothing anywhere saying why it mattered.
+# Named explicitly so the reason survives the next person's tidy-up.
+ops/cutover/out/
+**/devotees.sql
+apps/mobile/modules/*/android/build/
+
+# Local release notes and signing material stay outside Git.
+docs/release/FASTLANE-RELEASE-SETUP.md
+secrets/
+apps/mobile/fastlane/report.xml
+
+# Local standalone credentials and media never enter Git.
+operator-credentials*
+private-assets/
+private-runtime/

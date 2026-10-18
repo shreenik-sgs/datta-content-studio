@@ -1,0 +1,50 @@
+{
+  "name": "datta-content-studio",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "overrides": {
+      "postcss@<8.5.23": "8.5.28",
+      "xcode>uuid": "11.1.1",
+      "@expo/ngrok>uuid": "11.1.1",
+      "esbuild@<0.25.0": "0.28.2",
+      "decode-uri-component@<0.5.0": "0.5.0",
+      "brace-expansion@>=4.0.0 <5.0.12": "5.0.12",
+      "@grpc/grpc-js@<1.13.6": "1.14.5",
+      "http-cache-semantics@<=4.2.0": "4.3.0",
+      "smol-toml@<1.9.0": "1.9.0",
+      "source-map-js@<1.2.2": "1.2.2",
+      "compression@<1.8.2": "1.8.2",
+      "postcss-selector-parser@<7.1.6": "7.1.6",
+      "sharp@<0.35.5": "0.35.5",
+      "shell-quote@>=1.8.4 <1.11.0": "1.11.0"
+    },
+    "patchedDependencies": {}
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @satsang/distribution-web dev",
+    "worker": "pnpm --filter @satsang/distribution-worker studio:start",
+    "db:migrate": "pnpm --filter @satsang/distribution-db migrate",
+    "user:create": "tsx ops/create-operator.ts",
+    "build": "pnpm --filter @satsang/distribution-domain build && pnpm --filter @satsang/distribution-contracts build && pnpm --filter @satsang/distribution-db build && pnpm --filter @satsang/distribution-assets build && pnpm --filter @satsang/distribution-worker build && pnpm --filter @satsang/distribution-links build && pnpm --filter @satsang/distribution-web build",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "check": "pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "^1.49.0",
+    "drizzle-orm": "^0.45.2",
+    "jsdom": "26.1.0",
+    "knip": "6.37.0",
+    "pg": "^8.13.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.4.3",
+    "vitest": "^4.1.11"
+  }
+}

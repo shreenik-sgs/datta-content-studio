@@ -1,0 +1,122 @@
+.studio-history {
+  margin-block: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+}
+.studio-history > summary {
+  min-height: 48px;
+  padding: 15px 18px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.studio-history-body {
+  padding: 0 18px 18px;
+  min-width: 0;
+}
+.studio-history-body > p {
+  line-height: 1.65;
+}
+.studio-history-list {
+  list-style: none;
+  margin: 20px 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.studio-history-list > li {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.studio-history-version {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 16px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: var(--wash);
+  color: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.studio-history-version-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.studio-history-version time {
+  font-size: 13px;
+}
+.studio-history-toggle {
+  color: var(--kamala-deep);
+  font-weight: 600;
+}
+.studio-history-snapshot {
+  padding: 0 16px 16px;
+  min-width: 0;
+}
+.studio-history-snapshot[hidden] {
+  display: none;
+}
+.studio-history-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.studio-history-table {
+  width: 100%;
+  min-width: 580px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+.studio-history-table caption {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+}
+.studio-history-table th,
+.studio-history-table td {
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.studio-history-table th:first-child {
+  width: 40%;
+}
+.studio-history-table th[scope="row"] {
+  font-weight: 500;
+}
+.studio-history-table small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .studio-history-body {
+    padding-inline: 12px;
+  }
+  .studio-history-snapshot {
+    padding-inline: 10px;
+  }
+  .studio-history-version {
+    padding: 12px;
+  }
+}
+
+.studio-history-timezone {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}

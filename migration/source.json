@@ -1,0 +1,104 @@
+{
+  "sourceRepository": "shreenik-sgs/Datta-Sannidhi-NewGen",
+  "sourceCommit": "8b41ce4bb4e52b10b421936bcc1ab74a0c6286be",
+  "filesCopied": 652,
+  "containsRuntimeSecrets": false,
+  "dataCopied": false,
+  "additionalLocalFixes": {
+    "sourceCommit": "8b41ce4bb4e52b10b421936bcc1ab74a0c6286be",
+    "branch": "feat/gurubhavana-series-closing-20261018",
+    "snapshotUTC": "2026-10-18T17:19:16.370749+00:00",
+    "uncommitted": false,
+    "files": [
+      {
+        "path": "apps/distribution-web/src/app/content-library.tsx",
+        "sha256": "74de322cdc925c175a2bce40675e05a81106b20e6e823afb510d40742333cea8"
+      },
+      {
+        "path": "apps/distribution-web/src/app/online-import-panel.test.tsx",
+        "sha256": "80b9b18c5f3f8c6ec3c9cb9475bd1ca8a5705f6f3f2785682a787c49e321e947"
+      },
+      {
+        "path": "apps/distribution-web/src/app/online-import-panel.tsx",
+        "sha256": "88d96d62395ed5fd4be062dfb924cbe0e9f6c53c33c743be07ae095d595fb02a"
+      },
+      {
+        "path": "apps/distribution-web/src/app/playlist-curation.test.tsx",
+        "sha256": "c412d36f3025df97fa77db42172ba81a6647738ed028dcb83391ab34ba811e02"
+      },
+      {
+        "path": "apps/distribution-web/src/app/playlist-curation.tsx",
+        "sha256": "631001ccd9561a5c2b13ef35dcfaf851c2a625d3d87d17912d2b14e379225aef"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-combined-roles.test.tsx",
+        "sha256": "342ce94a4332df5f9b05555823061757f7c9c5acdef7da13607951748fed545d"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-generation-progress.tsx",
+        "sha256": "480adb9f5f74a66e9ee30f826587005d7149f812f07efbccf088996cf1cf2d86"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-panel.tsx",
+        "sha256": "72da6fab2569787263646259904ca27c7c96604c9d5eb3a2041a329a799ee3ac"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-quality-selection.test.tsx",
+        "sha256": "8b11fd22b4f62d7f8c553c46fac5d65dfc957fd073a948b27ca9841cf9a3242b"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-source-recovery.test.tsx",
+        "sha256": "59d8fc4a4281948a05d78a43f130f62f5f18e900b699e4c915e36f4dd0e050fd"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-source-recovery.tsx",
+        "sha256": "14b1e8d32a9eedadd95b02cdd31edea3678622c04a840f5e94171f63c3d25597"
+      },
+      {
+        "path": "apps/distribution-web/src/lib/studio-model.ts",
+        "sha256": "7119b6d91c8d0ebd321dfde6753e47b666cb173586fd9ca755dc3241b421c1d7"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-checkpoints.test.ts",
+        "sha256": "8ab21f14854176cae70fe1bd2c711e7d878540fcad0574093f72b43ff90da8c4"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-checkpoints.ts",
+        "sha256": "6d6f18c45e21efc68043927aafaeff7856002c032814ed7ae6ce513a3c034ba1"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-worker.test.ts",
+        "sha256": "f95c7621bae208d21aace8e5cd88fa9924296ec43b8afa043ea916fae538574c"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-worker.ts",
+        "sha256": "90f64a3e5c4a6f9c2def5188df293f8fb2f37444e936655edfd3025e81123c43"
+      },
+      {
+        "path": "docs/runbooks/studio-generation-recovery.md",
+        "sha256": "b12e91bf45ea9c810ff31e8e6bf922aa62ef677c4751b8233193a9c9b0dd9cf8"
+      },
+      {
+        "path": "packages/distribution-db/src/repository.integration.test.ts",
+        "sha256": "651727c33af8f684c85a2319d7b6974182f10724f443a52f101632f373dc5283"
+      },
+      {
+        "path": "packages/distribution-db/src/studio-repository.ts",
+        "sha256": "7ecefcb4ac39e7639aee3fdf696166fb3af584d00b51ebb5280f244ce18e5e7a"
+      },
+      {
+        "path": "packages/distribution-domain/src/intelligent-content.ts",
+        "sha256": "cba6c2b2e4fab6547cc8276077445cce362dbe0b155cb0f320c80fec3316dc73"
+      },
+      {
+        "path": "packages/distribution-domain/src/studio-progress.ts",
+        "sha256": "9dd14ab4d597606419a32282a2ef1246a671cd021cb6f16032d3cad8905dc739"
+      },
+      {
+        "path": "apps/distribution-web/src/app/content-library-entry.test.tsx",
+        "sha256": "5a7df0870042d008fd9f2d3f59d70845e48e708b818e5c31d15012b88569b3b6"
+      }
+    ],
+    "committedAs": "6e9da5087c717112e55432ca7955f99eab3b599d"
+  }
+}

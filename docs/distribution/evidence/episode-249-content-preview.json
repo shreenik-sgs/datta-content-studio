@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "id": "fNyMZjjzMZ0",
+    "url": "https://www.youtube.com/watch?v=fNyMZjjzMZ0",
+    "title": "Sampoorna Mahabharata • సంపూర్ణ శ్రీమహాభారతము • Episode 249 • Sabha Parva: The discussion continues",
+    "displayTitle": "Sampoorna Mahabharata · Episode 249",
+    "sha256": "8f6f1dce810ad04b77f237ad0a93210ed9e5123d036e98661dc38b7669161e43",
+    "durationMs": 1202283,
+    "language": "te",
+    "descriptionSha256": "f5dc8e666cb8f9b87a480b4bfbf7a91394b29f5748154a6a85c8081cdd56b8f4",
+    "transcriptSha256": "ec07919d80224a446c8a81884c9658c8d7d115d15acb745da0f1f936f51d316e"
+  },
+  "brand": {
+    "id": "ashrama-kamala-preview-v1",
+    "revision": 1,
+    "name": "Avadhoota Datta Peetham",
+    "speaker": "Sri Ganapathy Sachchidananda Swamiji",
+    "logoSha256": "858f756061a519bfdab97dc13c8401688b93771451991602d23db5443c9e89b8",
+    "profileSha256": "94ce52b8cef5cc52b9585dfd44aa70cfe04f3b66b52a38ea2072dcc0aeea0f97"
+  },
+  "world": "TEST",
+  "status": "DRAFT_REVIEW_REQUIRED",
+  "publishAllowed": false,
+  "createdAt": "2026-10-05T02:09:38.736Z",
+  "outputDirectory": "outputs/ashrama-episode-249",
+  "counts": {
+    "verticalClips": 3,
+    "xVideos": 1,
+    "postImages": 9,
+    "blogArticles": 2,
+    "platformDrafts": 5
+  },
+  "artifacts": [
+    {
+      "id": "contentment",
+      "file": "videos/contentment-vertical.mp4",
+      "sha256": "638ea20008066be88889920bf60329df9e6a0431d208fa5daf97d860d27801c0",
+      "byteSize": 6388920,
+      "media": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1920,
+            "r_frame_rate": "30/1"
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "r_frame_rate": "0/0"
+          }
+        ],
+        "format": {
+          "duration": "32.400000",
+          "size": "6388920"
+        }
+      }
+    },
+    {
+      "id": "contentment",
+      "file": "videos/contentment-x.mp4",
+      "sha256": "f4ae5ca3b1a92e60b17f0b9fa0425356d74ce83e6331101b1a505b97f6f42e8a",
+      "byteSize": 3637238,
+      "media": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 720,
+            "height": 1280,
+            "r_frame_rate": "30/1"
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "r_frame_rate": "0/0"
+          }
+        ],
+        "format": {
+          "duration": "32.400000",
+          "size": "3637238"
+        }
+      }
+    },
+    {
+      "id": "steadfastness",
+      "file": "videos/steadfastness-vertical.mp4",
+      "sha256": "163eee74315d13913377d7f5ee32b4ca9de2fbdc2af29e0e4326c45f32b0fd69",
+      "byteSize": 3278725,
+      "media": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1920,
+            "r_frame_rate": "30/1"
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "r_frame_rate": "0/0"
+          }
+        ],
+        "format": {
+          "duration": "17.200000",
+          "size": "3278725"
+        }
+      }
+    },
+    {
+      "id": "kinship",
+      "file": "videos/kinship-vertical.mp4",
+      "sha256": "2765ca8db77348254cf6046d37cf5cce34007a71d8451e1948eba6c358dbcd3f",
+      "byteSize": 11744906,
+      "media": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1920,
+            "r_frame_rate": "30/1"
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "r_frame_rate": "0/0"
+          }
+        ],
+        "format": {
+          "duration": "58.200000",
+          "size": "11744906"
+        }
+      }
+    },
+    {
+      "id": "contentment-card",
+      "file": "posts/contentment-card-4x5.png",
+      "sha256": "605ee7ad40bb204c0a66323620517ca484e7083dddf853d4f5a0b23bfedc56bf",
+      "byteSize": 722647
+    },
+    {
+      "id": "contentment-card",
+      "file": "posts/contentment-card-1x1.png",
+      "sha256": "0c7f4f0f4a417310469eecdb007abcc74389b53b539567707cb6931389dfbd0d",
+      "byteSize": 478210
+    },
+    {
+      "id": "contentment-card",
+      "file": "posts/contentment-card-16x9.png",
+      "sha256": "c25d967a40b479c09a50ac9bc90a53576409094ab5305cf70143638c76fba1d7",
+      "byteSize": 634733
+    },
+    {
+      "id": "steadfastness-card",
+      "file": "posts/steadfastness-card-4x5.png",
+      "sha256": "05603be823d79a16d8dcb882a4157adefaeaa6f661a59529795a29b5fffb1d84",
+      "byteSize": 708692
+    },
+    {
+      "id": "steadfastness-card",
+      "file": "posts/steadfastness-card-1x1.png",
+      "sha256": "1dae2b68be798a420ee815ad59070141de19d65f3601aa1a38cba724d332b718",
+      "byteSize": 473943
+    },
+    {
+      "id": "steadfastness-card",
+      "file": "posts/steadfastness-card-16x9.png",
+      "sha256": "420e5f012ef208ba5914bb17280d1d2478af1aec0ad32f88eb2fcad85ef2601b",
+      "byteSize": 631277
+    },
+    {
+      "id": "kinship-card",
+      "file": "posts/kinship-card-4x5.png",
+      "sha256": "d24ac70085483d6ac6933256daac6dae84b01afd50cf552f6c51f620071dfa62",
+      "byteSize": 718070
+    },
+    {
+      "id": "kinship-card",
+      "file": "posts/kinship-card-1x1.png",
+      "sha256": "ed6a7bb32244514e7e744e1154e6da1de4dc4a37fdac1d3fca0c68eb252bd483",
+      "byteSize": 475851
+    },
+    {
+      "id": "kinship-card",
+      "file": "posts/kinship-card-16x9.png",
+      "sha256": "ba9139494d6b0ec03e2fa070d40a6dfb01d517656b77f1e035129041d653ec58",
+      "byteSize": 630272
+    },
+    {
+      "id": "contentment-and-effort",
+      "file": "blogs/contentment-and-effort.html",
+      "sha256": "2ff038b58a6d8720901bbc0ec93f110e5f0cc65cb394d52ccf8c071b8b6277aa",
+      "byteSize": 2647218
+    },
+    {
+      "id": "listening-in-context",
+      "file": "blogs/listening-in-context.html",
+      "sha256": "474b4c8c100dac4ac22e1b53b4f5b066fff4a2cf1c7bf0829e87c23d090ab28b",
+      "byteSize": 2609462
+    }
+  ],
+  "recognitionWarningCounts": {
+    "SEGMENT_ONLY_TIMING": 105,
+    "REPLACEMENT_CHARACTER": 6,
+    "EMPTY_INSTANTANEOUS_SEGMENT": 1
+  },
+  "generation": {
+    "asr": "Local MLX Whisper large-v3",
+    "copyAndSelection": "Codex-assisted editorial plan",
+    "orchestration": "local acceptance CLI",
+    "nativeReview": null,
+    "captionPolicy": "No unreviewed word-for-word captions burned into outputs; English text is a labelled editorial summary."
+  },
+  "qualityGate": {
+    "fileGeneration": "PASS",
+    "mediaTechnicalChecks": "PASS",
+    "humanNativeReview": "PENDING",
+    "unattendedProductionPipeline": "NOT_ADOPTED",
+    "goldenCorpusQualified": false
+  }
+}

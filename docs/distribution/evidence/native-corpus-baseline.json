@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "provider": "not-selected",
+  "model": "not-selected",
+  "generatedAt": "2026-10-03T18:58:37.905Z",
+  "corpus": {
+    "te": 0,
+    "kn": 0,
+    "ta": 0
+  },
+  "corpusComplete": false,
+  "reviewed": 0,
+  "editorialAcceptance": null,
+  "boundaryPrecision": null,
+  "terminologyErrorRate": null,
+  "reviewMinutes": 0,
+  "realCorpusReady": false,
+  "teachingRecall": null,
+  "contextSafety": null,
+  "negationPreservation": null,
+  "translationFidelity": null,
+  "verticalFraming": null,
+  "reviewerEdits": 0,
+  "minutesSaved": null,
+  "releaseApproved": false
+}

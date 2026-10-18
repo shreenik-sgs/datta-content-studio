@@ -1,0 +1,53 @@
+# What never enters an image. Build output and installs are produced inside
+# the build; documents, references and test artefacts are not part of a
+# running app; anything that could hold a secret stays out.
+.git
+.github
+.claude
+**/node_modules
+**/.next
+**/.next-*
+**/dist
+**/*.tsbuildinfo
+**/__pycache__
+**/*.pyc
+**/.expo
+**/expo-env.d.ts
+.env
+.env.*
+!.env.example
+docs
+references
+tests
+test-results
+playwright-report
+coverage
+private-assets
+private-runtime
+secrets
+operator-credentials*
+.verify-*.mjs
+migration
+dumps
+*.sql
+*.sql.gz
+*.pdf
+*.docx
+*.html
+satsang-app-tech-stack.md
+greenfield-claude-code-playbook.md
+MVP_Plus_Foundation_and_Cutover_Package_*
+Datta_Sannidhi_Add_On_Features_Post_Cutover_Package_*
+# the phone app is built by EAS, not here; its manifest must still be seen by
+# the lockfile check, so only the manifest comes through
+apps/mobile/*
+!apps/mobile/package.json
+packages/mcp/*
+!packages/mcp/package.json
+
+# Database migration assets are reviewed application code, not operational dumps.
+# Keep the broad SQL exclusion, allowing only the versioned migration trees and
+# the dedicated Hub runtime-grants script used by its explicit pre-deploy step.
+!packages/db/drizzle/**/*.sql
+!packages/distribution-db/drizzle/**/*.sql
+!packages/distribution-db/ops/runtime-grants.sql

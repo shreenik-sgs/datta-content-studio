@@ -1,0 +1,23 @@
+{
+  "name": "@satsang/distribution-links",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cache": "./src/cache.ts",
+    "./outbox": "./src/event-outbox.ts"
+  },
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@satsang/distribution-contracts": "workspace:*",
+    "@satsang/distribution-domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0"
+  }
+}

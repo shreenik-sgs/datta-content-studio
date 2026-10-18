@@ -1,0 +1,86 @@
+{
+  "recordedAt": "2026-10-05T01:44:20.758944+00:00",
+  "scope": "Dedicated localhost nurturing preview; generated example.test fixture only",
+  "sourceSha256": "65524f5e72d12b37d3774e65e8a37a97a50f36f6a53b39ae795723e91da7d02e",
+  "ios": {
+    "runtime": "iPhone 17 simulator, iOS 26.5",
+    "build": "Release iphonesimulator, local ad-hoc signing",
+    "bundleIdentifier": "org.sgsdattasannidhi.app",
+    "finalBundleSha256": "092f846b7fc97bfaf0b13ef3443e3ad48a77cccb3b1471287510d06768709b55",
+    "verified": [
+      "native sign-in",
+      "secure session retained after app replacement",
+      "optional preferences persisted",
+      "onboarding completion",
+      "goal pause/resume/extend/cancel",
+      "visible saved-timezone goal window",
+      "default and accessibility-extra-extra-large layout",
+      "4 October: renewed local fixture sign-in without saving password",
+      "numeric target and window remain above native number pads at default large and accessibility-extra-extra-large",
+      "native drag dismisses keyboard and preserves numeric values",
+      "native scrolling exposes enrollment button above keyboard at 200-percent app text",
+      "zero target, zero window, and target 8/window 7 disable enrollment; target 2/window 7 enables enrollment",
+      "enrollment with keyboard open creates active goal and visible saved-timezone window",
+      "closing and reopening retains one active 2-day goal, 0/2 progress, and 4\u201311 October 2026 window"
+    ],
+    "pending": ["VoiceOver spoken navigation", "physical devices"],
+    "keyboardRecheck": {
+      "localDate": "2026-10-04",
+      "timezone": "America/Chicago",
+      "result": "PASS",
+      "sourceUnchanged": true,
+      "bundleUnchanged": true,
+      "fontSizes": ["large", "accessibility-extra-extra-large"],
+      "appTextScaleCap": 2,
+      "evidence": [
+        "ios-keyboard-normal-target.png",
+        "ios-keyboard-normal-window.png",
+        "ios-keyboard-large-target.png",
+        "ios-keyboard-large-window.png",
+        "ios-keyboard-large-ready.png",
+        "ios-keyboard-enrolled-reopened.png"
+      ],
+      "reopenedGoal": {
+        "activeGoalCount": 1,
+        "recordedPracticeDays": 0,
+        "targetPracticeDays": 2,
+        "displayedWindow": "10/4/2026\u201310/11/2026"
+      },
+      "cleanup": {
+        "restoredContentSize": "large",
+        "contentSizeConfirmedWithSimctl": true,
+        "taskOwnedSimulatorShutdown": true,
+        "featureFlagsChanged": false,
+        "coreHubPreviewServicesLeftIntact": true
+      }
+    }
+  },
+  "android": {
+    "runtime": "API36 ARM64 emulator;1080x2400",
+    "readOnlyAvd": true,
+    "build": "Debug ARM64; embedded local-only production-mode JS",
+    "apkSha256": "f715720a1def4b4849c2f22116f65d3e69a60ec6f6c2e77ef41852383cd58d33",
+    "verified": [
+      "native sign-in",
+      "retained secure session",
+      "optional preferences persisted and completed",
+      "goal pause/resume",
+      "end-and-enroll 2-day goal in 7-day window",
+      "200-percent font and native preference scrolling",
+      "private goal panel at 200-percent font",
+      "flags OFF: native nurturing absent, Maha Sankalpa remains, authenticated API404",
+      "previous preview flag stages restored"
+    ],
+    "scenarios": {
+      "largeFont": 18,
+      "enrollment": 11,
+      "flagOff": 5
+    },
+    "pending": ["release R8 acceptance", "TalkBack spoken navigation", "physical devices"]
+  },
+  "regressions": {
+    "tests": 5,
+    "result": "PASS"
+  },
+  "productionChanged": false
+}

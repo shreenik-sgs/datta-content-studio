@@ -1,0 +1,31 @@
+{
+  "name": "@satsang/distribution-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
+    "start": "node --import tsx src/index.ts",
+    "studio:start": "node --import tsx src/studio-index.ts",
+    "test": "vitest run",
+    "native:evaluate": "tsx src/native-evaluate.ts",
+    "native:benchmark": "tsx src/native-benchmark-cli.ts"
+  },
+  "dependencies": {
+    "@satsang/distribution-assets": "workspace:*",
+    "@satsang/distribution-contracts": "workspace:*",
+    "@satsang/distribution-db": "workspace:*",
+    "@satsang/distribution-domain": "workspace:*",
+    "@satsang/distribution-links": "workspace:*",
+    "pg": "^8.13.0",
+    "playwright": "1.62.1",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.0",
+    "drizzle-orm": "^0.45.2",
+    "tsx": "^4.19.0"
+  }
+}

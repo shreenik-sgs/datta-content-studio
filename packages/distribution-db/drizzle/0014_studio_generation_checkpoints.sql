@@ -1,0 +1,2 @@
+ALTER TABLE "distribution"."studio_generation_job" ADD COLUMN "progress" jsonb;--> statement-breakpoint
+ALTER TABLE "distribution"."studio_package" ADD COLUMN "generation_checkpoint" jsonb DEFAULT '{}'::jsonb NOT NULL;

@@ -1,0 +1,322 @@
+.studio-lineage {
+  margin-top: 26px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+.lineage-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.lineage-heading h3 {
+  margin: 0;
+  color: var(--kamala-deep);
+  font-size: 19px;
+}
+.lineage-map {
+  margin: 24px 0;
+}
+.lineage-master {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: min(100%, 600px);
+  margin: auto;
+  padding: 20px;
+  border: 1px solid #d8b7c6;
+  border-radius: 16px;
+  background: var(--wash);
+}
+.lineage-master > div {
+  min-width: 0;
+}
+.lineage-master strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.lineage-master-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  background: var(--kamala-deep);
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.lineage-identity {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.lineage-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--kamala);
+  line-height: 12px;
+}
+.lineage-connector span {
+  width: 1px;
+  height: 14px;
+  background: #d8b7c6;
+}
+.lineage-summary {
+  margin: 0 0 12px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--muted);
+}
+.lineage-branches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lineage-branches li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-top: 3px solid #d8b7c6;
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px;
+  font-size: 12px;
+}
+.lineage-branches strong {
+  color: var(--kamala-deep);
+}
+.lineage-branches span,
+.lineage-branches small {
+  color: var(--muted);
+}
+.lineage-help {
+  max-width: 900px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.lineage-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.lineage-table {
+  width: 100%;
+  min-width: 1200px;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.lineage-table caption {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--kamala-deep);
+  background: var(--wash);
+}
+.lineage-table th,
+.lineage-table td {
+  padding: 13px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+.lineage-table thead th {
+  background: #faf6f8;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 650;
+}
+.lineage-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.lineage-table tbody tr[data-included="false"] {
+  background: #faf8f9;
+}
+.lineage-table td {
+  min-width: 88px;
+  max-width: 180px;
+}
+.lineage-table small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.lineage-file {
+  width: 230px;
+  min-width: 200px;
+  max-width: 260px;
+  font-weight: 500;
+}
+.lineage-file button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  color: var(--kamala-deep);
+  background: transparent;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.lineage-format {
+  text-transform: capitalize;
+}
+.lineage-status {
+  display: inline-block;
+  border-radius: 8px;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f3edf0;
+  color: var(--muted);
+}
+.lineage-status-pending {
+  background: #fff4d9;
+  color: #755314;
+}
+.lineage-status-success {
+  background: #eaf3e9;
+  color: #345b32;
+}
+.lineage-status-attention {
+  background: #fff0ec;
+  color: #8a382d;
+}
+.lineage-status-excluded {
+  background: #efedef;
+  color: #62575e;
+}
+.lineage-comment {
+  min-width: 180px !important;
+  max-width: 240px !important;
+  overflow-wrap: anywhere;
+}
+.lineage-comment p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.lineage-table time {
+  display: block;
+  min-width: 90px;
+}
+.lineage-table-scroll:focus-visible {
+  outline: 3px solid var(--kamala);
+  outline-offset: 4px;
+}
+@media (max-width: 500px) {
+  .lineage-master {
+    padding: 14px;
+    gap: 10px;
+  }
+  .lineage-master-mark {
+    width: 34px;
+    height: 34px;
+    font-size: 10px;
+  }
+  .lineage-branches {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lineage-branches li {
+    padding: 10px;
+  }
+  .lineage-branches strong,
+  .lineage-branches span,
+  .lineage-branches small {
+    overflow-wrap: anywhere;
+  }
+}
+
+.lineage-map {
+  margin-block: 16px;
+}
+.lineage-master {
+  padding: 14px;
+}
+.lineage-branches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.lineage-branches li {
+  padding: 0;
+  border-top-width: 1px;
+}
+.lineage-branches button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+}
+.lineage-filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block: 16px;
+}
+.lineage-filters label {
+  min-width: 160px;
+  flex: 1;
+  max-width: 280px;
+}
+.lineage-filters output {
+  padding-block: 12px;
+  color: var(--muted);
+}
+.lineage-table-scroll {
+  max-height: 560px;
+  overflow: auto;
+}
+.lineage-table {
+  min-width: 1080px;
+}
+.lineage-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.lineage-comment summary {
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.playlist-files-table .playlist-file-master {
+  min-width: 12rem;
+  max-width: 17rem;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.playlist-file-master > span,
+.playlist-file-master > small {
+  display: block;
+  margin-bottom: 0.7rem;
+}
+.playlist-files-table tbody + tbody {
+  border-top: 2px solid var(--border, #ded4d8);
+}

@@ -1,0 +1,41 @@
+{
+  "recordedOn": "2026-10-03",
+  "scope": "V3.2 additions on recovered V3.1 dq-build",
+  "repository": {
+    "passedFiles": 358,
+    "passedTests": 2968,
+    "skippedFiles": 42,
+    "skippedTests": 297
+  },
+  "browser": {
+    "chromiumFlows": 9,
+    "webkitFlows": 9,
+    "additionalLostResponseRetries": 2,
+    "analyticsClockSkew": "one year ahead; passed"
+  },
+  "coreProductionBuild": "passed",
+  "hubProductionBuild": "passed",
+  "mobileTypecheck": "passed",
+  "guardrails": "passed",
+  "nativeLiveProviderCalls": 0,
+  "realCorpusVideos": 0,
+  "productionDeployed": false,
+  "newFlagsDefault": "OFF",
+  "deviceAcceptance": "iOS Release simulator and Android debug emulator built; native interaction and large-font checks passed. Final iOS keyboard visual recheck passed on 4 October at default and 200% app text scale; physical devices and spoken assistive navigation remain pilot gates.",
+  "remaining": "See V3.2-build-handoff.md release dependencies",
+  "projectionReliability": "Local real pg-boss acceptance-to-publication under five seconds; bounded-turn and failure recovery cases passed. See V3.2-projection-readiness.md.",
+  "channelPublishing": "33 tests pass; durable TEST-only rehearsal; networkEnabled=false.",
+  "analytics": "21 domain/database tests and eight API/bridge tests pass; TEST fixture imports and privacy-suppressed dashboard only.",
+  "packaging": "All four local Hub service images built; seven packaging tests and default-OFF network-disabled container smoke checks passed.",
+  "fullRepositoryLint": "passed",
+  "documentationCheck": "passed",
+  "fullPreCommitGate": "NURTURING_RUN_DB_TESTS=1 DISTRIBUTION_RUN_DB_TESTS=1 pnpm check passed",
+  "androidNativeAcceptance": {
+    "largeFontSteps": 18,
+    "enrollmentSteps": 11,
+    "flagOffSteps": 5,
+    "result": "passed"
+  },
+  "iosFinalKeyboardRecheck": "PASS: focused numeric fields visible above the number pad, scroll/dismissal preserves values, invalid values refused, enrollment succeeds with keyboard open, active goal persists after reopening; default and accessibility-extra-extra-large Dynamic Type. Same source/bundle; no code change.",
+  "updatedOn": "2026-10-04"
+}

@@ -1,0 +1,57 @@
+/* Web navigation stays at the top at every viewport width and for every role. */
+body.has-core-navigation {
+  padding-top: calc(var(--core-navigation-height, 72px) + 8px);
+  padding-bottom: 0;
+}
+.core-top-navigation {
+  position: fixed;
+  z-index: 30;
+  top: 0;
+  left: 0;
+  width: 100%;
+  max-height: 50dvh;
+  overflow: auto;
+  padding: 8px 4vw;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.core-top-navigation ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.core-top-navigation a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--muted);
+  text-decoration: none;
+  border-radius: 24px;
+}
+.core-top-navigation a[aria-current="page"] {
+  color: var(--kamala-deep);
+  font-weight: 650;
+  background: var(--wash);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.core-top-navigation a:hover {
+  background: var(--wash);
+}
+.core-top-navigation svg {
+  flex-shrink: 0;
+}
+.core-top-navigation span {
+  font-size: 14px;
+  line-height: 20px;
+}
+.shell [tabindex="-1"],
+.shell [id] {
+  scroll-margin-top: calc(var(--core-navigation-height, 72px) + 16px);
+}

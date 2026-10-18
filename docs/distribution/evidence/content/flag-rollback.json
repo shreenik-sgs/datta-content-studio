@@ -1,0 +1,40 @@
+{
+  "checkedAt": "2026-10-05T04:43:34.548Z",
+  "scope": "Dedicated local TEST preview only",
+  "flags": [
+    {
+      "key": "explore_library",
+      "stage": "OFF"
+    },
+    {
+      "key": "post_content_next_step",
+      "stage": "OFF"
+    },
+    {
+      "key": "today_with_dattaji",
+      "stage": "OFF"
+    },
+    {
+      "key": "tracked_social_deep_links",
+      "stage": "OFF"
+    },
+    {
+      "key": "universal_content_landing",
+      "stage": "OFF"
+    },
+    {
+      "key": "weekly_dattaji_guidance",
+      "stage": "OFF"
+    },
+    {
+      "key": "weekly_guidance_admin",
+      "stage": "OFF"
+    }
+  ],
+  "libraryDisabled": true,
+  "canonicalDisabled": true,
+  "guidanceDisabled": true,
+  "legacyHomeAvailable": true,
+  "historyRetained": true,
+  "productionChanged": false
+}

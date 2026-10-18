@@ -1,0 +1,54 @@
+diff --git a/index.js b/index.js
+index 56c26025074cbcf218e3ec4d810662da93f8024e..cf4cf3a8c099b239df1cb2becc5a8168bfa635b5 100644
+--- a/index.js
++++ b/index.js
+@@ -396,7 +396,7 @@ module.exports = class CachePolicy {
+         this._assertRequestHasHeaders(req);
+ 
+         // In all circumstances, a cache MUST NOT ignore the must-revalidate directive
+-        if (this._rescc['must-revalidate']) {
++        if (this._reuseRequiresRevalidation()) {
+             return this._evaluateRequestMissResult(req);
+         }
+ 
+@@ -448,6 +448,16 @@ module.exports = class CachePolicy {
+      * @param {boolean} allowHeadMethod - allow a HEAD method to match.
+      * @returns {boolean} `true` if the request matches.
+      */
++    _reuseRequiresRevalidation() {
++        // A client's max-stale cannot override a server's reuse prohibition.
++        // Apply the same restriction to stale-while-revalidate and stale-if-error.
++        return !!(
++            !this.storable() || this._rescc['no-cache'] || this._rescc['must-revalidate'] ||
++            (this._isShared && (this._rescc['proxy-revalidate'] ||
++                (this._resHeaders['set-cookie'] && !this._rescc.public && !this._rescc.immutable)))
++        );
++    }
++
+     _requestMatches(req, allowHeadMethod) {
+         // The presented effective request URI and that of the stored response match, and
+         return !!(
+@@ -687,6 +697,7 @@ module.exports = class CachePolicy {
+      * @returns {number} Time-to-live in milliseconds.
+      */
+     timeToLive() {
++        if (this._reuseRequiresRevalidation()) return 0;
+         const age = this.maxAge() - this.age();
+         const staleIfErrorAge = age + toNumberOrZero(this._rescc['stale-if-error']);
+         const staleWhileRevalidateAge = age + toNumberOrZero(this._rescc['stale-while-revalidate']);
+@@ -706,6 +717,7 @@ module.exports = class CachePolicy {
+      * @returns {boolean} `true` if `stale-if-error` condition allows use of a stale response.
+      */
+     _useStaleIfError() {
++        if (this._reuseRequiresRevalidation()) return false;
+         return this.maxAge() + toNumberOrZero(this._rescc['stale-if-error']) > this.age();
+     }
+ 
+@@ -713,6 +725,7 @@ module.exports = class CachePolicy {
+      * @returns {boolean} `true` if `stale-while-revalidate` is currently allowed.
+      */
+     useStaleWhileRevalidate() {
++        if (this._reuseRequiresRevalidation()) return false;
+         const swr = toNumberOrZero(this._rescc['stale-while-revalidate']);
+         return swr > 0 && this.maxAge() + swr > this.age();
+     }

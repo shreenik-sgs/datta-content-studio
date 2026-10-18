@@ -1,0 +1,26 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/distribution-assets"
+    },
+    {
+      "path": "packages/distribution-domain"
+    },
+    {
+      "path": "packages/distribution-contracts"
+    },
+    {
+      "path": "apps/distribution-worker"
+    },
+    {
+      "path": "apps/distribution-web"
+    },
+    {
+      "path": "packages/distribution-db"
+    },
+    {
+      "path": "apps/distribution-links"
+    }
+  ]
+}

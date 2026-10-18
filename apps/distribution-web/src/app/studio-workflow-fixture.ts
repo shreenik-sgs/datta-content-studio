@@ -1,0 +1,53 @@
+import type { PublicStudioOutput, PublicStudioPackage } from "../lib/studio-model";
+const asset = {
+  filename: "SGS_master-youtube-short-en.mp4",
+  sha256: "a".repeat(64),
+  byteSize: 1000,
+  mimeType: "video/mp4",
+};
+const output: PublicStudioOutput = {
+  id: "output-one",
+  channel: "youtube",
+  format: "short",
+  language: "en",
+  title: "Daily practice",
+  body: "Serve with kindness.\n\nSGS Datta Sannidhi",
+  rationale: "A complete teaching selected for this audience.",
+  included: true,
+  sourceSegmentIds: ["one"],
+  startMs: 1500,
+  endMs: 63500,
+  aspect: "9:16",
+  captions: [
+    { language: "en", translated: true, asset: { ...asset, mimeType: "text/vtt" } },
+    { language: "te", translated: false, asset: { ...asset, mimeType: "text/vtt" } },
+  ],
+  warnings: ["Check the translation before approval."],
+  asset,
+};
+export const value: PublicStudioPackage = {
+  id: "package-one",
+  isTest: true,
+  revision: 4,
+  status: "DRAFT",
+  createdBy: "coordinator",
+  contributorIds: ["coordinator"],
+  source: {
+    masterId: "master-one",
+    versionId: "source-one",
+    sha256: "a".repeat(64),
+    revision: 2,
+    title: "Episode 249",
+    language: "te",
+    category: "pravachanams",
+    mimeType: "video/mp4",
+  },
+  request: { languages: ["en"], instructions: "", channels: ["youtube"], captions: true },
+  outputs: [output],
+  approval: null,
+  provenance: null,
+  feedback: [],
+  failure: null,
+  createdAt: "2026-10-09T07:00:00.000Z",
+  updatedAt: "2026-10-10T10:00:00.000Z",
+};

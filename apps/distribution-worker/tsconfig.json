@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"],
+  "references": [
+    {
+      "path": "../../packages/distribution-assets"
+    },
+    {
+      "path": "../../packages/distribution-contracts"
+    },
+    {
+      "path": "../../packages/distribution-domain"
+    },
+    {
+      "path": "../../packages/distribution-db"
+    },
+    {
+      "path": "../distribution-links"
+    }
+  ]
+}

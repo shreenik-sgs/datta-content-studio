@@ -1,0 +1,45 @@
+{
+  "verifiedAt": "2026-10-05T06:12:59.638Z",
+  "world": "TEST",
+  "coreOrigin": "http://localhost:3020",
+  "hubPort": 3070,
+  "authority": "HMAC request and response verified",
+  "assertions": {
+    "creatorMayCreate": true,
+    "creatorMayReview": false,
+    "adminMayReview": true,
+    "adminMayCreate": false
+  },
+  "guidanceFlags": [
+    {
+      "key": "explore_library",
+      "stage": "OFF"
+    },
+    {
+      "key": "universal_content_landing",
+      "stage": "OFF"
+    },
+    {
+      "key": "tracked_social_deep_links",
+      "stage": "OFF"
+    },
+    {
+      "key": "post_content_next_step",
+      "stage": "OFF"
+    },
+    {
+      "key": "today_with_dattaji",
+      "stage": "OFF"
+    },
+    {
+      "key": "weekly_dattaji_guidance",
+      "stage": "OFF"
+    },
+    {
+      "key": "weekly_guidance_admin",
+      "stage": "OFF"
+    }
+  ],
+  "temporaryPortsStopped": [3025, 3075],
+  "socialPublished": false
+}

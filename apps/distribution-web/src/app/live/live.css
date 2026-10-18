@@ -1,0 +1,49 @@
+.live-curation {
+  display: grid;
+  gap: 20px;
+}
+.live-curation > a {
+  justify-self: start;
+}
+.live-help {
+  margin: 0 0 20px;
+}
+.live-help summary {
+  cursor: pointer;
+}
+.live-setup {
+  margin-top: 20px;
+  max-width: 840px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--wash);
+}
+.live-setup legend {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.live-setup .online-import-checkbox {
+  color: var(--ink);
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+.live-setup fieldset {
+  margin-bottom: 20px;
+}
+.live-setup .live-consent {
+  align-items: flex-start;
+  line-height: 1.5;
+}
+.live-consent input {
+  margin-top: 2px;
+  accent-color: var(--kamala);
+}
+.live-setup input[type="checkbox"] {
+  accent-color: var(--kamala);
+}
+@media (max-width: 600px) {
+  .live-setup {
+    padding: 16px;
+  }
+}

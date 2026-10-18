@@ -1,0 +1,2 @@
+ALTER TABLE "distribution"."studio_package" DROP CONSTRAINT "studio_package_creation";--> statement-breakpoint
+CREATE UNIQUE INDEX "studio_package_creation" ON "distribution"."studio_package" USING btree ("creation_key","is_test") WHERE "distribution"."studio_package"."deleted_at" IS NULL;

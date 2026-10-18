@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "completedAt": "2026-10-05T04:44:11.248Z",
+  "scope": "Local TEST social-link acceptance cleanup",
+  "browserRollbackConfirmedByRoot": true,
+  "queueBeforeStop": {
+    "checkedAt": "2026-10-05T04:44:06.702Z",
+    "pendingReceipts": 0,
+    "temporaryFiles": 0
+  },
+  "queueAfterStop": {
+    "pendingReceipts": 0,
+    "temporaryFiles": 0
+  },
+  "taskOwnedRefreshStopped": true,
+  "taskOwnedResolverStopped": true,
+  "previewSwitches": {
+    "DISTRIBUTION_SOCIAL_LINKS_ENABLED": "false",
+    "DISTRIBUTION_LINK_JOBS_ENABLED": "false"
+  },
+  "corePreviewStillListening": true,
+  "hubPreviewStillListening": true,
+  "queueAndCacheFilesPreserved": true,
+  "existingSeva3066Untouched": true,
+  "databaseFlagWritesPerformed": false,
+  "credentialsOrTokensIncluded": false
+}

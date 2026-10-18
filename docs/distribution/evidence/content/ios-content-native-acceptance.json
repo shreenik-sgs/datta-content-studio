@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "verifiedAt": "2026-10-05T04:43:00Z",
+  "scope": "Dedicated local iOS simulator; synthetic TEST fixture only",
+  "device": {
+    "name": "SGS V3.2 isolated QA",
+    "model": "iPhone 17",
+    "udid": "02B37C31-6FC5-4331-AA45-758757A95175",
+    "runtime": "iOS 26.5 (23F77)",
+    "xcode": "26.6",
+    "screenPixels": [1206, 2622],
+    "logicalPoints": [402, 874]
+  },
+  "build": {
+    "configuration": "Release iphonesimulator; local ad-hoc signature",
+    "bundleId": "org.sgsdattasannidhi.app",
+    "apiOrigin": "http://127.0.0.1:3020",
+    "mainJsBundleSha256": "ea4ba27cd268b18bf567963769866b71e0cb7f15c42dcb38a01a4aa0fcb1e731",
+    "sourceChangedDuringRuntimeChecks": false
+  },
+  "automation": {
+    "method": "Temporary native XCTest UI harness plus simctl local scheme delivery; screenshots visually inspected",
+    "privateHarnessRoot": "/private/tmp/sgs-hub-resume/content-native-xctest",
+    "credentialSource": "Private generated @example.test fixture; values excluded",
+    "hostDesktopCUA": "Unavailable: repeatedly reported Mac locked; XCTest used instead"
+  },
+  "checks": [
+    {
+      "name": "Guidance Home to exact canonical source to Explore More and native keyboard",
+      "status": "PASS",
+      "xctest": "smoke2.xcresult",
+      "durationSeconds": 14.381,
+      "sourceRoomId": "95ec807f-34d7-4957-9146-6d4d3dc6fd69"
+    },
+    {
+      "name": "Default Dynamic Type library field above keyboard",
+      "status": "PASS",
+      "dynamicType": "large",
+      "inputBottomPoints": 278.7,
+      "keyboardTopPoints": 583,
+      "notes": "Initial rapid harness typing omitted one character; screenshot is keyboard/layout evidence. Exact QA value assertion is in the subsequent large-text check."
+    },
+    {
+      "name": "Renewed native sign-in restores exact content intent",
+      "status": "PASS",
+      "method": "UI sign-out, local scheme sign-in returnTo, generated credentials, screenshot and visible canonical CTA assertion",
+      "passwordSave": "Not Now tapped; password not saved",
+      "evidence": "ios-auth-return-restored.png",
+      "qualification": "The combined harness later failed by querying the next screen before its transition completed. This is an observed/asserted auth-return check, not a claim that the entire combined harness passed."
+    },
+    {
+      "name": "Accessibility text library and keyboard geometry",
+      "status": "PASS",
+      "xctest": "large.xcresult",
+      "durationSeconds": 5.354,
+      "dynamicType": "accessibility-extra-extra-large",
+      "appTextMaximumMultiplier": 2,
+      "enteredValue": "QA",
+      "inputBottomPoints": 384,
+      "keyboardTopPoints": 583,
+      "returnKeyUsed": true
+    }
+  ],
+  "harnessDiagnostics": [
+    "Intermediate host URL launch and XCUIApplication URL-launch attempts timed out in XCTest accessibility/idle startup. Direct activation plus native UI interaction succeeded.",
+    "Harness selectors were corrected for grouped guidance buttons, underlying stacked-route fields, the system password sheet, and asynchronous navigation; these did not require application source changes."
+  ],
+  "notPerformed": [
+    "Public HTTPS iOS Universal Link association on signed installed device",
+    "Public Android App Link association or fresh Android runtime validation for this delta",
+    "Physical-device playback/counting and spoken VoiceOver/TalkBack acceptance",
+    "Native completed playback/post-content CTA acceptance"
+  ],
+  "cleanup": {
+    "dynamicTypeRestoredAndReadBack": "large",
+    "simulatorShutdown": true,
+    "temporaryXCTestHostAndRunnerUninstalled": true,
+    "coreAndHubPreviewServicesLeftIntact": true,
+    "nativeSourceQaBundleAbsent": true,
+    "notes": "This iOS build generated its local bundle only in DerivedData, outside the native source tree. No QA Android embedded bundle was created for this delta. Pre-existing ignored build-device files and user native configuration were preserved. Feature restoration is owned by root integration."
+  },
+  "screenshots": [
+    {
+      "path": "ios-guidance-home.png",
+      "sha256": "f0f70ddba4e802fe3f6df8aaef62c46e40afc88bb494b46420bd59b77fba7c4b"
+    },
+    {
+      "path": "ios-canonical-source.png",
+      "sha256": "8074e9baded2131b4629bdb0034ea64b85ce07ef21a030c65d68acc72c6c4d0e"
+    },
+    {
+      "path": "ios-library-keyboard-normal.png",
+      "sha256": "115e99a574373657fb950bf59543b0c9f3e39167a1efe15e60b15f4d68a97e8d"
+    },
+    {
+      "path": "ios-auth-return-restored.png",
+      "sha256": "d18ecab1897133bd09cb2bd0daa49000fb3d0ec8108b26e57e475ca10245f724"
+    },
+    {
+      "path": "ios-library-keyboard-large.png",
+      "sha256": "99e56cc8b14d83df9e3261976a62abf95bce03c41b2e00bbe0dccc8766003ecb"
+    },
+    {
+      "path": "ios-library-results-large.png",
+      "sha256": "aaf02cf0ecf670eda64eb445a40b4b4e2a565c10957dc09490acc9c40bdb65f2"
+    }
+  ]
+}
