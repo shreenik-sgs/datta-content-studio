@@ -32,7 +32,14 @@ it("reviews the exact clip and isolated edge without translated copy or drafting
     startMs: 100,
     endMs: 200,
     included: [{ id: "end", startMs: 100, endMs: 200, text: "తెలుగు విలువ ఆ భాష." }],
-    outside: [],
+    outside: [
+      {
+        id: "next",
+        startMs: 200,
+        endMs: 400,
+        text: "A completion only the next segment contains.",
+      },
+    ],
   });
   expect(actual).toEqual(result);
   const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
@@ -43,6 +50,12 @@ it("reviews the exact clip and isolated edge without translated copy or drafting
     "A complete earlier lesson does NOT excuse a new incomplete sentence",
   );
   expect(JSON.stringify(body.contents)).not.toContain("rationale");
+  expect(JSON.stringify(body.contents)).not.toContain("తెలుగు విలువ ఆ భాష.");
+  expect(JSON.stringify(body.contents)).not.toContain(
+    "A completion only the next segment contains.",
+  );
+  expect(body.systemInstruction.parts[0].text).toContain("blind audio check");
+  expect(body.systemInstruction.parts[0].text).toContain("language hint may be approximate");
 });
 it("fails closed when the reviewer supplies no audible boundary evidence", async () => {
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(

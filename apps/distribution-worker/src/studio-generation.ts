@@ -12,6 +12,7 @@ import {
 } from "@satsang/distribution-db";
 import {
   STUDIO_AUDIO_POLICY,
+  STUDIO_BOUNDARY_EVIDENCE_POLICY,
   STUDIO_BOUNDARY_REVIEW_POLICY,
   STUDIO_BRAND_NAME,
   STUDIO_CLOSING_CARD_POLICY,
@@ -684,6 +685,7 @@ export async function generateStudioPackage(input: {
         ];
         const fingerprint = studioFingerprint({
           policy: STUDIO_BOUNDARY_REVIEW_POLICY,
+          evidencePolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
           source: claim.source.sha256,
           startMs: range.startMs,
           endMs: range.endMs,
@@ -930,6 +932,7 @@ export async function generateStudioPackage(input: {
     const renderFingerprint = studioFingerprint({
       version: 18,
       boundaryPolicy: STUDIO_BOUNDARY_REVIEW_POLICY,
+      boundaryEvidencePolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
       audioPolicy: STUDIO_AUDIO_POLICY,
       visualStylePolicy: STUDIO_VISUAL_STYLE_POLICY,
       closingDestinations: input.closingDestinations,

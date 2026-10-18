@@ -100,5 +100,32 @@
       }
     ],
     "committedAs": "6e9da5087c717112e55432ca7955f99eab3b599d"
+  },
+  "additionalAudioBoundaryFixes": {
+    "baseCommit": "6e9da5087c717112e55432ca7955f99eab3b599d",
+    "uncommitted": true,
+    "snapshotUTC": "2026-10-18T17:26:23.254438+00:00",
+    "files": [
+      {
+        "path": "apps/distribution-worker/src/studio-boundary-review.test.ts",
+        "sha256": "9425489682bdabb7af7478a5cdb2a5429d9533d82232e7058e350a2c44624a72"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-boundary-review.ts",
+        "sha256": "6659e5bb34971cd4fc1958cf13b01506c343ae1a6be790c82fc0005739c2f136"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-generation.ts",
+        "sha256": "b2438b06429ada781828b4cef7ba125e0ec88f29d4412aca17ba6ef0b30d91fb"
+      },
+      {
+        "path": "docs/runbooks/studio-generation-recovery.md",
+        "sha256": "cb6acfe50efd497e048139a025ea8d87929e2a8ad25e910e050ce7a43a31fb70"
+      },
+      {
+        "path": "packages/distribution-domain/src/studio-boundary-review.ts",
+        "sha256": "6f05d160473c0b678ad62b1f4ee3b13720baa30a93f8338fa130bfde8e74cfdd"
+      }
+    ]
   }
 }

@@ -1,6 +1,7 @@
 import type { StudioContentReview } from "./studio-content-review";
 
 export const STUDIO_BOUNDARY_REVIEW_POLICY = "exact-native-audio-boundaries-v1";
+export const STUDIO_BOUNDARY_EVIDENCE_POLICY = "audio-only-native-boundaries-v2";
 export type StudioBoundaryFinding = {
   verdict: "complete" | "incomplete" | "uncertain";
   audibleWords: string;
@@ -11,6 +12,8 @@ export type StudioBoundaryFinding = {
 };
 export type StudioBoundaryReview = {
   policy: typeof STUDIO_BOUNDARY_REVIEW_POLICY;
+  /** Absent on older review records; new checks are deliberately blind to ASR text. */
+  evidencePolicy?: typeof STUDIO_BOUNDARY_EVIDENCE_POLICY;
   startMs: number;
   endMs: number;
   opening: StudioBoundaryFinding;
@@ -43,6 +46,7 @@ export function validateStudioBoundaryReview(
   if (
     !v ||
     v.policy !== STUDIO_BOUNDARY_REVIEW_POLICY ||
+    (v.evidencePolicy !== undefined && v.evidencePolicy !== STUDIO_BOUNDARY_EVIDENCE_POLICY) ||
     !Number.isSafeInteger(v.startMs) ||
     !Number.isSafeInteger(v.endMs) ||
     v.startMs < 0 ||
