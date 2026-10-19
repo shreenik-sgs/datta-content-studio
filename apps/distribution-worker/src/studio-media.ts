@@ -6,15 +6,19 @@ import {
   STUDIO_PICTURE,
   STUDIO_SUBTITLE_TOP,
   type StudioClosingCard,
+  type StudioMediaEdits,
   type StudioOpeningCard,
   type StudioPortraitScene,
   type StudioSegment,
+  studioSpeechTarget,
+  studioSubtitleSize,
   validateStudioAudioLevel,
   validateStudioClosingCard,
+  validateStudioMediaEdits,
   validateStudioOpeningCard,
 } from "@satsang/distribution-domain";
 import sharp from "sharp";
-import { measureStudioAudio, studioAudioNormalization } from "./studio-audio.js";
+import { measureStudioAudio, studioAudioNormalization, studioNoiseFilter } from "./studio-audio.js";
 import { executeStudioSource } from "./studio-process.js";
 
 const escapeMarkup = (s: string) =>
@@ -176,7 +180,7 @@ async function captionTimeline(
   segments: StudioSegment[],
   startMs: number,
   endMs: number,
-  placement: { scenes: StudioPortraitScene[]; fitCaptionTop: number },
+  placement: { scenes: StudioPortraitScene[]; fitCaptionTop: number; fontSize: number },
 ): Promise<string> {
   const timeline: { duration: number; text: string }[] = [];
   let cursor = startMs;
@@ -211,9 +215,13 @@ async function captionTimeline(
   });
   for (const [i, cue] of positioned.entries()) {
     const name = `cc-${i}.png`;
-    await writeFile(join(directory, name), await studioCaptionImage(cue.text, cue.top), {
-      mode: 0o600,
-    });
+    await writeFile(
+      join(directory, name),
+      await studioCaptionImage(cue.text, cue.top, placement.fontSize),
+      {
+        mode: 0o600,
+      },
+    );
     entries.push(`file '${name}'\nduration ${(cue.duration / 1000).toFixed(3)}`);
   }
   entries.push(`file 'cc-${positioned.length - 1}.png'`);
@@ -228,7 +236,12 @@ export function studioCaptionLines(text: string): string[] {
   return wrapGraphemes(text, CAPTION_LINE_GRAPHEMES);
 }
 /** Large centered captions occupy a bottom band outside the source picture, never covering Swamiji. */
-export async function studioCaptionImage(text: string, top = STUDIO_CAPTION_TOP): Promise<Buffer> {
+export async function studioCaptionImage(
+  text: string,
+  top = STUDIO_CAPTION_TOP,
+  fontSize = 72,
+): Promise<Buffer> {
+  if (![56, 72, 80].includes(fontSize)) throw Error("INVALID_STUDIO_MEDIA_EDITS");
   if (!Number.isSafeInteger(top) || top < 210 || top > STUDIO_CAPTION_TOP)
     throw Error("STUDIO_CAPTION_BOUNDARY_INVALID");
   const wrapped = studioCaptionLines(text);
@@ -240,12 +253,12 @@ export async function studioCaptionImage(text: string, top = STUDIO_CAPTION_TOP)
       .filter((line) => line.trim())
       .map(async (line) => {
         const measured = await sharp({
-          text: { text: escapeMarkup(line.trim()), font: "sans-serif 72", rgba: true },
+          text: { text: escapeMarkup(line.trim()), font: `sans-serif ${fontSize}`, rgba: true },
         }).metadata();
         return measured.width ?? 0;
       }),
   );
-  const size = Math.min(72, Math.floor((72 * 828) / Math.max(1, ...widths)));
+  const size = Math.min(fontSize, Math.floor((fontSize * 828) / Math.max(1, ...widths)));
   const lineHeight = Math.ceil(size * 1.35);
   const height = wrapped.length * lineHeight + 36;
   // A fixed 12px gap keeps every cue close to the picture, regardless of line count.
@@ -317,6 +330,7 @@ export async function studioIllustrationFrame(bytes: Uint8Array): Promise<Buffer
 }
 
 export async function renderStudioVideo(input: {
+  mediaEdits?: StudioMediaEdits;
   ffmpeg: string;
   directory: string;
   sourcePath: string;
@@ -335,12 +349,13 @@ export async function renderStudioVideo(input: {
   endMs: number;
   captions: StudioSegment[];
 }): Promise<string> {
+  if (input.mediaEdits) validateStudioMediaEdits(input.mediaEdits);
   const backdrop = join(input.directory, "backdrop.png");
   const destination = join(input.directory, "video.mp4");
   await writeFile(backdrop, input.backdrop, { mode: 0o600 });
   const width = input.sourceWidth ?? 1920;
   const height = input.sourceHeight ?? 1080;
-  const scenes = input.scenes ?? [];
+  const scenes = input.mediaEdits?.framing === "full-picture" ? [] : (input.scenes ?? []);
   const illustrations = input.illustrations ?? [];
   const closing = input.closingCard;
   const opening = input.openingCard;
@@ -393,6 +408,7 @@ export async function renderStudioVideo(input: {
         ...(opening ? [{ ...opening.plan, bodyTop: 0, bodyBottom: 1 }] : []),
       ],
       fitCaptionTop: input.hasVideo ? fitCaptionTop : STUDIO_CAPTION_TOP,
+      fontSize: studioSubtitleSize(input.mediaEdits),
     },
   );
   const frame = STUDIO_VIDEO_FRAME;
@@ -421,7 +437,7 @@ export async function renderStudioVideo(input: {
       const parts = [`body${i}`, ...(top ? [`top${i}`] : []), ...(bottom ? [`bottom${i}`] : [])];
       filter.push(`[shot${i}]split=${parts.length}${parts.map((p) => `[${p}]`).join("")}`);
       filter.push(
-        `[body${i}]crop=iw:${height - top - bottom}:0:${top},scale=${frame.width}:${bodyH}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${frame.width}:${bodyH},pad=${frame.width}:${frame.height}:0:${topH},setsar=1[portrait${i}]`,
+        `[body${i}]crop=iw:${height - top - bottom}:0:${top},scale=${frame.width}:${bodyH}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${frame.width}:${bodyH}:(iw-ow)*${input.mediaEdits?.portraitFocus ?? 0.5},pad=${frame.width}:${frame.height}:0:${topH},setsar=1[portrait${i}]`,
       );
       let sceneLabel = `portrait${i}`;
       if (top) {
@@ -477,7 +493,7 @@ export async function renderStudioVideo(input: {
   if (input.hasAudio) {
     const measured = await measureStudioAudio(input);
     filter.push(
-      `[1:a:0]atrim=duration=${durationMs / 1000},asetpts=PTS-STARTPTS,${studioAudioNormalization(measured)}[voice]`,
+      `[1:a:0]atrim=duration=${durationMs / 1000},asetpts=PTS-STARTPTS,${studioNoiseFilter(input.mediaEdits)}${studioAudioNormalization(measured, input.mediaEdits)}[voice]`,
     );
   }
   const source = `${filter.join(";")};`;
@@ -565,12 +581,17 @@ export async function renderStudioVideo(input: {
   if (input.hasAudio) {
     const measured = await measureStudioAudio({
       ...input,
+      ...(input.mediaEdits ? { mediaEdits: { ...input.mediaEdits, reduceNoise: false } } : {}),
       sourcePath: destination,
       mimeType: "video/mp4",
       startMs: 0,
       endMs: durationMs,
     });
-    validateStudioAudioLevel(measured.integratedLufs, measured.truePeakDbtp);
+    validateStudioAudioLevel(
+      measured.integratedLufs,
+      measured.truePeakDbtp,
+      studioSpeechTarget(input.mediaEdits),
+    );
   }
   return destination;
 }

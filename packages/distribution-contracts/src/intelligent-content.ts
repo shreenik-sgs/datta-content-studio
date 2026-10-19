@@ -50,8 +50,19 @@ export const studioCreateSchema = z
     request: studioGenerationRequestSchema,
   })
   .strict();
+export const studioMediaEditsSchema = z
+  .object({
+    framing: z.enum(["auto", "full-picture"]),
+    portraitFocus: z.number().finite().min(0).max(1),
+    captions: z.enum(["default", "on", "off"]),
+    subtitleSize: z.enum(["small", "standard", "large"]),
+    speechLevel: z.enum(["softer", "standard", "louder"]),
+    reduceNoise: z.boolean(),
+  })
+  .strict();
 export const studioReviseSchema = z
   .object({
+    render: z.boolean().optional(),
     expectedRevision: revision,
     comment: z.string().trim().max(4000),
     outputs: z
@@ -68,6 +79,7 @@ export const studioReviseSchema = z
               .max(10000)
               .refine(unique)
               .optional(),
+            mediaEdits: studioMediaEditsSchema.optional(),
             captionCues: z
               .array(
                 z

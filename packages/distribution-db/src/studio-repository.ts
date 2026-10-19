@@ -1023,9 +1023,11 @@ export function createIntelligentContentRepository(
       id: string,
       input: {
         expectedRevision: number;
+        render?: boolean | undefined;
         outputs: (Pick<StudioOutput, "id" | "title" | "body" | "included"> & {
           sourceSegmentIds?: string[] | undefined;
           captionCues?: StudioOutput["captionCues"] | undefined;
+          mediaEdits?: StudioOutput["mediaEdits"] | undefined;
         })[];
         comment: string;
       },
@@ -1068,11 +1070,13 @@ export function createIntelligentContentRepository(
               }))
           )
             throw new Error("INVALID_STUDIO_CAPTIONS");
+          const mediaEdits = edit.mediaEdits ?? output.mediaEdits;
           const changed =
             edit.title !== output.title ||
             edit.body !== output.body ||
             !same(sourceSegmentIds, output.sourceSegmentIds) ||
-            !same(captionCues, output.captionCues);
+            !same(captionCues, output.captionCues) ||
+            !same(mediaEdits, output.mediaEdits);
           const revised = {
             ...output,
             title: edit.title,
@@ -1083,6 +1087,7 @@ export function createIntelligentContentRepository(
               ? { startMs: range.startMs, endMs: range.endMs }
               : {}),
             ...(captionCues ? { captionCues } : {}),
+            ...(mediaEdits ? { mediaEdits } : {}),
             ...(changed
               ? {
                   asset: null,
@@ -1103,7 +1108,7 @@ export function createIntelligentContentRepository(
           request: pkg.request,
           provenance: pkg.provenance,
         });
-        return save(
+        const saved = await save(
           client,
           pkg,
           ctx.userId,
@@ -1117,6 +1122,14 @@ export function createIntelligentContentRepository(
           },
           { action: "REVISED", comment: note },
         );
+        // Saving edits and queuing their rebuild must commit or roll back together.
+        if (input.render)
+          return requestGeneration(client, ctx, id, {
+            expectedRevision: saved.revision,
+            outputIds: input.outputs.filter((output) => output.included).map((output) => output.id),
+            mode: "render",
+          });
+        return saved;
       }),
     submit: (
       ctx: DistributionContext,
@@ -1193,6 +1206,7 @@ export function createIntelligentContentRepository(
                   requestedAt: new Date().toISOString(),
                   state: "pending" as const,
                   before: {
+                    ...(o.mediaEdits ? { mediaEdits: o.mediaEdits } : {}),
                     title: o.title,
                     body: o.body,
                     sourceSegmentIds: o.sourceSegmentIds,

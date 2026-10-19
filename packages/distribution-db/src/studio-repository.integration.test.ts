@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   STUDIO_BRAND_NAME,
+  STUDIO_MEDIA_DEFAULTS,
   type StudioChannel,
   type StudioLanguage,
   type StudioOutput,
@@ -1275,6 +1276,87 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     expect(
       await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision }),
     ).toHaveLength(1);
+  });
+  it("atomically queues a manual media edit and keeps every other output unchanged", async () => {
+    const f = await fixture({ channels: ["youtube", "website"] });
+    const pkg = await draft(f);
+    const output = pkg.outputs[0];
+    if (!output) throw Error("MISSING_FIXTURE");
+    const mediaEdits = {
+      ...STUDIO_MEDIA_DEFAULTS,
+      speechLevel: "louder" as const,
+      captions: "off" as const,
+    };
+    const queued = await studio.revise(f.ctx, pkg.id, {
+      expectedRevision: pkg.revision,
+      render: true,
+      comment: "Correct the audio on this file only.",
+      outputs: [
+        { id: output.id, title: output.title, body: output.body, included: true, mediaEdits },
+      ],
+    });
+    expect(queued.status).toBe("QUEUED");
+    expect(queued.generation).toEqual({ outputIds: [output.id], mode: "render" });
+    expect(queued.outputs[0]).toMatchObject({
+      mediaEdits,
+      asset: null,
+      aiReview: null,
+      presentationReview: null,
+    });
+    expect(queued.outputs[1]).toEqual(pkg.outputs[1]);
+    expect(queued.approval).toBeNull();
+    await expect(
+      studio.revise(f.ctx, pkg.id, {
+        expectedRevision: pkg.revision,
+        render: true,
+        comment: "",
+        outputs: [{ ...output, mediaEdits }],
+      }),
+    ).rejects.toThrow("REVISION_CONFLICT");
+  });
+  it("rolls back an edit if its rebuild cannot be queued", async () => {
+    const f = await fixture();
+    const pkg = await draft(f);
+    const output = pkg.outputs[0];
+    if (!output) throw Error("MISSING_FIXTURE");
+    await expect(
+      studio.revise(f.ctx, pkg.id, {
+        expectedRevision: pkg.revision,
+        render: true,
+        comment: "",
+        outputs: [{ ...output, body: "Edited copy. @sgsswamiji", included: false }],
+      }),
+    ).rejects.toThrow("STUDIO_SELECT_OUTPUTS");
+    expect(await studio.get(f.ctx, pkg.id)).toEqual(pkg);
+  });
+  it("rejects media changes on approved packages and invalid settings on drafts", async () => {
+    const f = await fixture({ channels: ["youtube"] });
+    const pkg = await draft(f);
+    const output = pkg.outputs[0];
+    if (!output) throw Error("MISSING_FIXTURE");
+    await expect(
+      studio.revise(f.ctx, pkg.id, {
+        expectedRevision: pkg.revision,
+        comment: "",
+        outputs: [{ ...output, mediaEdits: { ...STUDIO_MEDIA_DEFAULTS, portraitFocus: 2 } }],
+      }),
+    ).rejects.toThrow("INVALID_STUDIO_MEDIA_EDITS");
+    expect(await studio.get(f.ctx, pkg.id)).toEqual(pkg);
+    const pending = await studio.submit(f.ctx, pkg.id, { expectedRevision: pkg.revision });
+    const approved = await studio.review(f.reviewer, pkg.id, {
+      expectedRevision: pending.revision,
+      decision: "APPROVED",
+      confirmTranscript: true,
+      confirmTeachingIntegrity: true,
+    });
+    await expect(
+      studio.revise(f.ctx, pkg.id, {
+        expectedRevision: approved.revision,
+        render: true,
+        comment: "",
+        outputs: [{ ...output, mediaEdits: { ...STUDIO_MEDIA_DEFAULTS, speechLevel: "louder" } }],
+      }),
+    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
   });
   it("saves a translated clip correction before replacement caption assets exist, then queues only that file", async () => {
     const f = await fixture({ channels: ["youtube", "website"], outputLanguages: ["te"] });

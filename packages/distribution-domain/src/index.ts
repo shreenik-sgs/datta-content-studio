@@ -82,6 +82,7 @@ export function nextContentState(state: ContentState, action: ContentAction): Co
 export * from "./content";
 export * from "./uploads";
 export * from "./studio-audio";
+export * from "./studio-media-edits";
 export * from "./studio-additional-message";
 export * from "./live-curation";
 

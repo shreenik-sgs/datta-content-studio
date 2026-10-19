@@ -3,7 +3,12 @@ import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { STUDIO_AUDIO_POLICY, validateStudioAudioLevel } from "@satsang/distribution-domain";
+import {
+  STUDIO_AUDIO_POLICY,
+  STUDIO_MEDIA_DEFAULTS,
+  studioSpeechTarget,
+  validateStudioAudioLevel,
+} from "@satsang/distribution-domain";
 import sharp from "sharp";
 import { expect, it } from "vitest";
 import { measureStudioAudio, parseStudioAudioMeasurement } from "./studio-audio";
@@ -41,8 +46,18 @@ it("renders quiet and normal source clips to matching measured speech levels wit
     })
       .png()
       .toBuffer();
-    for (const gain of [-17, 0]) {
-      const directory = join(dir, String(gain));
+    for (const [gain, speechLevel] of [
+      [-17, "standard"],
+      [0, "standard"],
+      [0, "louder"],
+      [0, "softer"],
+    ] as const) {
+      const mediaEdits = {
+        ...STUDIO_MEDIA_DEFAULTS,
+        speechLevel,
+        reduceNoise: speechLevel !== "standard",
+      };
+      const directory = join(dir, `${gain}-${speechLevel}`);
       await mkdir(directory);
       const sourcePath = join(directory, "source.wav");
       execFileSync(ffmpeg, [
@@ -59,6 +74,7 @@ it("renders quiet and normal source clips to matching measured speech levels wit
         sourcePath,
       ]);
       const output = await renderStudioVideo({
+        mediaEdits,
         ffmpeg,
         directory,
         sourcePath,
@@ -78,9 +94,7 @@ it("renders quiet and normal source clips to matching measured speech levels wit
         startMs: 0,
         endMs: 5000,
       });
-      expect(Math.abs(measured.integratedLufs - STUDIO_AUDIO_POLICY.integratedLufs)).toBeLessThan(
-        0.5,
-      );
+      expect(Math.abs(measured.integratedLufs - studioSpeechTarget(mediaEdits))).toBeLessThan(0.5);
       expect(measured.truePeakDbtp).toBeLessThanOrEqual(STUDIO_AUDIO_POLICY.maximumTruePeakDbtp);
       levels.push(measured.integratedLufs);
     }
@@ -88,4 +102,4 @@ it("renders quiet and normal source clips to matching measured speech levels wit
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
-}, 60000);
+}, 120000);

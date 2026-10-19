@@ -17,6 +17,7 @@ import {
 import { parseStudioAssetKey } from "./studio-assets";
 import { validateStudioAiReviewEvidence } from "./studio-content-review";
 import { studioRenderedDurationMs, studioYoutubeClosing } from "./studio-ending";
+import { studioCaptionsEnabled, validateStudioMediaEdits } from "./studio-media-edits";
 import {
   STUDIO_BRAND_NAME,
   STUDIO_COPY_LIMITS,
@@ -233,6 +234,10 @@ export function validateStudioOutputs(
   );
   const destinations = new Set<string>();
   for (const output of outputs) {
+    if (output.mediaEdits !== undefined) {
+      if (!["short", "reel"].includes(output.format)) throw Error("INVALID_STUDIO_MEDIA_EDITS");
+      validateStudioMediaEdits(output.mediaEdits);
+    }
     if (
       !validId(output.id) ||
       (output.messageId !== undefined && !validStudioMessageId(output.messageId)) ||
@@ -424,7 +429,9 @@ export function validateStudioOutputs(
       // Editing invalidates old media. Complete source-bound translated cues can be
       // saved for re-rendering; the missing asset still blocks review/publication.
       !(
-        !output.asset &&
+        (!output.asset ||
+          (output.mediaEdits &&
+            !studioCaptionsEnabled(output.mediaEdits, input.request.captions))) &&
         Array.isArray(output.captionCues) &&
         output.captionCues.length === range.segments.length &&
         output.captionCues.every((cue, index) => {
@@ -443,7 +450,7 @@ export function validateStudioOutputs(
       throw new Error("STUDIO_TRANSLATION_INCOMPLETE");
     if (
       video &&
-      input.request.captions &&
+      studioCaptionsEnabled(output.mediaEdits, input.request.captions) &&
       output.asset &&
       !output.captions.some((caption) => caption.language === output.language)
     )

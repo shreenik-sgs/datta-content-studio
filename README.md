@@ -45,6 +45,26 @@ and secure on HTTPS. Passwords are salted with scrypt; database sessions store
 only token hashes. Login is throttled per normalized email. Workers recheck current
 roles in this database before acting. Sannidhi cookies are never accepted.
 
+## Manual corrections
+
+Open a draft file preview and choose **Edit this file**, or choose **Edit file, video & audio**
+in the package's corrections section. Curators can edit titles and posting/article text,
+choose complete source passages while watching or listening to the version-bound master,
+and correct individual subtitles. Video controls include safe portrait focus, full-picture
+framing and per-file subtitle visibility/size. Audio controls offer softer, standard or louder
+speech and optional steady-noise reduction. Playback speed/volume affect preview only.
+
+**Save & rebuild this file** atomically saves and queues only the selected output. Rendered
+media, thumbnails and AI review evidence are invalidated when content or media settings change;
+other files retain their versions and assets. The normal AI content, boundary and actual-render
+checks still apply before human review. Audio is measured before and after rendering, with
+peak protection at every loudness preset. Branding and the closing card are retained.
+
+Approved packages stay immutable. Rejected files return with their review comments and can
+be corrected manually or with AI. Saved manual settings survive later corrections. Source
+passage selection deliberately uses transcript boundaries; it does not offer arbitrary cuts
+through speech, dubbing or a multitrack editing timeline. Review the rebuilt result before approval.
+
 ## Settings and deployment
 
 Channel credentials, upload limits and rendering settings live under the Studio's

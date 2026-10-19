@@ -9,6 +9,7 @@ import type { StudioGenerationClaim } from "@satsang/distribution-db";
 import {
   STUDIO_BOUNDARY_REVIEW_POLICY,
   STUDIO_CHANNELS,
+  STUDIO_MEDIA_DEFAULTS,
   type StudioPackage,
   createLocalStudioPlan,
   parseStudioAssetKey,
@@ -935,49 +936,71 @@ describe("automatic Studio generation with real media", () => {
     expect(request?.outputs.map((o) => o.id)).toEqual([target.id]);
     expect(request?.feedback.map((f) => f.comment)).toEqual(["Shorten this blog only"]);
   }, 90000);
-  it("renders a manually corrected video passage and captions without an AI call", async () => {
-    const first = await generateStudioPackage({
-      claim: {
-        ...claim,
-        package: { ...claim.package, request: { ...claim.package.request, channels: ["youtube"] } },
-      },
-      store,
-      env,
-    });
-    const target = first.outputs[0];
-    const segment = first.provenance.transcript.segments[0];
-    if (!target || !segment) throw new Error("Missing fixture");
-    const edited = {
-      ...target,
-      asset: null,
-      sourceSegmentIds: [segment.id],
-      captionCues: [{ ...segment, text: "Corrected subtitle." }],
-    };
-    const network = vi.spyOn(globalThis, "fetch");
-    const result = await generateStudioPackage({
-      claim: {
-        ...claim,
-        package: {
-          ...claim.package,
-          outputs: [edited],
-          provenance: first.provenance,
-          generation: { outputIds: [target.id], mode: "render" },
+  it.each([true, false])(
+    "renders manual media and caption overrides without replanning (captions=%s)",
+    async (captionsEnabled) => {
+      const first = await generateStudioPackage({
+        claim: {
+          ...claim,
+          package: {
+            ...claim.package,
+            request: { ...claim.package.request, channels: ["youtube"] },
+          },
         },
-      },
-      store,
-      env,
-    });
-    expect(network).not.toHaveBeenCalled();
-    const output = result.outputs[0];
-    expect(output?.startMs).toBe(segment.startMs);
-    expect(output?.endMs).toBe(segment.endMs);
-    expect(output?.captionCues?.[0]?.text).toBe("Corrected subtitle.");
-    const caption = output?.captions[0]?.asset;
-    if (!caption) throw new Error("Missing rendered captions");
-    expect((await store.readDerivedDescriptor(caption)).toString()).toContain(
-      "Corrected subtitle.",
-    );
-  }, 90000);
+        store,
+        env,
+      });
+      const target = first.outputs[0];
+      const segment = first.provenance.transcript.segments[0];
+      if (!target || !segment) throw new Error("Missing fixture");
+      const edited = {
+        ...target,
+        asset: null,
+        sourceSegmentIds: [segment.id],
+        captionCues: [{ ...segment, text: "Corrected subtitle." }],
+        mediaEdits: {
+          ...STUDIO_MEDIA_DEFAULTS,
+          captions: captionsEnabled ? ("on" as const) : ("off" as const),
+          subtitleSize: "small" as const,
+          speechLevel: "louder" as const,
+          reduceNoise: true,
+          framing: "full-picture" as const,
+        },
+      };
+      const network = vi.spyOn(globalThis, "fetch");
+      const result = await generateStudioPackage({
+        claim: {
+          ...claim,
+          package: {
+            ...claim.package,
+            request: { ...claim.package.request, captions: !captionsEnabled },
+            outputs: [edited],
+            provenance: first.provenance,
+            generation: { outputIds: [target.id], mode: "render" },
+          },
+        },
+        store,
+        env,
+      });
+      expect(network).not.toHaveBeenCalled();
+      const output = result.outputs[0];
+      expect(output?.startMs).toBe(segment.startMs);
+      expect(output?.endMs).toBe(segment.endMs);
+      expect(output?.captionCues?.[0]?.text).toBe("Corrected subtitle.");
+      expect(output?.mediaEdits).toEqual(edited.mediaEdits);
+      expect(output?.fileVersion).toBe(2);
+      if (!captionsEnabled) {
+        expect(output?.captions).toEqual([]);
+        return;
+      }
+      const caption = output?.captions[0]?.asset;
+      if (!caption) throw new Error("Missing rendered captions");
+      expect((await store.readDerivedDescriptor(caption)).toString()).toContain(
+        "Corrected subtitle.",
+      );
+    },
+    90000,
+  );
   it("accepts JSONB key reordering during a selected-file correction but rejects changed source evidence", async () => {
     const sourceClaim = {
       ...claim,

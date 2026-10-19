@@ -8,12 +8,16 @@ export const STUDIO_AUDIO_POLICY = {
   maximumTruePeakDbtp: -1,
 } as const;
 
-export function validateStudioAudioLevel(integratedLufs: number, truePeakDbtp: number): void {
+export function validateStudioAudioLevel(
+  integratedLufs: number,
+  truePeakDbtp: number,
+  targetLufs: number = STUDIO_AUDIO_POLICY.integratedLufs,
+): void {
   if (
+    ![-26, -22, -18].includes(targetLufs) ||
     !Number.isFinite(integratedLufs) ||
     !Number.isFinite(truePeakDbtp) ||
-    Math.abs(integratedLufs - STUDIO_AUDIO_POLICY.integratedLufs) >
-      STUDIO_AUDIO_POLICY.toleranceLufs ||
+    Math.abs(integratedLufs - targetLufs) > STUDIO_AUDIO_POLICY.toleranceLufs ||
     truePeakDbtp > STUDIO_AUDIO_POLICY.maximumTruePeakDbtp
   )
     throw Error("STUDIO_AUDIO_QUALITY_FAILED");

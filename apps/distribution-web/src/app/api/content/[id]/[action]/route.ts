@@ -108,6 +108,12 @@ export async function GET(request: Request, { params }: Params) {
       return json({ versions: await auth.repo.versions(auth.context, id) });
     if (action !== "media") return json({ error: "NOT_FOUND" }, 404);
     const initial = await auth.repo.getAsset(auth.context, id);
+    const expectedVersion = new URL(request.url).searchParams.get("versionId");
+    if (
+      expectedVersion &&
+      z.string().uuid().parse(expectedVersion) !== initial.content.currentVersion.id
+    )
+      return json({ error: "SOURCE_CHANGED" }, 409);
     const { asset } = initial;
     const store = privateAssets(auth.context);
     const tag = `"${asset.sha256}"`;

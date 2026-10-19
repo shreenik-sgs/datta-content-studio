@@ -1,0 +1,43 @@
+.studio-source-player,
+.studio-export-controls {
+  border: 1px solid #d8d3d5;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-block: 1rem;
+}
+.studio-source-player video {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  background: #181518;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.studio-source-player audio {
+  width: 100%;
+}
+.studio-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 1rem;
+}
+.studio-editor-grid label {
+  min-width: 0;
+}
+.studio-editor-grid input[type="range"] {
+  width: 100%;
+}
+.studio-editor-grid small {
+  display: block;
+  font-weight: normal;
+}
+
+.studio-file-editor label {
+  color: #33282f;
+}
+.studio-file-editor label small {
+  color: #625960;
+}
+.studio-file-editor [role="alert"] {
+  color: #9f1d35;
+}

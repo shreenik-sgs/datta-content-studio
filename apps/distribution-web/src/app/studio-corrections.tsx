@@ -1,15 +1,20 @@
 "use client";
 import {
-  STUDIO_BRAND_SIGNATURE,
   STUDIO_COPY_LIMITS,
+  STUDIO_MEDIA_DEFAULTS,
   STUDIO_TITLE_LIMITS,
+  type StudioMediaEdits,
   type StudioSegment,
+  studioCaptionsEnabled,
   studioChannelLabel,
+  studioClosingCardPlan,
   studioVideoDurationLimitMs,
 } from "@satsang/distribution-domain";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PublicStudioPackage } from "../lib/studio-model";
 import { useHubTimestamp } from "./hub-locale";
+
+import { StudioMediaControls, StudioMediaSummary, StudioSourcePlayer } from "./studio-media-editor";
 
 type Action = (
   action: string,
@@ -20,14 +25,29 @@ export function StudioCorrections({
   busy,
   available,
   onAction,
-}: { value: PublicStudioPackage; busy: boolean; available: boolean; onAction: Action }) {
+  initialOutputId,
+  onEditingChange,
+}: {
+  initialOutputId?: string | undefined;
+  onEditingChange?: ((dirty: boolean) => void) | undefined;
+  value: PublicStudioPackage;
+  busy: boolean;
+  available: boolean;
+  onAction: Action;
+}) {
   const requested = value.outputs.filter((o) => o.included && o.correction?.state === "pending");
   const [selected, setSelected] = useState<string[]>(requested.map((o) => o.id));
-  const [mode, setMode] = useState<"ai" | "manual">("ai");
+  const [mode, setMode] = useState<"ai" | "manual">(initialOutputId ? "manual" : "ai");
   const [editingId, setEditingId] = useState(
-    requested[0]?.id ?? value.outputs.find((o) => o.included)?.id ?? "",
+    initialOutputId ?? requested[0]?.id ?? value.outputs.find((o) => o.included)?.id ?? "",
   );
   const formatTime = useHubTimestamp();
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    onEditingChange?.(dirty);
+    return () => onEditingChange?.(false);
+  }, [dirty, onEditingChange]);
+  const leave = () => !dirty || window.confirm("Discard unsaved edits to this file?");
   return (
     <section aria-label="File corrections">
       <h3>Fix selected files</h3>
@@ -48,7 +68,11 @@ export function StudioCorrections({
           type="button"
           className="button"
           aria-pressed={mode === "ai"}
-          onClick={() => setMode("ai")}
+          onClick={() => {
+            if (mode === "manual" && !leave()) return;
+            setDirty(false);
+            setMode("ai");
+          }}
         >
           Apply suggestions with AI
         </button>
@@ -58,7 +82,7 @@ export function StudioCorrections({
           aria-pressed={mode === "manual"}
           onClick={() => setMode("manual")}
         >
-          Edit text, clip & captions
+          Edit file, video & audio
         </button>
       </div>
       {mode === "ai" ? (
@@ -124,7 +148,13 @@ export function StudioCorrections({
             <select
               aria-label="File to edit"
               value={editingId}
-              onChange={(e) => setEditingId(e.target.value)}
+              disabled={busy}
+              onChange={(e) => {
+                if (leave()) {
+                  setDirty(false);
+                  setEditingId(e.target.value);
+                }
+              }}
             >
               {value.outputs
                 .filter((o) => o.included)
@@ -142,25 +172,28 @@ export function StudioCorrections({
             busy={busy}
             available={available}
             onAction={onAction}
+            onDirty={setDirty}
           />
         </>
       )}
       {!available && (
         <p aria-live="polite">
-          Generation is unavailable. You can save text edits; rendering and AI corrections require
+          Generation is unavailable. You can save manual edits; rendering and AI corrections require
           the generation service.
         </p>
       )}
     </section>
   );
 }
-function ManualFile({
+export function ManualFile({
   value,
   outputId,
   busy,
   available,
   onAction,
+  onDirty,
 }: {
+  onDirty?: ((dirty: boolean) => void) | undefined;
   value: PublicStudioPackage;
   outputId: string;
   busy: boolean;
@@ -177,12 +210,44 @@ function ManualFile({
         .map((s) => ({ ...s, text: output?.language === source.language ? s.text : "" })) ??
       [],
   );
-  if (!output || !source) return null;
+  const [mediaEdits, setMediaEdits] = useState<StudioMediaEdits>({
+    ...STUDIO_MEDIA_DEFAULTS,
+    ...output?.mediaEdits,
+  });
+  const [error, setError] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const markDirty = () => {
+    setDirty(true);
+    onDirty?.(true);
+  };
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+  if (!output || !source)
+    return (
+      <p role="alert">
+        This file has no editable source evidence. Refresh the package or run AI correction first.
+      </p>
+    );
   const video = ["short", "reel"].includes(output.format);
   const range = (start: string, end: string) => {
     const a = source.segments.findIndex((s) => s.id === start);
     const b = source.segments.findIndex((s) => s.id === end);
-    if (a < 0 || b < a) return;
+    if (a < 0 || b < a) {
+      setError(
+        "The last passage must follow the first passage. Adjust the other end of the selection first.",
+      );
+      return;
+    }
+    setError("");
+    markDirty();
     const chosen = source.segments.slice(a, b + 1);
     setIds(chosen.map((s) => s.id));
     setCues(
@@ -194,65 +259,80 @@ function ManualFile({
       })),
     );
   };
+  const passages = source.segments.filter((s) => ids.includes(s.id));
+  const duration = (passages.at(-1)?.endMs ?? 0) - (passages[0]?.startMs ?? 0);
+  const exportDuration = duration > 0 ? studioClosingCardPlan(duration).endMs : 0;
+  const tooLong = video && exportDuration > studioVideoDurationLimitMs(output.channel);
+  const missingCaption = video && cues.some((cue) => !cue.text.trim());
   return (
     <form
+      className="studio-file-editor"
+      onChange={markDirty}
       onSubmit={async (e) => {
         e.preventDefault();
+        if (busy || saving || tooLong || missingCaption) return;
         const f = new FormData(e.currentTarget);
-        const saved = await onAction("revise", {
-          expectedRevision: value.revision,
-          comment: String(f.get("comment") ?? ""),
-          outputs: [
-            {
-              id: output.id,
-              included: output.included,
-              title: String(f.get("title")),
-              body: String(f.get("body")),
-              sourceSegmentIds: ids,
-              ...(video ? { captionCues: cues } : {}),
-            },
-          ],
-        });
-        if (saved?.package && available)
-          await onAction("regenerate", {
-            expectedRevision: saved.package.revision,
-            outputIds: [output.id],
-            mode: "render",
+        setSaving(true);
+        setError("");
+        try {
+          const saved = await onAction("revise", {
+            expectedRevision: value.revision,
+            render: available,
+            comment: String(f.get("comment") ?? ""),
+            outputs: [
+              {
+                id: output.id,
+                included: output.included,
+                title: String(f.get("title")),
+                body: String(f.get("body")),
+                sourceSegmentIds: ids,
+                ...(video ? { captionCues: cues, mediaEdits } : {}),
+              },
+            ],
           });
+          if (saved?.package) {
+            setDirty(false);
+            onDirty?.(false);
+          } else
+            setError(
+              "The save could not be confirmed. Your edits remain here. Check the package message before retrying; refresh its status if the connection was interrupted.",
+            );
+        } catch {
+          setError(
+            "The save could not be confirmed. Your edits remain here. Check the connection and refresh the package status before retrying.",
+          );
+        } finally {
+          setSaving(false);
+        }
       }}
     >
-      <fieldset disabled={busy}>
-        <label>
-          Title
-          <input
-            name="title"
-            defaultValue={output.title}
-            required
-            maxLength={STUDIO_TITLE_LIMITS[output.channel]}
-          />
-        </label>
-        <label>
-          Posting text
-          <textarea
-            name="body"
-            rows={8}
-            defaultValue={output.body}
-            required
-            maxLength={STUDIO_COPY_LIMITS[output.channel]}
-          />
-        </label>
-        <p>
-          Keep the {STUDIO_BRAND_SIGNATURE} signature. Saving renders this file using your exact
-          edits.
-        </p>
+      <fieldset disabled={busy || saving}>
+        {dirty && <output>Unsaved changes to this file</output>}
+        {error && <p role="alert">{error}</p>}
         {video && (
-          <details open>
-            <summary>Clip and subtitle editor</summary>
-            <p>
-              Select complete source passages. Source audio and caption timing stay tied to the
-              master; maximum clip length for {studioChannelLabel(output.channel)} is{" "}
-              {studioVideoDurationLimitMs(output.channel) / 1000} seconds.
-            </p>
+          <StudioSourcePlayer
+            value={value}
+            passages={passages}
+            onBoundary={(edge, ms) => {
+              const current =
+                source.segments.find((s) => ms >= s.startMs && ms < s.endMs) ??
+                (edge === "start"
+                  ? source.segments.find((s) => s.startMs >= ms)
+                  : source.segments.findLast((s) => s.endMs <= ms));
+              if (!current) {
+                setError("Move the playhead to a spoken passage before setting a boundary.");
+                return;
+              }
+              range(
+                edge === "start" ? current.id : (ids[0] ?? current.id),
+                edge === "end" ? current.id : (ids.at(-1) ?? current.id),
+              );
+            }}
+          />
+        )}
+        {video && (
+          <div className="studio-editor-grid">
+            {" "}
             <label>
               First source passage
               <select
@@ -281,6 +361,67 @@ function ManualFile({
                 ))}
               </select>
             </label>
+          </div>
+        )}
+        <label>
+          Title
+          <input
+            name="title"
+            defaultValue={output.title}
+            required
+            maxLength={STUDIO_TITLE_LIMITS[output.channel]}
+          />
+        </label>
+        <label>
+          Posting text
+          <textarea
+            name="body"
+            rows={8}
+            defaultValue={output.body}
+            required
+            maxLength={STUDIO_COPY_LIMITS[output.channel]}
+          />
+        </label>
+        <p>
+          Keep the source channel’s attribution and subscription text. Only this file is rebuilt; AI
+          review and human approval are required again.
+        </p>
+        {video && (
+          <StudioMediaControls
+            value={mediaEdits}
+            onChange={(next) => {
+              setMediaEdits(next);
+              markDirty();
+            }}
+          />
+        )}
+        {video && (
+          <details open>
+            <summary>Subtitle text</summary>
+            <p>
+              Select complete source passages. Source audio and caption timing stay tied to the
+              master; maximum clip length for {studioChannelLabel(output.channel)} is{" "}
+              {studioVideoDurationLimitMs(output.channel) / 1000} seconds.
+            </p>
+            {tooLong && (
+              <p role="alert">
+                This selection plus the closing card is {(exportDuration / 1000).toFixed(1)}{" "}
+                seconds. Choose a shorter complete passage; {studioChannelLabel(output.channel)}{" "}
+                allows {studioVideoDurationLimitMs(output.channel) / 1000} seconds.
+              </p>
+            )}
+            {missingCaption && (
+              <p role="alert">
+                Enter the {output.language} subtitle text for every selected passage. Newly added
+                passages need their translation, even when captions are hidden, so the reviewer can
+                verify the meaning.
+              </p>
+            )}
+            {!studioCaptionsEnabled(mediaEdits, value.request.captions) && (
+              <p>
+                Subtitles will be hidden in this export. Their text remains available for review.
+              </p>
+            )}
             {cues.map((c, i) => (
               <label key={c.id}>
                 Subtitle {(c.startMs / 1000).toFixed(1)}–{(c.endMs / 1000).toFixed(1)} seconds
@@ -309,8 +450,8 @@ function ManualFile({
           Response to reviewer
           <textarea name="comment" rows={3} maxLength={4000} />
         </label>
-        <button className="button primary" type="submit">
-          {available ? "Save & render this file" : "Save edits for this file"}
+        <button className="button primary" type="submit" disabled={tooLong || missingCaption}>
+          {saving ? "Saving…" : available ? "Save & rebuild this file" : "Save edits for this file"}
         </button>
       </fieldset>
     </form>
@@ -340,6 +481,12 @@ export function StudioCorrectionComparison({ value }: { value: PublicStudioPacka
               Source passage before: {passage(value, o.correction?.before.sourceSegmentIds ?? [])}.
               After: {passage(value, o.sourceSegmentIds)}.
             </p>
+            {o.mediaEdits && (
+              <>
+                <StudioMediaSummary label="Media before" edits={o.correction?.before.mediaEdits} />
+                <StudioMediaSummary label="Media after" edits={o.mediaEdits} />
+              </>
+            )}
             {o.captionCues && (
               <details>
                 <summary>Caption comparison</summary>

@@ -50,6 +50,7 @@ export type StudioTranscript = {
   recognition?: { provider: "sarvam" | "openai"; model: string };
 };
 export type StudioOutput = {
+  mediaEdits?: import("./studio-media-edits").StudioMediaEdits;
   postArt?: import("./studio-post-art").StudioPostArt | null;
   presentationReview?: import("./studio-presentation").StudioPresentationReview | null;
   /** Stable teaching identity across channels, languages, corrections and AI reviews. */
@@ -68,6 +69,7 @@ export type StudioOutput = {
       body: string;
       sourceSegmentIds: string[];
       captionCues?: StudioSegment[];
+      mediaEdits?: import("./studio-media-edits").StudioMediaEdits;
       aiReview?: StudioAiReviewEvidence;
     };
   };

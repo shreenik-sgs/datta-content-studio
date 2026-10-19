@@ -11,6 +11,7 @@ import {
   studioAppLinks,
   studioCanDiscard,
   studioCanEdit,
+  studioCaptionsEnabled,
   studioChannelLabel,
   studioClosingChannel,
   studioExternalProcessingDecision,
@@ -36,6 +37,7 @@ import { StudioCorrectionComparison, StudioCorrections } from "./studio-correcti
 import { StudioGenerationProgressView } from "./studio-generation-progress";
 import { StudioHistory } from "./studio-history";
 import { StudioLineage } from "./studio-lineage";
+import { StudioMediaSummary } from "./studio-media-editor";
 import { StudioPreviewDialog } from "./studio-preview-dialog";
 import { StudioPublishing } from "./studio-publishing";
 import { StudioQualitySelection } from "./studio-quality-selection";
@@ -182,7 +184,7 @@ export function StudioOutputPreview({
     DISTRIBUTION_LANGUAGE_NAMES[sourceLanguage as keyof typeof DISTRIBUTION_LANGUAGE_NAMES] ??
     sourceLanguage;
   const embeddedCaption =
-    video && value.request.captions
+    video && studioCaptionsEnabled(output.mediaEdits, value.request.captions)
       ? output.captions.find((caption) => caption.language === output.language)
       : undefined;
   const copyHeading =
@@ -278,6 +280,7 @@ export function StudioOutputPreview({
               ? `${writtenLanguage}${embeddedCaption.translated ? " (translation)" : " (source language)"}. These are part of the video and remain visible when player CC is off.`
               : "None in this generated file."}
           </p>
+          {output.mediaEdits && <StudioMediaSummary edits={output.mediaEdits} />}
           {output.captions.length > 0 && (
             <details>
               <summary>Optional player CC tracks</summary>
@@ -475,8 +478,13 @@ export function StudioPanel({
   const [refreshError, setRefreshError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(false);
+  const editingRef = useRef(false);
+  useEffect(() => {
+    editingRef.current = editing;
+  }, [editing]);
   const [regenerating, setRegenerating] = useState(false);
   const [previewOutput, setPreviewOutput] = useState<string | null>(null);
+  const [manualEdit, setManualEdit] = useState<{ id: string; sequence: number } | null>(null);
   const [bundlePreview, setBundlePreview] = useState<{
     packageId: string;
     outputId: string;
@@ -495,7 +503,7 @@ export function StudioPanel({
   const inBundle = Boolean(bundle);
   const playlistId = bundle?.playlistId;
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal, preserveEdits = false) => {
       const requestSignal = signal
         ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
         : AbortSignal.timeout(15000);
@@ -546,7 +554,8 @@ export function StudioPanel({
         });
         const next = await current.json();
         if (!current.ok) throw Error(next.error ?? "unavailable");
-        if (generation === latestLoad.current) setDetail(next);
+        if (generation === latestLoad.current && (!preserveEdits || !editingRef.current))
+          setDetail(next);
       }
       if (generation === latestLoad.current) {
         setLoading(false);
@@ -559,14 +568,15 @@ export function StudioPanel({
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const refresh = async () => {
-      await load(abort.signal).catch(() => {
-        if (!abort.signal.aborted) {
-          setRefreshError(
-            "Unable to refresh package progress. Reconnecting automatically; saved work is retained.",
-          );
-          setLoading(false);
-        }
-      });
+      if (!editingRef.current)
+        await load(abort.signal, true).catch(() => {
+          if (!abort.signal.aborted) {
+            setRefreshError(
+              "Unable to refresh package progress. Reconnecting automatically; saved work is retained.",
+            );
+            setLoading(false);
+          }
+        });
       if (!abort.signal.aborted) timer = setTimeout(() => void refresh(), 5000);
     };
     void refresh();
@@ -624,7 +634,9 @@ export function StudioPanel({
             ? detail?.package.isTest
               ? "Test publication was queued. Nothing is posted to social channels in the test workspace."
               : "Publication requested. Check each channel below for its result."
-            : action === "regenerate" || action === "create"
+            : action === "regenerate" ||
+                action === "create" ||
+                (action === "revise" && data.package?.status === "QUEUED")
               ? "Generation is queued. You can leave this page and return to the package."
               : "Package updated.",
       );
@@ -1488,6 +1500,32 @@ export function StudioPanel({
                       {!output.included && <span className="badge">Discarded output</span>}
                     </div>
                     <h3 style={{ overflowWrap: "anywhere" }}>{output.title}</h3>
+                    {output.included && studioCanEdit(value.status, capabilities) && (
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={busy}
+                        onClick={() => {
+                          if (
+                            editing &&
+                            !window.confirm("Discard unsaved edits to the current file?")
+                          )
+                            return;
+                          setPreviewOutput(null);
+                          setManualEdit({
+                            id: output.id,
+                            sequence: (manualEdit?.sequence ?? 0) + 1,
+                          });
+                          window.setTimeout(() => {
+                            const editor = document.getElementById(`package-actions-${value.id}`);
+                            editor?.scrollIntoView({ block: "start", behavior: "smooth" });
+                            editor?.focus();
+                          }, 0);
+                        }}
+                      >
+                        Edit this file
+                      </button>
+                    )}
                     <StudioOutputPreview
                       value={value}
                       output={output}
@@ -1551,7 +1589,13 @@ export function StudioPanel({
             <StudioCorrectionComparison value={value} />
             {studioCanEdit(value.status, capabilities) && value.outputs.length > 0 && (
               <StudioCorrections
-                key={`${value.id}-${value.revision}`}
+                key={`${value.id}-${value.revision}-${manualEdit?.sequence ?? 0}`}
+                initialOutputId={
+                  value.outputs.some((output) => output.id === manualEdit?.id)
+                    ? manualEdit?.id
+                    : undefined
+                }
+                onEditingChange={setEditing}
                 value={value}
                 busy={busy}
                 available={readiness?.generation.available ?? false}

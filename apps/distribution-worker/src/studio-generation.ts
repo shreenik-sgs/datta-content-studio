@@ -46,6 +46,7 @@ import {
   studioAppLinks,
   studioAssetName,
   studioBoundaryPasses,
+  studioCaptionsEnabled,
   studioCardStyle,
   studioClosingCardPlan,
   studioContentReviewIssues,
@@ -1006,6 +1007,7 @@ export async function generateStudioPackage(input: {
       const range = studioSourceRange(planned.sourceSegmentIds, transcript, planned.format);
       const output: StudioOutput = {
         ...planned,
+        ...(prior?.mediaEdits ? { mediaEdits: prior.mediaEdits } : {}),
         id,
         fileVersion: (prior?.fileVersion ?? (prior ? 1 : 0)) + 1,
         generatedAt: provenance.generatedAt,
@@ -1018,7 +1020,7 @@ export async function generateStudioPackage(input: {
         captions: [],
         warnings: [
           "Review the source recording, complete context and attribution before approval.",
-          ...(video && claim.package.request.captions
+          ...(video && studioCaptionsEnabled(prior?.mediaEdits, claim.package.request.captions)
             ? [
                 "Long subtitle cues use estimated page timing within the original segment; review caption synchronization.",
               ]
@@ -1070,7 +1072,7 @@ export async function generateStudioPackage(input: {
               : (translations.get(s.id) ?? ""),
         }));
         output.captionCues = captions;
-        if (claim.package.request.captions) {
+        if (studioCaptionsEnabled(prior?.mediaEdits, claim.package.request.captions)) {
           output.captions.push({
             language: planned.language,
             asset: await save(
@@ -1085,6 +1087,7 @@ export async function generateStudioPackage(input: {
           // in source provenance for review; it is not an unrequested caption track.
         }
         const key = JSON.stringify({
+          mediaEdits: prior?.mediaEdits,
           title: planned.title,
           youtubeClosing: claim.package.request.youtubeClosing,
           closingDestination:
@@ -1094,7 +1097,9 @@ export async function generateStudioPackage(input: {
             "app",
           start: range.startMs,
           end: range.endMs,
-          captions: claim.package.request.captions ? captions : [],
+          captions: studioCaptionsEnabled(prior?.mediaEdits, claim.package.request.captions)
+            ? captions
+            : [],
         });
         const style = studioCardStyle(
           `${claim.package.source.masterId}:${planned.messageId ?? planned.sourceSegmentIds.join(":")}`,
@@ -1208,7 +1213,7 @@ export async function generateStudioPackage(input: {
           // A storyboard can leave a portrait interval gap for an insert. If the
           // insert is omitted, use a consistent uncropped picture throughout;
           // otherwise that gap would briefly shrink and enlarge the speaker.
-          if (rejectedIllustration) scenes = [];
+          if (rejectedIllustration || prior?.mediaEdits?.framing === "full-picture") scenes = [];
           const wantsOpening =
             sourceBrand.portrait &&
             (input.steadyOpening ||
@@ -1234,6 +1239,7 @@ export async function generateStudioPackage(input: {
             });
             const videoStream = media.streams?.find((s) => s.codec_type === "video");
             const path = await renderStudioVideo({
+              ...(prior?.mediaEdits ? { mediaEdits: prior.mediaEdits } : {}),
               ffmpeg: env.DISTRIBUTION_FFMPEG_PATH ?? "ffmpeg",
               directory: folder,
               sourcePath,
@@ -1250,7 +1256,9 @@ export async function generateStudioPackage(input: {
               ...(opening ? { openingCard: opening } : {}),
               startMs: range.startMs,
               endMs: range.endMs,
-              captions: claim.package.request.captions ? captions : [],
+              captions: studioCaptionsEnabled(prior?.mediaEdits, claim.package.request.captions)
+                ? captions
+                : [],
             });
             if (!screened) {
               mediaRender = { path };
@@ -1329,7 +1337,10 @@ export async function generateStudioPackage(input: {
                 context: {
                   title: planned.title,
                   sourceSpeaker: sourceBrand,
-                  captionsRequested: claim.package.request.captions,
+                  captionsRequested: studioCaptionsEnabled(
+                    prior?.mediaEdits,
+                    claim.package.request.captions,
+                  ),
                   language: planned.language,
                   captions,
                   closingCard: closing.plan,

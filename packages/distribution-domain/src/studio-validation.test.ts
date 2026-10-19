@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StudioPackage, StudioProvenance } from "./intelligent-content";
 import { studioAssetName } from "./studio-assets";
+import { STUDIO_MEDIA_DEFAULTS } from "./studio-media-edits";
 import { STUDIO_BRAND_NAME } from "./studio-planner";
 import {
   studioPackageBlockers,
@@ -428,6 +429,26 @@ describe("Studio domain persistence guards", () => {
         o.asset.storageKey = o.asset.storageKey.replace("_youtube_", "_instagram_");
       expect(() => check(p)).toThrow("INVALID_STUDIO_ASSET");
     }
+  });
+  it("allows explicitly hidden translated captions only with complete source-bound review text", () => {
+    const p = fixture();
+    const output = p.outputs[0];
+    if (!output || !p.provenance) throw Error("MISSING_FIXTURE");
+    p.provenance.transcript.language = "te";
+    p.request.captions = true;
+    output.mediaEdits = { ...STUDIO_MEDIA_DEFAULTS, captions: "off" };
+    output.captionCues = p.provenance.transcript.segments.map((s) => ({
+      ...s,
+      text: "Complete English translation.",
+    }));
+    expect(() => check(p)).not.toThrow();
+    output.mediaEdits.captions = "on";
+    expect(() => check(p)).toThrow("STUDIO_TRANSLATION_INCOMPLETE");
+    output.mediaEdits.captions = "off";
+    const cue = output.captionCues[0];
+    if (!cue) throw Error("MISSING_FIXTURE");
+    cue.startMs = 100;
+    expect(() => check(p)).toThrow("STUDIO_TRANSLATION_INCOMPLETE");
   });
   it("requires translated captions for foreign-language video and never manufactures translations", () => {
     const p = fixture();

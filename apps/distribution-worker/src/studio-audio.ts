@@ -1,4 +1,8 @@
-import { STUDIO_AUDIO_POLICY } from "@satsang/distribution-domain";
+import {
+  STUDIO_AUDIO_POLICY,
+  type StudioMediaEdits,
+  studioSpeechTarget,
+} from "@satsang/distribution-domain";
 import { executeStudioSource } from "./studio-process.js";
 
 type AudioMeasurement = {
@@ -8,7 +12,8 @@ type AudioMeasurement = {
   threshold: number;
   offset: number;
 };
-const preset = `I=${STUDIO_AUDIO_POLICY.integratedLufs}:TP=${STUDIO_AUDIO_POLICY.truePeakDbtp}:LRA=${STUDIO_AUDIO_POLICY.loudnessRange}`;
+const preset = (edits?: StudioMediaEdits) =>
+  `I=${studioSpeechTarget(edits)}:TP=${STUDIO_AUDIO_POLICY.truePeakDbtp}:LRA=${STUDIO_AUDIO_POLICY.loudnessRange}`;
 
 /** Bounded numeric values only; no provider/source text enters an encoder filter. */
 export function parseStudioAudioMeasurement(diagnostics: string): AudioMeasurement {
@@ -38,12 +43,20 @@ export function parseStudioAudioMeasurement(diagnostics: string): AudioMeasureme
   return result;
 }
 
-export function studioAudioNormalization(measured: AudioMeasurement): string {
-  return `loudnorm=${preset}:measured_I=${measured.integratedLufs}:measured_TP=${measured.truePeakDbtp}:measured_LRA=${measured.loudnessRange}:measured_thresh=${measured.threshold}:offset=${measured.offset}:linear=true,aresample=48000`;
+export function studioNoiseFilter(edits?: StudioMediaEdits): string {
+  return edits?.reduceNoise ? "afftdn=nr=8:nf=-40," : "";
+}
+
+export function studioAudioNormalization(
+  measured: AudioMeasurement,
+  edits?: StudioMediaEdits,
+): string {
+  return `loudnorm=${preset(edits)}:measured_I=${measured.integratedLufs}:measured_TP=${measured.truePeakDbtp}:measured_LRA=${measured.loudnessRange}:measured_thresh=${measured.threshold}:offset=${measured.offset}:linear=true,aresample=48000`;
 }
 
 /** Measure the exact spoken excerpt, excluding the silent closing hold. */
 export async function measureStudioAudio(input: {
+  mediaEdits?: StudioMediaEdits;
   ffmpeg: string;
   sourcePath: string;
   mimeType: string;
@@ -76,7 +89,7 @@ export async function measureStudioAudio(input: {
       "-sn",
       "-dn",
       "-af",
-      `atrim=duration=${(input.endMs - input.startMs) / 1000},asetpts=PTS-STARTPTS,loudnorm=${preset}:print_format=json`,
+      `atrim=duration=${(input.endMs - input.startMs) / 1000},asetpts=PTS-STARTPTS,${studioNoiseFilter(input.mediaEdits)}loudnorm=${preset(input.mediaEdits)}:print_format=json`,
       "-f",
       "null",
       "-",

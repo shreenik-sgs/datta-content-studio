@@ -122,6 +122,23 @@ describe("DS-DIST-R1 endpoint security and release lifecycle", () => {
     m.getExport.mockResolvedValue({ content, asset });
     m.getAsset.mockResolvedValue({ content, asset });
   });
+  it("refuses to play a replaced master for an older editing package before reading storage", async () => {
+    const response = await getAction(
+      new Request(`http://localhost:3070/api/content/${id}/media?versionId=${actor}`),
+      params("media"),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "SOURCE_CHANGED" });
+    expect(m.read).not.toHaveBeenCalled();
+  });
+  it("streams the exact source version selected by the editor", async () => {
+    const response = await getAction(
+      new Request(`http://localhost:3070/api/content/${id}/media?versionId=${vid}`),
+      params("media"),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("ID3");
+  });
   it.each([
     [{ owner: "   " }, "owner", "rights holder"],
     [{ authorizationBasis: "" }, "authorizationBasis", "authorized"],
