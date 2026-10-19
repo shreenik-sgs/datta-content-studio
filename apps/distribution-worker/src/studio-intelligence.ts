@@ -625,7 +625,12 @@ function studioPlanRepairIssues(
         issues.push(`${label} body must contain the exact Ashrama brand signature.`);
     }
     try {
-      const range = studioSourceRange(output.sourceSegmentIds, transcript, output.format);
+      const range = studioSourceRange(
+        output.sourceSegmentIds,
+        transcript,
+        output.format,
+        output.sourceTrim,
+      );
       if (
         (output.format === "short" || output.format === "reel") &&
         range.endMs - range.startMs > studioVideoSourceDurationLimitMs(channel)

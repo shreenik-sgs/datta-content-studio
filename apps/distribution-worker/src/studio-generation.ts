@@ -572,7 +572,12 @@ export async function generateStudioPackage(input: {
     const screenSource = async (planned: StudioPlan["outputs"][number]) => {
       if (!videoConnection.apiKey || !videoConnection.model)
         throw Error("STUDIO_PRESENTATION_NOT_CONFIGURED");
-      const range = studioSourceRange(planned.sourceSegmentIds, transcript, planned.format);
+      const range = studioSourceRange(
+        planned.sourceSegmentIds,
+        transcript,
+        planned.format,
+        planned.sourceTrim,
+      );
       const fingerprint = studioFingerprint({
         editorialReview: STUDIO_EDITORIAL_REVIEW_POLICY,
         openingPolicy: STUDIO_OPENING_CARD_POLICY,
@@ -661,7 +666,12 @@ export async function generateStudioPackage(input: {
           continue;
         }
         if (!hasAudio) throw Error("STUDIO_SOURCE_EVIDENCE_REQUIRED");
-        const range = studioSourceRange(planned.sourceSegmentIds, transcript, planned.format);
+        const range = studioSourceRange(
+          planned.sourceSegmentIds,
+          transcript,
+          planned.format,
+          planned.sourceTrim,
+        );
         const first = transcript.segments.findIndex((s) => s.id === range.segments[0]?.id);
         const last = transcript.segments.findIndex((s) => s.id === range.segments.at(-1)?.id);
         const outside = [
@@ -727,6 +737,7 @@ export async function generateStudioPackage(input: {
             body: o.body,
             rationale: o.rationale,
             sourceSegmentIds: o.sourceSegmentIds,
+            ...(o.sourceTrim ? { sourceTrim: o.sourceTrim } : {}),
           })),
           skippedChannels: [],
           translations: [
@@ -797,7 +808,10 @@ export async function generateStudioPackage(input: {
       (input.renderOnly || studioFingerprint(plan) !== studioFingerprint(generatedPlan))
     ) {
       const fingerprint = studioFingerprint({
-        version: 6,
+        version: 7,
+        manualCaptions: input.renderOnly
+          ? claim.package.outputs.map((o) => ({ id: o.id, cues: o.captionCues }))
+          : null,
         boundaryEvidencePolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
         framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
         editorialReview: STUDIO_EDITORIAL_REVIEW_POLICY,
@@ -829,6 +843,7 @@ export async function generateStudioPackage(input: {
         const checks = await reviewMedia(
           plan,
           await reviewStudioContent({
+            ...(input.renderOnly ? { useManualCaptions: true } : {}),
             pkg: claim.package,
             plan,
             transcript,
@@ -1004,7 +1019,12 @@ export async function generateStudioPackage(input: {
         }
       }
       const id = prior?.id ?? randomUUID();
-      const range = studioSourceRange(planned.sourceSegmentIds, transcript, planned.format);
+      const range = studioSourceRange(
+        planned.sourceSegmentIds,
+        transcript,
+        planned.format,
+        planned.sourceTrim,
+      );
       const output: StudioOutput = {
         ...planned,
         ...(prior?.mediaEdits ? { mediaEdits: prior.mediaEdits } : {}),

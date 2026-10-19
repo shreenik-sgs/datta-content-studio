@@ -94,6 +94,7 @@ export function validStudioMessageId(value: unknown): value is string {
   return typeof value === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(value);
 }
 export type StudioPlannedOutput = {
+  sourceTrim?: { startMs: number; endMs: number } | null;
   messageId?: string;
   channel: StudioChannel;
   format: StudioFormat;
@@ -192,6 +193,7 @@ export function preserveStudioEditorialEdits(plan: StudioPlan, pkg: StudioPackag
             format: edit.format,
             rationale: edit.rationale,
             sourceSegmentIds: [...edit.sourceSegmentIds],
+            sourceTrim: edit.sourceTrim ?? null,
           }
         : { ...output };
     }),
@@ -253,6 +255,7 @@ export function studioSourceRange(
   ids: readonly string[],
   transcript: StudioTranscript,
   format: StudioFormat = "short",
+  trim?: { startMs: number; endMs: number } | null,
 ): { startMs: number; endMs: number; segments: StudioSegment[] } {
   if (!Array.isArray(ids)) throw new Error("STUDIO_SOURCE_EVIDENCE_REQUIRED");
   const contiguous = format !== "post" && format !== "blog";
@@ -269,6 +272,26 @@ export function studioSourceRange(
   )
     throw new Error("STUDIO_SOURCE_EVIDENCE_REQUIRED");
   const segments = indices.map((i) => transcript.segments[i] as StudioSegment);
+  if (trim != null) {
+    if (
+      !["short", "reel"].includes(format) ||
+      !Number.isSafeInteger(trim.startMs) ||
+      !Number.isSafeInteger(trim.endMs) ||
+      trim.startMs < (segments[0] as StudioSegment).startMs ||
+      trim.endMs > (segments[segments.length - 1] as StudioSegment).endMs ||
+      trim.endMs - trim.startMs < 1000
+    )
+      throw new Error("INVALID_STUDIO_TRIM");
+    const clipped = segments
+      .filter((segment) => segment.endMs > trim.startMs && segment.startMs < trim.endMs)
+      .map((segment) => ({
+        ...segment,
+        startMs: Math.max(segment.startMs, trim.startMs),
+        endMs: Math.min(segment.endMs, trim.endMs),
+      }));
+    if (!clipped.length) throw new Error("INVALID_STUDIO_TRIM");
+    return { startMs: trim.startMs, endMs: trim.endMs, segments: clipped };
+  }
   return {
     startMs: (segments[0] as StudioSegment).startMs,
     endMs: (segments[segments.length - 1] as StudioSegment).endMs,
@@ -331,7 +354,12 @@ export function validateStudioPlan(
       : `${output.channel}:${output.language}`;
     if (seen.has(identity)) throw new Error("DUPLICATE_STUDIO_OUTPUT");
     seen.add(identity);
-    const range = studioSourceRange(output.sourceSegmentIds, transcript, output.format);
+    const range = studioSourceRange(
+      output.sourceSegmentIds,
+      transcript,
+      output.format,
+      output.sourceTrim,
+    );
     if (pkg.source.liveWindow && range.startMs >= pkg.source.liveWindow.ownedEndMs)
       throw new Error("STUDIO_LIVE_OVERLAP");
     if (
@@ -365,7 +393,11 @@ export function validateStudioPlan(
     for (const o of plan.outputs.filter(
       (o) => o.language === translation.language && (o.format === "short" || o.format === "reel"),
     )) {
-      if (o.sourceSegmentIds.some((id) => !ids.has(id)))
+      if (
+        studioSourceRange(o.sourceSegmentIds, transcript, o.format, o.sourceTrim).segments.some(
+          (s) => !ids.has(s.id),
+        )
+      )
         throw new Error("STUDIO_TRANSLATION_INCOMPLETE");
     }
   }

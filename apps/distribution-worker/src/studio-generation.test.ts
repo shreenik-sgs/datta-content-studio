@@ -936,6 +936,70 @@ describe("automatic Studio generation with real media", () => {
     expect(request?.outputs.map((o) => o.id)).toEqual([target.id]);
     expect(request?.feedback.map((f) => f.comment)).toEqual(["Shorten this blog only"]);
   }, 90000);
+  it("renders an exact sub-passage trim with rebased subtitles and a retained closing card", async () => {
+    const first = await generateStudioPackage({
+      claim: {
+        ...claim,
+        package: {
+          ...claim.package,
+          request: { ...claim.package.request, channels: ["youtube", "website"] },
+        },
+      },
+      store,
+      env,
+    });
+    const target = first.outputs.find((o) => o.channel === "youtube");
+    if (!target) throw Error("MISSING_FIXTURE");
+    const trim = { startMs: 500, endMs: 1750 };
+    const edited = {
+      ...target,
+      sourceTrim: trim,
+      startMs: trim.startMs,
+      endMs: trim.endMs,
+      asset: null,
+      closingDestination: "youtube" as const,
+      captionCues: first.provenance.transcript.segments.map((s) => ({
+        ...s,
+        startMs: Math.max(s.startMs, trim.startMs),
+        endMs: Math.min(s.endMs, trim.endMs),
+      })),
+    };
+    const result = await generateStudioPackage({
+      claim: {
+        ...claim,
+        package: {
+          ...claim.package,
+          outputs: first.outputs.map((o) => (o.id === target.id ? edited : o)),
+          provenance: first.provenance,
+          generation: { outputIds: [target.id], mode: "render" },
+        },
+      },
+      store,
+      env,
+    });
+    const output = result.outputs.find((o) => o.id === target.id);
+    expect(output).toMatchObject({ sourceTrim: trim, startMs: 500, endMs: 1750, fileVersion: 2 });
+    expect(result.outputs.find((o) => o.channel === "website")).toEqual(
+      first.outputs.find((o) => o.channel === "website"),
+    );
+    expect(result.provenance.transcript).toEqual(first.provenance.transcript);
+    if (!output?.asset || !output.captions[0]) throw Error("MISSING_RENDER");
+    const vtt = (await store.readDerivedDescriptor(output.captions[0].asset)).toString();
+    expect(vtt).toContain("00:00:00.000 --> 00:00:00.500");
+    expect(vtt).toContain("00:00:00.500 --> 00:00:01.250");
+    const file = join(root, "exact-trim-result.mp4");
+    await writeFile(file, await store.readDerivedDescriptor(output.asset));
+    const duration = Number(
+      execFileSync(
+        ffprobe,
+        ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", file],
+        { encoding: "utf8" },
+      ).trim(),
+    );
+    expect(duration).toBeGreaterThanOrEqual(4.2);
+    expect(duration).toBeLessThan(4.4);
+    expect(output.closingDestination).toBe("youtube");
+  }, 90000);
   it.each([true, false])(
     "renders manual media and caption overrides without replanning (captions=%s)",
     async (captionsEnabled) => {

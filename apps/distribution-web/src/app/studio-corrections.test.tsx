@@ -74,6 +74,8 @@ let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("React", React);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   host = document.createElement("div");
   document.body.append(host);
@@ -155,7 +157,7 @@ it("handles playback failure and snaps a playhead selection to source passages",
       <ManualFile value={value} outputId="one" busy={false} available onAction={onAction} />,
     ),
   );
-  const video = host.querySelector("video") as HTMLVideoElement;
+  const video = host.querySelector('[aria-label="Original video"]') as HTMLVideoElement;
   await act(async () => {
     video.dispatchEvent(new Event("loadedmetadata"));
     video.currentTime = 6;
@@ -189,4 +191,54 @@ it("explains an invalid end selection and retains the valid range", async () => 
   });
   expect(host.textContent).toContain("last passage must follow the first");
   expect(last.value).toBe("two");
+});
+
+it("trims exactly two seconds on the Short timeline and clips editable captions without mutating source evidence", async () => {
+  const onAction = vi.fn().mockResolvedValue({ package: value });
+  await act(async () =>
+    root.render(
+      <ManualFile value={value} outputId="one" busy={false} available onAction={onAction} />,
+    ),
+  );
+  const video = host.querySelector('[aria-label="Curated video trim preview"]') as HTMLVideoElement;
+  await act(async () => {
+    video.dispatchEvent(new Event("loadedmetadata"));
+    video.currentTime = 3;
+    video.dispatchEvent(new Event("timeupdate"));
+  });
+  await act(async () => button("Set start here").click());
+  expect((host.querySelector('[aria-label="Start (seconds)"]') as HTMLInputElement).value).toBe(
+    "2",
+  );
+  await act(async () => button("Preview trim").click());
+  expect(video.currentTime).toBe(3);
+  expect(onAction).not.toHaveBeenCalled();
+  await submit();
+  expect(onAction.mock.calls[0]?.[1].outputs).toEqual([
+    expect.objectContaining({
+      id: "one",
+      sourceTrim: { startMs: 3000, endMs: 9000 },
+      captionCues: [{ ...segments[0], startMs: 3000 }, segments[1]],
+    }),
+  ]);
+  expect(value.provenance?.transcript.segments[0]?.startMs).toBe(1000);
+});
+it("blocks reversed trim ranges with a specific explanation", async () => {
+  const onAction = vi.fn();
+  await act(async () =>
+    root.render(
+      <ManualFile value={value} outputId="one" busy={false} available onAction={onAction} />,
+    ),
+  );
+  const video = host.querySelector('[aria-label="Curated video trim preview"]') as HTMLVideoElement;
+  await act(async () => {
+    video.dispatchEvent(new Event("loadedmetadata"));
+    video.currentTime = 1;
+    video.dispatchEvent(new Event("timeupdate"));
+  });
+  await act(async () => button("Set end here").click());
+  expect(host.textContent).toContain("keeping at least one second");
+  expect(button("Save & rebuild").disabled).toBe(true);
+  await submit();
+  expect(onAction).not.toHaveBeenCalled();
 });

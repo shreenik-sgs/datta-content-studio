@@ -1028,6 +1028,7 @@ export function createIntelligentContentRepository(
           sourceSegmentIds?: string[] | undefined;
           captionCues?: StudioOutput["captionCues"] | undefined;
           mediaEdits?: StudioOutput["mediaEdits"] | undefined;
+          sourceTrim?: StudioOutput["sourceTrim"] | undefined;
         })[];
         comment: string;
       },
@@ -1052,7 +1053,8 @@ export function createIntelligentContentRepository(
           const sourceSegmentIds = edit.sourceSegmentIds ?? output.sourceSegmentIds;
           const transcript = pkg.provenance?.transcript;
           if (!transcript) throw new Error("GENERATION_REQUIRED");
-          const range = studioSourceRange(sourceSegmentIds, transcript, output.format);
+          const sourceTrim = edit.sourceTrim === undefined ? output.sourceTrim : edit.sourceTrim;
+          const range = studioSourceRange(sourceSegmentIds, transcript, output.format, sourceTrim);
           const captionCues = edit.captionCues ?? output.captionCues;
           if (
             captionCues &&
@@ -1076,6 +1078,7 @@ export function createIntelligentContentRepository(
             edit.body !== output.body ||
             !same(sourceSegmentIds, output.sourceSegmentIds) ||
             !same(captionCues, output.captionCues) ||
+            !same(sourceTrim, output.sourceTrim) ||
             !same(mediaEdits, output.mediaEdits);
           const revised = {
             ...output,
@@ -1083,6 +1086,7 @@ export function createIntelligentContentRepository(
             body: edit.body,
             included: edit.included,
             sourceSegmentIds,
+            ...(sourceTrim !== undefined ? { sourceTrim } : {}),
             ...(["short", "reel"].includes(output.format)
               ? { startMs: range.startMs, endMs: range.endMs }
               : {}),
@@ -1213,6 +1217,7 @@ export function createIntelligentContentRepository(
                     title: o.title,
                     body: o.body,
                     sourceSegmentIds: o.sourceSegmentIds,
+                    ...(o.sourceTrim ? { sourceTrim: o.sourceTrim } : {}),
                     ...(o.captionCues ? { captionCues: o.captionCues } : {}),
                     ...(o.aiReview ? { aiReview: o.aiReview } : {}),
                   },

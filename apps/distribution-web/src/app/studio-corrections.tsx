@@ -8,13 +8,19 @@ import {
   studioCaptionsEnabled,
   studioChannelLabel,
   studioClosingCardPlan,
+  studioSourceRange,
   studioVideoDurationLimitMs,
 } from "@satsang/distribution-domain";
 import { useEffect, useState } from "react";
 import type { PublicStudioPackage } from "../lib/studio-model";
 import { useHubTimestamp } from "./hub-locale";
 
-import { StudioMediaControls, StudioMediaSummary, StudioSourcePlayer } from "./studio-media-editor";
+import {
+  StudioMediaControls,
+  StudioMediaSummary,
+  StudioSourcePlayer,
+  StudioTrimPlayer,
+} from "./studio-media-editor";
 
 type Action = (
   action: string,
@@ -214,6 +220,8 @@ export function ManualFile({
     ...STUDIO_MEDIA_DEFAULTS,
     ...output?.mediaEdits,
   });
+  const [sourceTrim, setSourceTrim] = useState(output?.sourceTrim ?? null);
+  const [sourceSelectionChanged, setSourceSelectionChanged] = useState(false);
   const [error, setError] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -250,6 +258,8 @@ export function ManualFile({
     markDirty();
     const chosen = source.segments.slice(a, b + 1);
     setIds(chosen.map((s) => s.id));
+    setSourceTrim(null);
+    setSourceSelectionChanged(true);
     setCues(
       chosen.map((s) => ({
         ...s,
@@ -260,17 +270,41 @@ export function ManualFile({
     );
   };
   const passages = source.segments.filter((s) => ids.includes(s.id));
-  const duration = (passages.at(-1)?.endMs ?? 0) - (passages[0]?.startMs ?? 0);
+  let trimError = "";
+  let selected = {
+    startMs: passages[0]?.startMs ?? 0,
+    endMs: passages.at(-1)?.endMs ?? 0,
+    segments: passages,
+  };
+  try {
+    selected = studioSourceRange(ids, source, output.format, sourceTrim);
+  } catch {
+    trimError = "Choose a start and end inside this video, keeping at least one second.";
+  }
+  const selectedCues = selected.segments.map((s) => ({
+    ...s,
+    text: cues.find((c) => c.id === s.id)?.text ?? "",
+  }));
+  const samePassages =
+    !sourceSelectionChanged && JSON.stringify(ids) === JSON.stringify(output.sourceSegmentIds);
+  const baseStart = samePassages
+    ? (output.startMs ?? selected.startMs)
+    : (passages[0]?.startMs ?? 0);
+  const baseEnd = samePassages ? (output.endMs ?? selected.endMs) : (passages.at(-1)?.endMs ?? 0);
+  if (sourceTrim && (sourceTrim.startMs < baseStart || sourceTrim.endMs > baseEnd))
+    trimError =
+      "Keep the trim within this video. Use Advanced to choose a different source passage.";
+  const duration = selected.endMs - selected.startMs;
   const exportDuration = duration > 0 ? studioClosingCardPlan(duration).endMs : 0;
   const tooLong = video && exportDuration > studioVideoDurationLimitMs(output.channel);
-  const missingCaption = video && cues.some((cue) => !cue.text.trim());
+  const missingCaption = video && selectedCues.some((cue) => !cue.text.trim());
   return (
     <form
       className="studio-file-editor"
       onChange={markDirty}
       onSubmit={async (e) => {
         e.preventDefault();
-        if (busy || saving || tooLong || missingCaption) return;
+        if (busy || saving || tooLong || missingCaption || trimError) return;
         const f = new FormData(e.currentTarget);
         setSaving(true);
         setError("");
@@ -286,7 +320,7 @@ export function ManualFile({
                 title: String(f.get("title")),
                 body: String(f.get("body")),
                 sourceSegmentIds: ids,
-                ...(video ? { captionCues: cues, mediaEdits } : {}),
+                ...(video ? { captionCues: selectedCues, mediaEdits, sourceTrim } : {}),
               },
             ],
           });
@@ -310,58 +344,75 @@ export function ManualFile({
         {dirty && <output>Unsaved changes to this file</output>}
         {error && <p role="alert">{error}</p>}
         {video && (
-          <StudioSourcePlayer
+          <StudioTrimPlayer
             value={value}
-            passages={passages}
-            onBoundary={(edge, ms) => {
-              const current =
-                source.segments.find((s) => ms >= s.startMs && ms < s.endMs) ??
-                (edge === "start"
-                  ? source.segments.find((s) => s.startMs >= ms)
-                  : source.segments.findLast((s) => s.endMs <= ms));
-              if (!current) {
-                setError("Move the playhead to a spoken passage before setting a boundary.");
-                return;
-              }
-              range(
-                edge === "start" ? current.id : (ids[0] ?? current.id),
-                edge === "end" ? current.id : (ids.at(-1) ?? current.id),
-              );
+            output={output}
+            baseStart={baseStart}
+            baseEnd={baseEnd}
+            useRendered={samePassages && Boolean(output.asset)}
+            startMs={sourceTrim?.startMs ?? baseStart}
+            endMs={sourceTrim?.endMs ?? baseEnd}
+            error={trimError}
+            onChange={(next) => {
+              setSourceTrim(next);
+              markDirty();
             }}
           />
         )}
         {video && (
-          <div className="studio-editor-grid">
-            {" "}
-            <label>
-              First source passage
-              <select
-                aria-label="First source passage"
-                value={ids[0]}
-                onChange={(e) => range(e.target.value, ids.at(-1) ?? e.target.value)}
-              >
-                {source.segments.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {(s.startMs / 1000).toFixed(1)}s · {s.text.slice(0, 100)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Last source passage
-              <select
-                aria-label="Last source passage"
-                value={ids.at(-1)}
-                onChange={(e) => range(ids[0] ?? e.target.value, e.target.value)}
-              >
-                {source.segments.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {(s.endMs / 1000).toFixed(1)}s · {s.text.slice(0, 100)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <details>
+            <summary>Advanced: choose a different source passage</summary>
+            <StudioSourcePlayer
+              value={value}
+              passages={passages}
+              onBoundary={(edge, ms) => {
+                const current =
+                  source.segments.find((s) => ms >= s.startMs && ms < s.endMs) ??
+                  (edge === "start"
+                    ? source.segments.find((s) => s.startMs >= ms)
+                    : source.segments.findLast((s) => s.endMs <= ms));
+                if (!current) {
+                  setError("Move the playhead to a spoken passage before setting a boundary.");
+                  return;
+                }
+                range(
+                  edge === "start" ? current.id : (ids[0] ?? current.id),
+                  edge === "end" ? current.id : (ids.at(-1) ?? current.id),
+                );
+              }}
+            />
+            <div className="studio-editor-grid">
+              {" "}
+              <label>
+                First source passage
+                <select
+                  aria-label="First source passage"
+                  value={ids[0]}
+                  onChange={(e) => range(e.target.value, ids.at(-1) ?? e.target.value)}
+                >
+                  {source.segments.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {(s.startMs / 1000).toFixed(1)}s · {s.text.slice(0, 100)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Last source passage
+                <select
+                  aria-label="Last source passage"
+                  value={ids.at(-1)}
+                  onChange={(e) => range(ids[0] ?? e.target.value, e.target.value)}
+                >
+                  {source.segments.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {(s.endMs / 1000).toFixed(1)}s · {s.text.slice(0, 100)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </details>
         )}
         <label>
           Title
@@ -399,8 +450,9 @@ export function ManualFile({
           <details open>
             <summary>Subtitle text</summary>
             <p>
-              Select complete source passages. Source audio and caption timing stay tied to the
-              master; maximum clip length for {studioChannelLabel(output.channel)} is{" "}
+              Captions follow the trimmed video. Check the first and last subtitle and remove any
+              words you have cut from the audio. Maximum clip length for{" "}
+              {studioChannelLabel(output.channel)} is{" "}
               {studioVideoDurationLimitMs(output.channel) / 1000} seconds.
             </p>
             {tooLong && (
@@ -422,9 +474,10 @@ export function ManualFile({
                 Subtitles will be hidden in this export. Their text remains available for review.
               </p>
             )}
-            {cues.map((c, i) => (
+            {selectedCues.map((c) => (
               <label key={c.id}>
-                Subtitle {(c.startMs / 1000).toFixed(1)}–{(c.endMs / 1000).toFixed(1)} seconds
+                Subtitle {((c.startMs - selected.startMs) / 1000).toFixed(2)}–
+                {((c.endMs - selected.startMs) / 1000).toFixed(2)} seconds
                 <textarea
                   rows={2}
                   required
@@ -432,7 +485,7 @@ export function ManualFile({
                   value={c.text}
                   onChange={(e) =>
                     setCues(
-                      cues.map((old, n) => (n === i ? { ...old, text: e.target.value } : old)),
+                      cues.map((old) => (old.id === c.id ? { ...old, text: e.target.value } : old)),
                     )
                   }
                 />
@@ -450,7 +503,11 @@ export function ManualFile({
           Response to reviewer
           <textarea name="comment" rows={3} maxLength={4000} />
         </label>
-        <button className="button primary" type="submit" disabled={tooLong || missingCaption}>
+        <button
+          className="button primary"
+          type="submit"
+          disabled={tooLong || missingCaption || Boolean(trimError)}
+        >
           {saving ? "Saving…" : available ? "Save & rebuild this file" : "Save edits for this file"}
         </button>
       </fieldset>

@@ -413,3 +413,31 @@ it("reviews the explicitly selected Bala Swamiji identity and channel rather tha
     "Do not attribute this recording to a different teacher",
   );
 });
+
+it("reviews the exact human trim and its edited caption instead of the whole original passage", async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([complete]));
+  const selected: StudioPlan = {
+    ...plan,
+    outputs: plan.outputs.map((o) => ({ ...o, sourceTrim: { startMs: 2000, endMs: 9500 } })),
+  };
+  await reviewStudioContent({
+    ...input,
+    useManualCaptions: true,
+    plan: selected,
+    pkg: {
+      ...pkg,
+      outputs: [
+        {
+          ...selected.outputs[0],
+          asset: null,
+          captionCues: [{ id: "one", startMs: 2000, endMs: 9500, text: "Corrected translation." }],
+        } as StudioPackage["outputs"][number],
+      ],
+    },
+    fetcher,
+  });
+  const request = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
+  const reviewed = JSON.parse(request.contents[0].parts[0].text).outputs[0];
+  expect(reviewed.selectedClip).toMatchObject({ startMs: 2000, endMs: 9500, durationMs: 7500 });
+  expect(reviewed.captions).toEqual([{ id: "one", text: "Corrected translation." }]);
+});

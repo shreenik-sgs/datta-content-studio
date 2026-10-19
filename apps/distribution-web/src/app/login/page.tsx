@@ -1,7 +1,10 @@
+import { localStudioLoginAliases } from "../../lib/auth";
+
 export default async function Login({
   searchParams,
 }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
+  const aliasesEnabled = Object.keys(localStudioLoginAliases()).length > 0;
   return (
     <main className="shell">
       <h1>Sign in to Datta Content Studio</h1>
@@ -13,8 +16,16 @@ export default async function Login({
       )}
       <form className="card" method="post" action="/distribution/api/auth/login">
         <label>
-          Email
-          <input name="email" type="email" autoComplete="username" required maxLength={254} />
+          {aliasesEnabled ? "Username or email" : "Email"}
+          <input
+            name="email"
+            type={aliasesEnabled ? "text" : "email"}
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            maxLength={254}
+          />
         </label>
         <label>
           Password

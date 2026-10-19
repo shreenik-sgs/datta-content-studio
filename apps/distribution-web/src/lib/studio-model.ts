@@ -84,6 +84,8 @@ const messages: Record<string, string> = {
   STUDIO_CORRECTIONS_PENDING: "Finish the requested file corrections before resubmitting.",
   INVALID_STUDIO_MEDIA_EDITS:
     "Check picture framing, subtitle size and audio settings for this file. Choose one of the listed options and save again.",
+  INVALID_STUDIO_TRIM:
+    "Choose a start and end inside the selected video, keeping at least one second. Preview the cut before saving.",
   INVALID_STUDIO_CAPTIONS: "Each subtitle must match its source passage and original timing.",
   STUDIO_UNRELATED_OUTPUT_CHANGED:
     "The correction tried to change an unselected file. No results were applied.",

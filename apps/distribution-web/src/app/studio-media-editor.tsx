@@ -12,6 +12,225 @@ import "./studio-media-editor.css";
 const time = (ms: number) =>
   `${Math.floor(ms / 60000)}:${((ms % 60000) / 1000).toFixed(1).padStart(4, "0")}`;
 
+/** Trim on the current export's timeline; keep absolute source evidence on save. */
+export function StudioTrimPlayer({
+  value,
+  output,
+  baseStart,
+  baseEnd,
+  startMs,
+  endMs,
+  useRendered,
+  error,
+  onChange,
+}: {
+  value: PublicStudioPackage;
+  output: PublicStudioPackage["outputs"][number];
+  baseStart: number;
+  baseEnd: number;
+  startMs: number;
+  endMs: number;
+  useRendered: boolean;
+  error: string;
+  onChange: (span: { startMs: number; endMs: number }) => void;
+}) {
+  const player = useRef<HTMLVideoElement>(null);
+  const stopAt = useRef<number | null>(null);
+  const [position, setPosition] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [playError, setPlayError] = useState("");
+  const offset = useRendered ? 0 : baseStart / 1000;
+  const seconds = (ms: number) => (Number.isFinite(ms) ? (ms - baseStart) / 1000 : "");
+  const start = seconds(startMs);
+  const end = seconds(endMs);
+  const duration = (baseEnd - baseStart) / 1000;
+  const src = useRendered
+    ? `/distribution/api/studio/${value.id}/assets/${output.id}/media`
+    : `/distribution/api/content/${value.source.masterId}/media?versionId=${encodeURIComponent(value.source.versionId)}`;
+  useEffect(() => {
+    if (startMs === endMs) return;
+    stopAt.current = null;
+    player.current?.pause();
+  }, [startMs, endMs]);
+  // Animation frames stop preview closer to the selected boundary than timeupdate alone.
+  useEffect(() => {
+    if (player.current?.getAttribute("src") !== src) return;
+    let frame = 0;
+    const tick = () => {
+      if (
+        player.current &&
+        stopAt.current !== null &&
+        player.current.currentTime >= stopAt.current
+      ) {
+        player.current.pause();
+        player.current.currentTime = stopAt.current;
+        stopAt.current = null;
+      }
+      if (player.current && !player.current.paused) frame = requestAnimationFrame(tick);
+    };
+    const media = player.current;
+    const start = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(tick);
+    };
+    media?.addEventListener("play", start);
+    return () => {
+      cancelAnimationFrame(frame);
+      media?.removeEventListener("play", start);
+    };
+  }, [src]);
+  const seek = (seconds: number) => {
+    if (!player.current) return;
+    player.current.pause();
+    stopAt.current = null;
+    player.current.currentTime = offset + Math.max(0, Math.min(duration, seconds));
+  };
+  return (
+    <section className="studio-source-player" aria-label="Trim this Short">
+      <h4>Trim this Short</h4>
+      <p>Times start at zero in this Short. To remove the first two seconds, set Start to 2.00.</p>
+      {/* biome-ignore lint/a11y/useMediaCaption: The export already contains its embedded subtitles; editable cues appear below. */}
+      <video
+        key={src}
+        ref={player}
+        src={src}
+        controls
+        playsInline
+        preload="metadata"
+        aria-label="Curated video trim preview"
+        onLoadedMetadata={() => {
+          setReady(true);
+          setPlayError("");
+          if (player.current) player.current.currentTime = offset;
+        }}
+        onTimeUpdate={() =>
+          setPosition(Math.max(0, (player.current?.currentTime ?? offset) - offset))
+        }
+        onError={() => {
+          setReady(false);
+          setPlayError(
+            "This video could not load. Your edits are retained. Retry playback or refresh the package to check file access.",
+          );
+        }}
+      />
+      {playError && (
+        <p role="alert">
+          {playError}{" "}
+          <button className="button" type="button" onClick={() => player.current?.load()}>
+            Retry video
+          </button>
+        </p>
+      )}
+      <p>
+        Playhead: {position.toFixed(2)} seconds · Spoken video: {duration.toFixed(2)} seconds
+      </p>
+      <div className="studio-editor-grid">
+        <label>
+          Start (seconds)
+          <input
+            aria-label="Start (seconds)"
+            type="number"
+            min="0"
+            max={duration - 1}
+            step="0.01"
+            required
+            value={start}
+            onChange={(e) =>
+              onChange({ startMs: baseStart + Math.round(e.target.valueAsNumber * 1000), endMs })
+            }
+          />
+        </label>
+        <label>
+          End (seconds)
+          <input
+            aria-label="End (seconds)"
+            type="number"
+            min="1"
+            max={duration}
+            step="0.01"
+            required
+            value={end}
+            onChange={(e) =>
+              onChange({ startMs, endMs: baseStart + Math.round(e.target.valueAsNumber * 1000) })
+            }
+          />
+        </label>
+      </div>
+      {error && <p role="alert">{error}</p>}
+      <div className="actions">
+        <button
+          className="button"
+          type="button"
+          disabled={!ready}
+          onClick={() => seek(position - 0.1)}
+        >
+          Back 0.1s
+        </button>
+        <button
+          className="button"
+          type="button"
+          disabled={!ready}
+          onClick={() => seek(position + 0.1)}
+        >
+          Forward 0.1s
+        </button>
+        <button
+          className="button"
+          type="button"
+          disabled={!ready}
+          onClick={() =>
+            onChange({
+              startMs: baseStart + Math.round(Math.min(duration, position) * 1000),
+              endMs,
+            })
+          }
+        >
+          Set start here
+        </button>
+        <button
+          className="button"
+          type="button"
+          disabled={!ready}
+          onClick={() =>
+            onChange({
+              startMs,
+              endMs: baseStart + Math.round(Math.min(duration, position) * 1000),
+            })
+          }
+        >
+          Set end here
+        </button>
+        <button
+          className="button primary"
+          type="button"
+          disabled={!ready || Boolean(error)}
+          onClick={async () => {
+            if (!player.current || start === "" || end === "") return;
+            player.current.currentTime = offset + start;
+            stopAt.current = offset + end;
+            try {
+              await player.current.play();
+              setPlayError("");
+            } catch {
+              stopAt.current = null;
+              setPlayError(
+                "Playback could not start. Try Preview trim again; your edits are retained.",
+              );
+            }
+          }}
+        >
+          Preview trim
+        </button>
+      </div>
+      <p>
+        The closing card stays at the end after rebuilding. Preview plays the selected speech;
+        subtitle and audio changes appear in the rebuilt file. Nothing is saved until you choose
+        Save &amp; rebuild this file.
+      </p>
+    </section>
+  );
+}
+
 export function StudioMediaSummary({
   edits,
   label = "File adjustments",

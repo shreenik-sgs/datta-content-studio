@@ -50,6 +50,8 @@ export type StudioTranscript = {
   recognition?: { provider: "sarvam" | "openai"; model: string };
 };
 export type StudioOutput = {
+  /** Curator-selected, exact source times. Transcript evidence remains unchanged. */
+  sourceTrim?: { startMs: number; endMs: number } | null;
   /** Retained across invalidated render reviews; configured package branding takes precedence. */
   closingDestination?: "app" | "youtube";
   mediaEdits?: import("./studio-media-edits").StudioMediaEdits;
@@ -70,6 +72,7 @@ export type StudioOutput = {
       title: string;
       body: string;
       sourceSegmentIds: string[];
+      sourceTrim?: { startMs: number; endMs: number } | null;
       captionCues?: StudioSegment[];
       mediaEdits?: import("./studio-media-edits").StudioMediaEdits;
       aiReview?: StudioAiReviewEvidence;

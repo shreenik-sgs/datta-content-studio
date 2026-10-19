@@ -40,3 +40,22 @@ it.each([
     }).success,
   ).toBe(false);
 });
+
+it.each([
+  { startMs: -2, endMs: 4000 },
+  { startMs: 4000, endMs: 2000 },
+  { startMs: 0, endMs: 500 },
+  { startMs: 0, endMs: 4000, filter: "unsafe" },
+])("rejects invalid trim requests %j", (sourceTrim) => {
+  expect(
+    studioReviseSchema.safeParse({ ...edit, outputs: [{ ...edit.outputs[0], sourceTrim }] })
+      .success,
+  ).toBe(false);
+});
+it("accepts millisecond trim boundaries and an explicit reset", () => {
+  for (const sourceTrim of [{ startMs: 2010, endMs: 4090 }, null])
+    expect(
+      studioReviseSchema.safeParse({ ...edit, outputs: [{ ...edit.outputs[0], sourceTrim }] })
+        .success,
+    ).toBe(true);
+});

@@ -45,12 +45,21 @@ and secure on HTTPS. Passwords are salted with scrypt; database sessions store
 only token hashes. Login is throttled per normalized email. Workers recheck current
 roles in this database before acting. Sannidhi cookies are never accepted.
 
+For loopback TEST workspaces, `STUDIO_LOCAL_LOGIN_ALIASES_JSON` can map short usernames
+to existing operator emails. Aliases use the same password, roles and login throttle as
+the underlying email. They are ignored on hosted or non-TEST environments. Keep the
+mapping in private local configuration; no account or password is seeded in the repository.
+
 ## Manual corrections
 
 Open a draft file preview and choose **Edit this file**, or choose **Edit file, video & audio**
 in the package's corrections section. Curators can edit titles and posting/article text,
 choose complete source passages while watching or listening to the version-bound master,
-and correct individual subtitles. Video controls include safe portrait focus, full-picture
+and correct individual subtitles. **Trim this Short** previews the curated video with Start/End
+times measured from zero. Set Start to `2.00` to remove its first two seconds, preview the
+selection, then save. The closing card is preserved. Captions are clipped and rebased;
+check and edit any words removed from the first/last subtitle. **Advanced** retains the
+whole-passage source selector when a different excerpt is needed. Video controls include safe portrait focus, full-picture
 framing and per-file subtitle visibility/size. Audio controls offer softer, standard or louder
 speech and optional steady-noise reduction. Playback speed/volume affect preview only.
 
@@ -61,9 +70,10 @@ checks still apply before human review. Audio is measured before and after rende
 peak protection at every loudness preset. Branding and the closing card are retained.
 
 Approved packages stay immutable. Rejected files return with their review comments and can
-be corrected manually or with AI. Saved manual settings survive later corrections. Source
-passage selection deliberately uses transcript boundaries; it does not offer arbitrary cuts
-through speech, dubbing or a multitrack editing timeline. Review the rebuilt result before approval.
+be corrected manually or with AI. Saved manual settings survive later corrections. Exact cuts
+remain bounded by the original source evidence; invalid or reversed ranges cannot be saved.
+A fresh AI review checks the edited boundaries and captions without silently moving the cut.
+Dubbing and multitrack editing are not included. Review the rebuilt result before approval.
 
 ## Settings and deployment
 

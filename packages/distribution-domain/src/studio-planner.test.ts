@@ -526,3 +526,56 @@ it("keeps the channel subscription link in YouTube copy through planning and rep
   expect(() => validateStudioPlan(provider, current, transcript)).toThrow("INVALID_STUDIO_COPY");
   expect(() => validateStudioPlan(repaired, current, transcript)).not.toThrow();
 });
+
+describe("precise human trim", () => {
+  it("clips intersecting cues, drops excluded cues and keeps original evidence untouched", () => {
+    expect(
+      studioSourceRange(["one", "two"], transcript, "short", { startMs: 500, endMs: 1750 }),
+    ).toEqual({
+      startMs: 500,
+      endMs: 1750,
+      segments: [
+        { ...transcript.segments[0], startMs: 500 },
+        { ...transcript.segments[1], endMs: 1750 },
+      ],
+    });
+    expect(
+      studioSourceRange(["one", "two"], transcript, "short", {
+        startMs: 1000,
+        endMs: 2000,
+      }).segments.map((s) => s.id),
+    ).toEqual(["two"]);
+    expect(transcript.segments[0]?.startMs).toBe(0);
+  });
+  it.each([
+    { startMs: -1, endMs: 1500 },
+    { startMs: 0, endMs: 2001 },
+    { startMs: 1500, endMs: 1000 },
+    { startMs: 0.5, endMs: 2000 },
+    { startMs: Number.NaN, endMs: 2000 },
+  ])("rejects invalid exact boundaries %j", (trim) => {
+    expect(() => studioSourceRange(["one", "two"], transcript, "short", trim)).toThrow(
+      "INVALID_STUDIO_TRIM",
+    );
+  });
+});
+
+it("requires translations only for the speech kept by a precise trim", () => {
+  const translated = createLocalStudioPlan(
+    { ...pkg, request: { ...pkg.request, channels: ["youtube"] } },
+    transcript,
+  );
+  translated.outputs = translated.outputs.map((o) => ({
+    ...o,
+    language: "te",
+    sourceTrim: { startMs: 1000, endMs: 2000 },
+  }));
+  translated.translations = [{ language: "te", segments: [{ id: "two", text: "మంచి మాట." }] }];
+  expect(() =>
+    validateStudioPlan(
+      translated,
+      { ...pkg, request: { ...pkg.request, channels: ["youtube"], languages: ["te"] } },
+      transcript,
+    ),
+  ).not.toThrow();
+});

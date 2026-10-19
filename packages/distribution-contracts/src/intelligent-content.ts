@@ -80,6 +80,15 @@ export const studioReviseSchema = z
               .refine(unique)
               .optional(),
             mediaEdits: studioMediaEditsSchema.optional(),
+            sourceTrim: z
+              .object({
+                startMs: z.number().int().nonnegative(),
+                endMs: z.number().int().positive(),
+              })
+              .strict()
+              .refine((span) => span.endMs - span.startMs >= 1000)
+              .nullable()
+              .optional(),
             captionCues: z
               .array(
                 z

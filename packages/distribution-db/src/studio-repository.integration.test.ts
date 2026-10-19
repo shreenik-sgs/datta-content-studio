@@ -1314,6 +1314,42 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       }),
     ).rejects.toThrow("REVISION_CONFLICT");
   });
+  it("queues only the trimmed file, retains source evidence and rejects out-of-source cuts", async () => {
+    const f = await fixture({ channels: ["youtube", "website"] });
+    const pkg = await draft(f);
+    const output = pkg.outputs[0];
+    if (!output) throw Error("MISSING_FIXTURE");
+    await expect(
+      studio.revise(f.ctx, pkg.id, {
+        expectedRevision: pkg.revision,
+        comment: "",
+        outputs: [{ ...output, sourceTrim: { startMs: 0, endMs: 4000 } }],
+      }),
+    ).rejects.toThrow("INVALID_STUDIO_TRIM");
+    expect(await studio.get(f.ctx, pkg.id)).toEqual(pkg);
+    const trimmed = await studio.revise(f.ctx, pkg.id, {
+      expectedRevision: pkg.revision,
+      render: true,
+      comment: "Remove the opening greeting",
+      outputs: [
+        {
+          ...output,
+          sourceTrim: { startMs: 500, endMs: 2000 },
+          captionCues: [{ id: "one", startMs: 500, endMs: 2000, text: "Teaching." }],
+        },
+      ],
+    });
+    expect(trimmed.generation).toEqual({ outputIds: [output.id], mode: "render" });
+    expect(trimmed.outputs[0]).toMatchObject({
+      startMs: 500,
+      endMs: 2000,
+      sourceTrim: { startMs: 500, endMs: 2000 },
+      asset: null,
+      aiReview: null,
+    });
+    expect(trimmed.outputs[1]).toEqual(pkg.outputs[1]);
+    expect(trimmed.provenance).toEqual(pkg.provenance);
+  });
   it("rolls back an edit if its rebuild cannot be queued", async () => {
     const f = await fixture();
     const pkg = await draft(f);

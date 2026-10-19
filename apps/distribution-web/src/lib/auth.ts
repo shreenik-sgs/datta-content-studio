@@ -22,6 +22,39 @@ export function trustedDistributionOrigin(value: string | undefined): string | n
   }
 }
 export const STUDIO_SESSION_COOKIE = "dcs_session";
+/** Explicit local TEST aliases share the underlying email's password and rate limit. */
+export function localStudioLoginAliases(
+  env: Record<string, string | undefined> = process.env,
+): Record<string, string> {
+  const origin = trustedDistributionOrigin(env.DISTRIBUTION_APP_ORIGIN);
+  if (
+    env.DISTRIBUTION_HUB_STAGE !== "TEST" ||
+    !origin ||
+    !["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname)
+  )
+    return {};
+  try {
+    const parsed: unknown = JSON.parse(env.STUDIO_LOCAL_LOGIN_ALIASES_JSON ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(
+          ([alias, email]) =>
+            /^[a-z][a-z0-9_-]{0,63}$/i.test(alias) &&
+            typeof email === "string" &&
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+            email.length <= 254,
+        )
+        .map(([alias, email]) => [alias.toLowerCase(), String(email).toLowerCase()]),
+    );
+  } catch {
+    return {};
+  }
+}
+export function studioLoginIdentifier(input: string, aliases: Record<string, string>) {
+  const normalized = input.trim().toLowerCase();
+  return Object.hasOwn(aliases, normalized) ? (aliases[normalized] as string) : normalized;
+}
 export function studioSessionToken(request: Request): string | null {
   const cookies = (request.headers.get("cookie") ?? "")
     .split(";")

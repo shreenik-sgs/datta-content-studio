@@ -343,6 +343,7 @@ export function validateStudioOutputs(
       output.sourceSegmentIds,
       input.provenance.transcript,
       output.format,
+      output.sourceTrim,
     );
     if (input.source.liveWindow && range.startMs >= input.source.liveWindow.ownedEndMs)
       throw new Error("STUDIO_LIVE_OVERLAP");

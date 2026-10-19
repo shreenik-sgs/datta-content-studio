@@ -63,6 +63,7 @@ const reviewSchema = (messages: boolean) => ({
 export async function reviewStudioContent(
   input: Parameters<typeof generateStudioPlan>[0] & {
     plan: StudioPlan;
+    useManualCaptions?: boolean;
     audioRange?: { startMs: number; endMs: number };
   },
 ): Promise<StudioContentReview[]> {
@@ -194,7 +195,12 @@ export async function reviewStudioContent(
       ...video,
       selectedClip: ["short", "reel"].includes(video.format)
         ? (() => {
-            const range = studioSourceRange(video.sourceSegmentIds, input.transcript, video.format);
+            const range = studioSourceRange(
+              video.sourceSegmentIds,
+              input.transcript,
+              video.format,
+              video.sourceTrim,
+            );
             return { ...range, durationMs: range.endMs - range.startMs };
           })()
         : null,
@@ -203,14 +209,24 @@ export async function reviewStudioContent(
         : null,
       captions:
         ["short", "reel"].includes(video.format) && input.pkg.request.captions
-          ? video.sourceSegmentIds.map((id) => ({
+          ? studioSourceRange(
+              video.sourceSegmentIds,
+              input.transcript,
+              video.format,
+              video.sourceTrim,
+            ).segments.map(({ id }) => ({
               id,
               text:
-                video.language === input.transcript.language
+                (input.useManualCaptions
+                  ? input.pkg.outputs
+                      ?.find((o) => studioOutputKey(o) === studioOutputKey(video))
+                      ?.captionCues?.find((c) => c.id === id)?.text
+                  : undefined) ??
+                (video.language === input.transcript.language
                   ? input.transcript.segments.find((s) => s.id === id)?.text
                   : input.plan.translations
                       .find((t) => t.language === video.language)
-                      ?.segments.find((s) => s.id === id)?.text,
+                      ?.segments.find((s) => s.id === id)?.text),
             }))
           : [],
     })),
@@ -297,15 +313,22 @@ export async function reviewStudioContent(
       !["short", "reel"].includes(output.format)
     )
       return check;
-    const untranslated = output.sourceSegmentIds.filter((id) => {
-      const text =
-        input.transcript.language === "en"
-          ? input.transcript.segments.find((segment) => segment.id === id)?.text
-          : input.plan.translations
-              .find((translation) => translation.language === "en")
-              ?.segments.find((segment) => segment.id === id)?.text;
-      return text ? studioEnglishCaptionNeedsTranslation(text) : false;
-    });
+    const untranslated = studioSourceRange(
+      output.sourceSegmentIds,
+      input.transcript,
+      output.format,
+      output.sourceTrim,
+    )
+      .segments.map((s) => s.id)
+      .filter((id) => {
+        const text =
+          input.transcript.language === "en"
+            ? input.transcript.segments.find((segment) => segment.id === id)?.text
+            : input.plan.translations
+                .find((translation) => translation.language === "en")
+                ?.segments.find((segment) => segment.id === id)?.text;
+        return text ? studioEnglishCaptionNeedsTranslation(text) : false;
+      });
     return untranslated.length
       ? {
           ...check,
