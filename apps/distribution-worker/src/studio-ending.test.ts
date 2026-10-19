@@ -329,4 +329,5 @@ it("uses the authentic Bala portrait with the same green closing card for every 
   await expect(
     studioClosingCard(Buffer.from("not-an-image"), "forest", "youtube", undefined, "bala-swamiji"),
   ).rejects.toThrow();
-});
+  // Four real image renders can exceed the default five seconds on a cold CI font cache.
+}, 30000);

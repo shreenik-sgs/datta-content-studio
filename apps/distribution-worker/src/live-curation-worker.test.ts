@@ -11,12 +11,12 @@ import type {
 } from "@satsang/distribution-db";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { assembleLiveWindow, createLiveCurationRunner } from "./live-curation-worker";
-const ffmpeg = existsSync("/opt/homebrew/bin/ffmpeg")
-  ? "/opt/homebrew/bin/ffmpeg"
-  : "/usr/bin/ffmpeg";
-const ffprobe = existsSync("/opt/homebrew/bin/ffprobe")
-  ? "/opt/homebrew/bin/ffprobe"
-  : "/usr/bin/ffprobe";
+const ffmpeg =
+  process.env.DISTRIBUTION_TEST_FFMPEG ??
+  (existsSync("/opt/homebrew/bin/ffmpeg") ? "/opt/homebrew/bin/ffmpeg" : "/usr/bin/ffmpeg");
+const ffprobe =
+  process.env.DISTRIBUTION_TEST_FFPROBE ??
+  (existsSync("/opt/homebrew/bin/ffprobe") ? "/opt/homebrew/bin/ffprobe" : "/usr/bin/ffprobe");
 let root: string;
 let first: Buffer;
 let second: Buffer;
