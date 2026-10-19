@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  STUDIO_BOUNDARY_EVIDENCE_POLICY,
   STUDIO_BOUNDARY_REVIEW_POLICY,
   type StudioBoundaryReview,
   applyStudioBoundaryReview,
@@ -72,6 +73,21 @@ it("binds review evidence to the exact included range", () => {
   expect(() =>
     validateStudioBoundaryReview({ ...boundary, ending: { ...complete, audibleWords: "" } }),
   ).toThrow();
+});
+it("preserves historical evidence and validates the new blind-audio policy", () => {
+  expect(validateStudioBoundaryReview(boundary)).toEqual(boundary);
+  const blind: StudioBoundaryReview = {
+    ...boundary,
+    evidencePolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
+  };
+  expect(validateStudioBoundaryReview(blind)).toEqual(blind);
+  expect(() =>
+    validateStudioBoundaryReview({
+      ...boundary,
+      // @ts-expect-error Exercise malformed persisted evidence at the runtime boundary.
+      evidencePolicy: "unverified-transcript",
+    }),
+  ).toThrow("STUDIO_VIDEO_REVIEW_INVALID");
 });
 it("does not accept a general pass that contradicts its boundary evidence", () => {
   const plan = {

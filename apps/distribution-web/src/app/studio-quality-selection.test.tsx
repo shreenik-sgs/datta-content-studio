@@ -27,7 +27,7 @@ it("explains a music-only source without presenting a service error or completed
           },
         ],
       }}
-      waiting={false}
+      status="FAILED"
       formatTimestamp={(value) => value}
     />,
   );
@@ -49,7 +49,7 @@ it("identifies the interrupted stage and safe recovery for an unexpected excepti
         total: 2,
         errorCode: "GENERATION_FAILED",
       }}
-      waiting={false}
+      status="FAILED"
       formatTimestamp={(value) => value}
     />,
   );
@@ -102,7 +102,7 @@ it("does not display passed review findings as problems during generation", () =
           },
         ],
       }}
-      waiting={false}
+      status="GENERATING"
       formatTimestamp={(value) => value}
     />,
   );
@@ -127,3 +127,33 @@ it("keeps an unsuitable-source failure distinct in package labels and workflow g
     "Generation needs attention",
   );
 });
+
+it.each(["GENERATING", "QUEUED", "FAILED"] as const)(
+  "explains a section cooldown without calling active work stopped: %s",
+  (status) => {
+    const html = renderToStaticMarkup(
+      <StudioGenerationProgressView
+        value={{
+          phase: "transcription",
+          provider: "sarvam",
+          completed: 17,
+          total: 28,
+          errorCode: "STUDIO_PROVIDER_RATE_LIMITED",
+          retryAt: "2026-10-19T00:00:00Z",
+        }}
+        status={status}
+        formatTimestamp={(value) => value}
+      />,
+    );
+    if (status === "FAILED") {
+      expect(html).toContain("Stopped during:");
+      expect(html).not.toContain("Retry scheduled for");
+    } else {
+      expect(html).toContain("Waiting to resume:");
+      expect(html).toContain("Retry scheduled for 2026-10-19T00:00:00Z");
+      expect(html).not.toContain("Stopped during:");
+    }
+    expect(html).toContain("17 of 28");
+    expect(html).not.toContain('class="notice error"');
+  },
+);

@@ -229,8 +229,9 @@ export function PlaylistCuration({
               <p>The service will retry automatically. You do not need to restart the playlist.</p>
             ) : (
               <p>
-                The cloud worker is paused to avoid repeated failures. A successful download from
-                the worker is required before access is shown as restored.
+                Downloads are paused to avoid repeated failures. Recordings already downloaded can
+                continue generating. Access is restored after the import service successfully
+                downloads a recording.
               </p>
             )}
           </div>

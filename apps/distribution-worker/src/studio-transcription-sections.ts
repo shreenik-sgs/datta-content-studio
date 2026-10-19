@@ -5,6 +5,7 @@ import { type StudioCheckpoints, studioFingerprint } from "./studio-checkpoints"
 import { normalizeStudioTranscription } from "./studio-intelligence";
 import { executeStudioSource } from "./studio-process";
 import { type SarvamJobCheckpoint, transcribeSarvamStudioAudio } from "./studio-sarvam";
+import { retrySarvamSection } from "./studio-sarvam-section-retry.js";
 
 /** A single master and timeline, with independently resumable private ASR sections. */
 export async function transcribeStudioSections(input: {
@@ -14,6 +15,7 @@ export async function transcribeStudioSections(input: {
   ffmpeg: string;
   durationMs: number;
   fingerprint: string;
+  capacityLimited?: boolean | undefined;
   checkpoints?: StudioCheckpoints;
   provider: Omit<
     Parameters<typeof transcribeSarvamStudioAudio>[0],
@@ -21,7 +23,16 @@ export async function transcribeStudioSections(input: {
   >;
 }): Promise<StudioTranscript> {
   const { checkpoints, durationMs } = input;
-  const fingerprint = studioFingerprint({ source: input.fingerprint, policy: "bounded-asr-v1" });
+  const initialMaximumMs = input.capacityLimited
+    ? durationMs > 120000
+      ? 120000
+      : 30000
+    : 30 * 60 * 1000;
+  const fingerprint = studioFingerprint({
+    source: input.fingerprint,
+    policy: "bounded-asr-v1",
+    ...(input.capacityLimited ? { initialMaximumMs } : {}),
+  });
   const boundary = async (startMs: number, endLimitMs: number, maximumMs: number) => {
     const target = Math.min(endLimitMs, startMs + maximumMs);
     const quietPoints: number[] = [];
@@ -71,7 +82,7 @@ export async function transcribeStudioSections(input: {
   if (!ranges) {
     ranges = [];
     for (let startMs = 0; startMs < durationMs; ) {
-      const endMs = await boundary(startMs, durationMs, 30 * 60 * 1000);
+      const endMs = await boundary(startMs, durationMs, initialMaximumMs);
       ranges.push({ startMs, endMs });
       startMs = endMs;
     }
@@ -124,23 +135,37 @@ export async function transcribeStudioSections(input: {
         ],
       });
       try {
-        transcript = await transcribeSarvamStudioAudio({
-          ...input.provider,
-          allowEmptySection: true,
-          durationMs: range.endMs - range.startMs,
-          bytes: await readFile(path),
-          ...(checkpoints
-            ? {
-                recovery: {
-                  saved: checkpoints.get<SarvamJobCheckpoint>(
-                    `sarvam-job:${key}`,
-                    sectionFingerprint,
-                  ),
-                  save: (value: SarvamJobCheckpoint) =>
-                    checkpoints.set(`sarvam-job:${key}`, sectionFingerprint, value),
-                },
-              }
-            : {}),
+        transcript = await retrySarvamSection({
+          signal: input.provider.signal,
+          onWait: async (retryAt) =>
+            checkpoints?.progress({
+              phase: "transcription",
+              provider: "sarvam",
+              completed,
+              total,
+              ...(retryAt ? { retryAt, errorCode: "STUDIO_PROVIDER_RATE_LIMITED" } : {}),
+            }),
+          // Read the latest saved job stage on every attempt. A rejected start
+          // resumes that same job; completed sibling sections are never repeated.
+          run: async () =>
+            transcribeSarvamStudioAudio({
+              ...input.provider,
+              allowEmptySection: true,
+              durationMs: range.endMs - range.startMs,
+              bytes: await readFile(path),
+              ...(checkpoints
+                ? {
+                    recovery: {
+                      saved: checkpoints.get<SarvamJobCheckpoint>(
+                        `sarvam-job:${key}`,
+                        sectionFingerprint,
+                      ),
+                      save: (value: SarvamJobCheckpoint) =>
+                        checkpoints.set(`sarvam-job:${key}`, sectionFingerprint, value),
+                    },
+                  }
+                : {}),
+            }),
         });
       } catch (error) {
         if (

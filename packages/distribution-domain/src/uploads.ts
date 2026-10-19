@@ -1,5 +1,5 @@
 export const MAX_MASTER_BYTES = 250 * 1024 * 1024;
-export const MAX_ONLINE_MASTER_BYTES = 2 * 1024 * 1024 * 1024;
+export const MAX_ONLINE_MASTER_BYTES = 20 * 1024 * 1024 * 1024;
 export const MASTER_MIME_TYPES = [
   "image/jpeg",
   "image/png",

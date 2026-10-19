@@ -435,6 +435,22 @@ describe("Sarvam Studio batch adapter — mocked provider only", () => {
   });
 
   it.each([
+    [429, "STUDIO_PROVIDER_RATE_LIMITED", true],
+    [500, "STUDIO_PROVIDER_UNAVAILABLE", false],
+  ])(
+    "distinguishes a rejected creation from an uncertain HTTP %i creation",
+    async (status, code, resumable) => {
+      const fetcher = fixture([new Response("private provider details", { status })]);
+      const save = vi.fn();
+      await expect(
+        transcribeSarvamStudioAudio({ ...input(), fetcher, recovery: { saved: undefined, save } }),
+      ).rejects.toMatchObject({ message: code, transcriptionResumable: resumable });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(save).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     { ...job("Failed"), error_message: "secret provider error" },
     { ...complete(), job_id: "another-job" },
     { ...complete(), failed_files_count: 1 },

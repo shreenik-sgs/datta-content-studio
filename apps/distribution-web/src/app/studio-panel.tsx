@@ -978,7 +978,7 @@ export function StudioPanel({
         >
           <StudioGenerationProgressView
             value={value.generationProgress}
-            waiting={value.status === "QUEUED"}
+            status={value.status}
             formatTimestamp={formatTimestamp}
           />
         </div>

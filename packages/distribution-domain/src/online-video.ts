@@ -138,7 +138,7 @@ export const ONLINE_IMPORT_ERRORS: Record<string, string> = {
   ONLINE_SOURCE_FORMAT_UNSUPPORTED:
     "The video is reachable, but the provider has not offered a supported downloadable format. A recent livestream may still be processing. Retry later or upload your original recording.",
   ONLINE_SOURCE_TOO_LARGE:
-    "This recording exceeds the 2 GB online download limit. Upload a smaller complete recording or split it into complete teachings.",
+    "This recording exceeds the 20 GB online download limit. Upload a smaller complete recording or split it into complete teachings.",
   PLAYLIST_ALREADY_STARTED:
     "This playlist already has saved settings. Open its progress below; existing curation has been preserved.",
   PLAYLIST_NOT_READY:

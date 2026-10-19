@@ -49,6 +49,8 @@ export async function generateCheckpointedStudioPlan(
   input: Parameters<typeof generateStudioPlan>[0],
   checkpoints?: StudioCheckpoints,
   options: {
+    /** Review changes invalidate evidence, while keeping the paid draft and translation. */
+    mediaReviewPolicy?: string;
     reviewMedia?: (
       plan: StudioPlan,
       checks: StudioContentReview[],
@@ -67,6 +69,7 @@ export async function generateCheckpointedStudioPlan(
   } = {},
 ): Promise<StudioPlan> {
   if (input.provider === "local") return generateStudioPlan(input);
+  const mediaReviewPolicy = options.reviewMedia ? options.mediaReviewPolicy : undefined;
   const combined: StudioPlan = { outputs: [], skippedChannels: [], translations: [] };
   const candidateSelection = canSelectInitialStudioCandidates(
     input.pkg,
@@ -146,6 +149,7 @@ export async function generateCheckpointedStudioPlan(
         ...(selected[0] ? { channel: selected[0] } : {}),
       });
       type SavedPlan = {
+        mediaReviewPolicy?: string;
         selectionComplete?: boolean;
         plan: StudioPlan;
         checks: StudioContentReview[];
@@ -155,6 +159,11 @@ export async function generateCheckpointedStudioPlan(
         audioIncluded: boolean;
       };
       let saved = checkpoints?.get<SavedPlan>(key, fingerprint);
+      const previous = saved;
+      if (mediaReviewPolicy && saved?.mediaReviewPolicy !== mediaReviewPolicy) {
+        if (saved?.provider === "openai" && options.fallback) useFallback = true;
+        saved = undefined;
+      }
       // A wholly rejected prior run may retry its saved working draft, never treat it as approval.
       if (
         saved &&
@@ -197,18 +206,30 @@ export async function generateCheckpointedStudioPlan(
             model: engine.model,
             version: 1,
           });
-          type Working = { plan: StudioPlan; checks?: StudioContentReview[] };
-          const working = checkpoints?.get<Working>(workingKey, workingFingerprint);
+          type Working = {
+            plan: StudioPlan;
+            checks?: StudioContentReview[];
+            mediaReviewPolicy?: string;
+          };
+          const working =
+            checkpoints?.get<Working>(workingKey, workingFingerprint) ??
+            (previous?.provider === engine.provider ? previous : undefined);
           let plan =
             working?.plan ??
             reuseStudioPlanTranslations(await generateStudioPlan(request), referencePlan);
           validateStudioPlan(plan, pkg, input.transcript, true);
-          await checkpoints?.set(workingKey, workingFingerprint, { plan, checks: working?.checks });
+          let checks = working?.checks;
+          if (mediaReviewPolicy && working?.mediaReviewPolicy !== mediaReviewPolicy)
+            checks = undefined;
+          await checkpoints?.set(workingKey, workingFingerprint, {
+            plan,
+            checks,
+            ...(mediaReviewPolicy ? { mediaReviewPolicy } : {}),
+          });
           const reviewInput = {
             ...request,
             ...(engine.provider === "gemini" && originalAudio ? { originalAudio } : {}),
           };
-          let checks = working?.checks;
           for (let repair = 0; ; repair++) {
             await checkpoints?.progress({
               phase: "reviewing",
@@ -223,7 +244,11 @@ export async function generateCheckpointedStudioPlan(
               if (options.reviewMedia) checks = await options.reviewMedia(plan, checks);
             }
             checks = validateStudioContentReview({ checks }, plan);
-            await checkpoints?.set(workingKey, workingFingerprint, { plan, checks });
+            await checkpoints?.set(workingKey, workingFingerprint, {
+              plan,
+              checks,
+              ...(mediaReviewPolicy ? { mediaReviewPolicy } : {}),
+            });
             const issues = studioContentReviewIssues(checks);
             if (!issues.length) break;
             // Bounded repairs preserve the last draft and findings if the provider is interrupted.
@@ -277,6 +302,7 @@ export async function generateCheckpointedStudioPlan(
           return {
             plan,
             checks,
+            ...(mediaReviewPolicy ? { mediaReviewPolicy } : {}),
             reviewedAt: new Date().toISOString(),
             provider: engine.provider,
             model: engine.model ?? "",

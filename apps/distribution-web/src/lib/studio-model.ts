@@ -208,6 +208,8 @@ const messages: Record<string, string> = {
     "The transcription language does not match this master's source language. Check the source language before retrying.",
   STUDIO_PROVIDER_TRANSCRIPTION_FAILED:
     "The speech service could not transcribe the recording. Your master is saved; retry transcription after checking the original audio and service readiness.",
+  STUDIO_TRANSCRIPTION_CONTEXT_LIMIT:
+    "The speech service could not process an audio section within its capacity. Your master and completed sections are saved. Retry to resume automatic processing in smaller sections; no manual file splitting is needed.",
   STUDIO_SARVAM_CONFIGURATION_INVALID:
     "The transcription model or devotional vocabulary needs correction in the worker configuration.",
   STUDIO_AUDIO_INVALID_OR_TOO_LARGE:

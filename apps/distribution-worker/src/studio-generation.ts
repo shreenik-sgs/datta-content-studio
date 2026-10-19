@@ -21,6 +21,7 @@ import {
   STUDIO_POST_ART_POLICY,
   STUDIO_PRESENTATION_POLICY,
   STUDIO_SINGLE_TRANSCRIPTION_MS,
+  STUDIO_SOURCE_FRAMING_POLICY,
   STUDIO_STORYBOARD_CONTINUITY_POLICY,
   STUDIO_VIDEO_ILLUSTRATION_POLICY,
   STUDIO_VISUAL_STYLE_POLICY,
@@ -44,6 +45,7 @@ import {
   safeStudioPortraitScenes,
   studioAppLinks,
   studioAssetName,
+  studioBoundaryPasses,
   studioCardStyle,
   studioClosingCardPlan,
   studioContentReviewIssues,
@@ -64,6 +66,7 @@ import {
   validateStudioSourceScreen,
 } from "@satsang/distribution-domain";
 import { createPrivateRenderScratch } from "./renderer.js";
+import { transcribeAdaptiveSarvam } from "./studio-adaptive-transcription.js";
 import { createStudioReviewAudio } from "./studio-analysis-audio.js";
 import { reviewStudioClipBoundaries } from "./studio-boundary-review.js";
 import {
@@ -98,8 +101,6 @@ import {
   studioReviewProxy,
 } from "./studio-presentation-review.js";
 import { executeStudioSource, validateStudioSourceDimensions } from "./studio-process.js";
-import { transcribeSarvamStudioAudio } from "./studio-sarvam.js";
-import { transcribeStudioSections } from "./studio-transcription-sections.js";
 
 const run = promisify(execFile);
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -211,40 +212,22 @@ async function transcriptFor(
           throw new Error("STUDIO_SARVAM_KEYTERMS_INVALID");
         }
       }
-      if (durationMs > STUDIO_SINGLE_TRANSCRIPTION_MS)
-        return transcribeStudioSections({
-          sourcePath,
-          mimeType: claim.source.mimeType,
-          directory,
-          ffmpeg: env.DISTRIBUTION_FFMPEG_PATH ?? "ffmpeg",
-          durationMs,
-          fingerprint:
-            transcriptFingerprint ??
-            studioFingerprint({ source: claim.source.sha256, language: input.language }),
-          ...(checkpoints ? { checkpoints } : {}),
-          provider: {
-            ...input,
-            model: env.STUDIO_SARVAM_MODEL ?? "saaras:v4",
-            ...(keyterms ? { keyterms } : {}),
-          },
-        });
-      return transcribeSarvamStudioAudio({
-        ...input,
-        bytes: await sourceAudio(claim, sourcePath, directory, env, signal),
-        model: env.STUDIO_SARVAM_MODEL ?? "saaras:v4",
-        ...(checkpoints && transcriptFingerprint
-          ? {
-              recovery: {
-                saved: checkpoints.get<import("./studio-sarvam.js").SarvamJobCheckpoint>(
-                  "sarvam-job",
-                  transcriptFingerprint,
-                ),
-                save: (value: import("./studio-sarvam.js").SarvamJobCheckpoint) =>
-                  checkpoints.set("sarvam-job", transcriptFingerprint, value),
-              },
-            }
-          : {}),
-        ...(keyterms ? { keyterms } : {}),
+      return transcribeAdaptiveSarvam({
+        sourcePath,
+        mimeType: claim.source.mimeType,
+        directory,
+        ffmpeg: env.DISTRIBUTION_FFMPEG_PATH ?? "ffmpeg",
+        durationMs,
+        fingerprint:
+          transcriptFingerprint ??
+          studioFingerprint({ source: claim.source.sha256, language: input.language }),
+        ...(checkpoints ? { checkpoints } : {}),
+        audio: () => sourceAudio(claim, sourcePath, directory, env, signal),
+        provider: {
+          ...input,
+          model: env.STUDIO_SARVAM_MODEL ?? "saaras:v4",
+          ...(keyterms ? { keyterms } : {}),
+        },
       });
     }
     return {
@@ -594,6 +577,7 @@ export async function generateStudioPackage(input: {
         openingPolicy: STUDIO_OPENING_CARD_POLICY,
         sourceSpeaker: sourceBrand,
         policy: STUDIO_PRESENTATION_POLICY,
+        framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
         storyboard: "context-rich-v2",
         storyboardContinuity: STUDIO_STORYBOARD_CONTINUITY_POLICY,
         illustrationSelection: STUDIO_VIDEO_ILLUSTRATION_POLICY,
@@ -781,7 +765,12 @@ export async function generateStudioPackage(input: {
           checkpoints,
           {
             ...(fallback ? { fallback } : {}),
-            ...(provider !== "local" ? { reviewMedia } : {}),
+            ...(provider !== "local"
+              ? {
+                  reviewMedia,
+                  mediaReviewPolicy: `${STUDIO_BOUNDARY_EVIDENCE_POLICY}:${STUDIO_SOURCE_FRAMING_POLICY}`,
+                }
+              : {}),
             onReview: recordReviews,
             onProvider: (usedProvider, usedModel, audioIncluded) => {
               analyzedAudio ||= audioIncluded;
@@ -808,6 +797,8 @@ export async function generateStudioPackage(input: {
     ) {
       const fingerprint = studioFingerprint({
         version: 6,
+        boundaryEvidencePolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
+        framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
         editorialReview: STUDIO_EDITORIAL_REVIEW_POLICY,
         ...(reviewAudio ? { audioReview: "selected-source-windows-v1" } : {}),
         storyboard: "context-rich-v2",
@@ -933,6 +924,8 @@ export async function generateStudioPackage(input: {
       version: 18,
       boundaryPolicy: STUDIO_BOUNDARY_REVIEW_POLICY,
       boundaryEvidencePolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
+      renderedBoundaryPolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
+      framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
       audioPolicy: STUDIO_AUDIO_POLICY,
       visualStylePolicy: STUDIO_VISUAL_STYLE_POLICY,
       closingDestinations: input.closingDestinations,
@@ -1266,6 +1259,8 @@ export async function generateStudioPackage(input: {
             const bytes = await readFile(path);
             const qualityFingerprint = studioFingerprint({
               reviewerVersion: 5,
+              renderedBoundaryPolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
+              framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
               policy: STUDIO_PRESENTATION_POLICY,
               rendered: sha(bytes),
               source: claim.source.sha256,
@@ -1356,6 +1351,35 @@ export async function generateStudioPackage(input: {
                       : null,
                 },
               });
+              const audibleBoundary = await reviewStudioClipBoundaries({
+                ...videoConnection,
+                sourcePath: path,
+                mimeType: "video/mp4",
+                directory: folder,
+                ffmpeg: env.DISTRIBUTION_FFMPEG_PATH ?? "ffmpeg",
+                language: transcript.language,
+                startMs: range.startMs,
+                endMs: range.endMs,
+                fileStartMs: 0,
+                included: range.segments,
+                outside: [],
+              });
+              const incomplete = (["opening", "ending"] as const).filter(
+                (edge) => !studioBoundaryPasses(audibleBoundary[edge]),
+              );
+              checks = {
+                ...checks,
+                naturalBoundaries: checks.naturalBoundaries && !incomplete.length,
+                reason: [
+                  ...incomplete.map(
+                    (edge) =>
+                      `Rendered ${edge}: ${audibleBoundary[edge].audibleWords}. ${audibleBoundary[edge].reason}`,
+                  ),
+                  checks.reason,
+                ]
+                  .join(" ")
+                  .slice(0, 3000),
+              };
               await checkpoints?.set(
                 `render-screen:${qualityFingerprint}`,
                 qualityFingerprint,

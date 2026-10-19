@@ -9,6 +9,8 @@ import {
 import { STUDIO_SOURCE_SCENE_MARGIN_MS } from "./studio-timing";
 /** Geometry and evidence rules are shared by the renderer and output validation. */
 export const STUDIO_PRESENTATION_POLICY = "source-safe-portrait-v1" as const;
+/** A devotional backdrop alone does not require shrinking a single live speaker. */
+export const STUDIO_SOURCE_FRAMING_POLICY = "speaker-first-framing-v2" as const;
 export const STUDIO_PICTURE = { x: 0, y: 72, width: 1080, height: 1280 } as const;
 export const STUDIO_SUBTITLE_TOP = STUDIO_PICTURE.y + STUDIO_PICTURE.height + 12;
 export type StudioPortraitScene = {

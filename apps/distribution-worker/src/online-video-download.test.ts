@@ -1,12 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import {
   ONLINE_VIDEO_FORMAT,
   ONLINE_VIDEO_METADATA,
+  downloadOnlineVideo,
   onlineDownloadFailure,
 } from "./online-video-download";
 
@@ -33,6 +34,33 @@ it("distinguishes server bot verification from source privacy or rights", () => 
   expect(onlineDownloadFailure("Requested format is not available. Use --list-formats")).toBe(
     "ONLINE_SOURCE_FORMAT_UNSUPPORTED",
   );
+});
+
+it("reports an oversized format skipped on stdout before it becomes a missing-file error", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "studio-size-skip-"));
+  try {
+    const binary = join(dir, "synthetic-downloader");
+    await writeFile(
+      binary,
+      `#!${process.execPath}\nprocess.stdout.write('[download] File is larger than max-filesize (3000 > 1000). Aborting.\\n');\n`,
+    );
+    await chmod(binary, 0o700);
+    await expect(
+      downloadOnlineVideo({
+        source: {
+          kind: "video",
+          provider: "youtube",
+          id: "QnJEAhhnbUA",
+          url: "https://www.youtube.com/watch?v=QnJEAhhnbUA",
+        },
+        maxBytes: 1000,
+        signal: new AbortController().signal,
+        binary,
+      }),
+    ).rejects.toThrow("ONLINE_SOURCE_TOO_LARGE");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 const downloader = process.env.STUDIO_YTDLP_PATH ?? "/opt/homebrew/bin/yt-dlp";

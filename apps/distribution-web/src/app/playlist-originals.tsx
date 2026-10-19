@@ -74,7 +74,7 @@ export function PlaylistOriginals({
                 ? "Choose a valid MP4, MP3, M4A or WAV recording. The file’s contents must match its format."
                 : undefined) ??
               (response.status === 413
-                ? "This file exceeds 2 GB."
+                ? "This file exceeds 20 GB."
                 : response.status === 429
                   ? "Another upload is in progress. Retry this file when it finishes."
                   : "Upload failed. Your other recordings are retained; retry this file."),
@@ -112,7 +112,7 @@ export function PlaylistOriginals({
       </p>
       <fieldset disabled={busy}>
         <label>
-          Select recordings (MP4, MP3, M4A or WAV; up to 2 GB each)
+          Select recordings (MP4, MP3, M4A or WAV; up to 20 GB each)
           <input
             type="file"
             multiple
@@ -175,7 +175,7 @@ export function PlaylistOriginals({
                     <p role="alert">Choose a nonempty MP4, MP3, M4A or WAV recording.</p>
                   )}
                   {entry.file.size > MAX_ONLINE_MASTER_BYTES && (
-                    <p role="alert">This file exceeds 2 GB.</p>
+                    <p role="alert">This file exceeds 20 GB.</p>
                   )}
                   {entry.id && selected.filter((other) => other.id === entry.id).length > 1 && (
                     <p role="alert">

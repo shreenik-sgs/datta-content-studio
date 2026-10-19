@@ -43,6 +43,12 @@ it("screens the actual audiovisual excerpt and includes human feedback without t
   expect(body.systemInstruction.parts[0].text).toContain("untrusted");
   expect(body.systemInstruction.parts[0].text).toContain("fade cannot repair");
   expect(body.systemInstruction.parts[0].text).toContain("bodyTop must be 0");
+  expect(body.systemInstruction.parts[0].text).toContain(
+    "Background artwork and a lower-third banner alone do not justify a full-picture fallback",
+  );
+  expect(body.systemInstruction.parts[0].text).toContain(
+    "Retain the full picture when the actual crop would cut meaningful text",
+  );
   expect(body.systemInstruction.parts[0].text).toContain("Original speaker footage is the default");
   expect(body.systemInstruction.parts[0].text).toContain("Return zero illustrations");
   expect(body.contents[0].parts[0].text).toContain("Preserve the Telugu name");

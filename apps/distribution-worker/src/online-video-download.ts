@@ -90,6 +90,10 @@ async function run(
     timer.unref();
     child.stdout.on("data", (chunk) => {
       out += chunk.toString();
+      // yt-dlp reports a size skip on stdout and may exit successfully or continue
+      // downloading audio. Stop before a missing video becomes a generic merge error.
+      if (/(?:^|\n)\[download\] File is larger than max-filesize\b/.test(out))
+        stop("ONLINE_SOURCE_TOO_LARGE");
       if (Buffer.byteLength(out) > 8 * 1024 * 1024) stop("ONLINE_PLAYLIST_TOO_LARGE");
     });
     child.stderr.on("data", (chunk) => {

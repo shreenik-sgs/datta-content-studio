@@ -3,6 +3,7 @@ import {
   type ContentMaster,
   type ContentRights,
   MAX_MASTER_BYTES,
+  MAX_ONLINE_MASTER_BYTES,
   contentApprovalDecision,
   contentExportDecision,
   contentStateAfterEdit,
@@ -155,6 +156,21 @@ describe("DS-DIST-R1 pure authorization and rights", () => {
 });
 
 describe("DS-DIST-R1-ASSET master signature and bounds", () => {
+  it("accepts long online masters above 2 GB without relaxing the separate upload default", () => {
+    const file = {
+      byteSize: 3 * 1024 ** 3,
+      mimeType: "video/mp4",
+      signature: new TextEncoder().encode("0000ftypisom0000"),
+    };
+    expect(validateMasterUpload(file, MAX_ONLINE_MASTER_BYTES)).toBe("video/mp4");
+    expect(() => validateMasterUpload(file)).toThrow("UPLOAD_TOO_LARGE");
+    expect(() =>
+      validateMasterUpload(
+        { ...file, byteSize: MAX_ONLINE_MASTER_BYTES + 1 },
+        MAX_ONLINE_MASTER_BYTES,
+      ),
+    ).toThrow("UPLOAD_TOO_LARGE");
+  });
   it("DS-DIST-R1-ASSET checks declared MIME against a bounded source signature", () => {
     expect(
       validateMasterUpload({

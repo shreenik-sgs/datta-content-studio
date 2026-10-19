@@ -53,6 +53,17 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
       category: "bhajans",
       asset: asset(),
     });
+  it("persists a complete online master larger than 2 GB after the capacity migration", async () => {
+    const byteSize = 3 * 1024 ** 3;
+    const item = await repository.create(ctx, {
+      title: "Long online discourse",
+      language: "en",
+      category: "pravachanams",
+      asset: { ...asset(), byteSize, mimeType: "video/mp4", originalName: "full-discourse.mp4" },
+    });
+    expect(item.currentVersion.byteSize).toBe(byteSize);
+    expect((await repository.get(ctx, item.id)).currentVersion.byteSize).toBe(byteSize);
+  });
   it("rejects renamed duplicates and simultaneous identical uploads without crossing worlds", async () => {
     const bytes = asset();
     const input = { title: "Duplicate guard", language: "en", category: "bhajans", asset: bytes };
@@ -519,9 +530,11 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
         jobId: job.id,
       });
       if (!claim) throw Error("missing generation claim");
-      await studio.failGeneration(claim, "STUDIO_PROVIDER_TIMEOUT");
+      const failureCode = bundle ? "STUDIO_TRANSCRIPTION_CONTEXT_LIMIT" : "STUDIO_PROVIDER_TIMEOUT";
+      await studio.failGeneration(claim, failureCode);
       const failed = await studio.get(ctx, failedId);
       expect(failed.status).toBe("FAILED");
+      expect(failed.failure).toBe(failureCode);
       await expect(studio.retryPlaylistGeneration(reviewer, parent.id)).rejects.toThrow(
         "FORBIDDEN",
       );

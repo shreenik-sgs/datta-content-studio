@@ -445,7 +445,10 @@ export async function transcribeSarvamStudioAudio(input: {
         error.message,
         error.retryAfterMs,
         error.requestNotSent,
-        transcriptionResumable,
+        // An explicit creation rejection did not accept a paid job. An ambiguous
+        // creation timeout/5xx still cannot be repeated without a saved job ID.
+        transcriptionResumable ||
+          (error.message === "STUDIO_PROVIDER_RATE_LIMITED" && Boolean(input.recovery)),
       );
     if (
       error instanceof Error &&

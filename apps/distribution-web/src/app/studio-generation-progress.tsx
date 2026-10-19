@@ -1,6 +1,7 @@
 import { DISTRIBUTION_LANGUAGE_NAMES } from "@satsang/distribution-contracts";
 import {
   type StudioGenerationProgress,
+  type StudioPackage,
   studioChannelLabel,
   studioContentReviewIssues,
   studioNeedsSuitabilityReview,
@@ -18,13 +19,14 @@ const phases = {
 };
 export function StudioGenerationProgressView({
   value,
-  waiting,
+  status,
   formatTimestamp,
 }: {
   value: StudioGenerationProgress;
-  waiting: boolean;
+  status: StudioPackage["status"];
   formatTimestamp: (value: string) => string;
 }) {
+  const waiting = status === "QUEUED" || (status === "GENERATING" && Boolean(value.retryAt));
   const issues = value.reviewIssues?.filter((issue) => studioContentReviewIssues([issue]).length);
   if (studioNeedsSuitabilityReview(value.errorCode))
     return (

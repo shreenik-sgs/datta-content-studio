@@ -103,7 +103,7 @@
   },
   "additionalAudioBoundaryFixes": {
     "baseCommit": "6e9da5087c717112e55432ca7955f99eab3b599d",
-    "uncommitted": true,
+    "uncommitted": false,
     "snapshotUTC": "2026-10-18T17:26:23.254438+00:00",
     "files": [
       {
@@ -126,6 +126,242 @@
         "path": "packages/distribution-domain/src/studio-boundary-review.ts",
         "sha256": "6f05d160473c0b678ad62b1f4ee3b13720baa30a93f8338fa130bfde8e74cfdd"
       }
-    ]
+    ],
+    "committedAs": "bb2a2039e85a0a9805ddee75c9ad9a0ec210262c"
+  },
+  "latestHubFixes": {
+    "sourceCommit": "c74f881a689b176485048cc25031e16171ff488e",
+    "sourceBranch": "feat/gurubhavana-series-closing-20261018",
+    "importedAtUTC": "2026-10-19T00:40:16.583629+00:00",
+    "sourceCommits": [
+      "bb2a2039e85a0a9805ddee75c9ad9a0ec210262c",
+      "b7e0f47c58e7796156f3519f0893c6c73a5c4e0c",
+      "df1a7123d06edbde57a773d2072155d305cddf7d",
+      "7a19abb6d8563223650a93f2126b420b48144026",
+      "5697019d193925adf0b5a4935d0af9a00253e9b9",
+      "aeab5d453ae39a87bce6fee847c6329634bcb013",
+      "bc712f004a4d38bf64f9a7694f215547f78876f4",
+      "c74f881a689b176485048cc25031e16171ff488e"
+    ],
+    "files": [
+      {
+        "path": "apps/distribution-web/src/app/playlist-curation.tsx",
+        "mode": "imported",
+        "sourceSha256": "e2e3bf6294fd076ef8056fc2454309e658dd9e6bc1d6065860f8e8ba4c8fa35d",
+        "importedSha256": "e2e3bf6294fd076ef8056fc2454309e658dd9e6bc1d6065860f8e8ba4c8fa35d"
+      },
+      {
+        "path": "apps/distribution-web/src/app/playlist-originals.tsx",
+        "mode": "imported",
+        "sourceSha256": "5b34c5f32c0a4f7d9d514dbc78f74237fc718b44c8fa3a31f7238fda226c399b",
+        "importedSha256": "5b34c5f32c0a4f7d9d514dbc78f74237fc718b44c8fa3a31f7238fda226c399b"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-generation-progress.tsx",
+        "mode": "imported",
+        "sourceSha256": "e80b04a13ec4a6f47ab1ba104d1263ee395106c6012d646bbef17319955a7712",
+        "importedSha256": "e80b04a13ec4a6f47ab1ba104d1263ee395106c6012d646bbef17319955a7712"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-panel.tsx",
+        "mode": "imported",
+        "sourceSha256": "8334061ec17c9e74ce67b076fc65f71b23f9ba258335117758d95ac75e304072",
+        "importedSha256": "8334061ec17c9e74ce67b076fc65f71b23f9ba258335117758d95ac75e304072"
+      },
+      {
+        "path": "apps/distribution-web/src/app/studio-quality-selection.test.tsx",
+        "mode": "imported",
+        "sourceSha256": "154f1d3aa879fbf3560b21939ddfba7789f00f3bcb1784b15f11db808a04ea45",
+        "importedSha256": "154f1d3aa879fbf3560b21939ddfba7789f00f3bcb1784b15f11db808a04ea45"
+      },
+      {
+        "path": "apps/distribution-web/src/lib/studio-model.test.ts",
+        "mode": "imported",
+        "sourceSha256": "87fae9d8ff6097dca98e29d2bd000c78182a41e6d854a9159b38a3335817dde1",
+        "importedSha256": "87fae9d8ff6097dca98e29d2bd000c78182a41e6d854a9159b38a3335817dde1"
+      },
+      {
+        "path": "apps/distribution-web/src/lib/studio-model.ts",
+        "mode": "imported",
+        "sourceSha256": "3746e590012bdab73633be940f386210b0788423cda6642f1cfb44b11c4e9250",
+        "importedSha256": "3746e590012bdab73633be940f386210b0788423cda6642f1cfb44b11c4e9250"
+      },
+      {
+        "path": "apps/distribution-worker/src/online-video-download.test.ts",
+        "mode": "imported",
+        "sourceSha256": "3e72085be5f259815e253979e5e27991de54fb0572aeef620c689fc6ee5187c3",
+        "importedSha256": "3e72085be5f259815e253979e5e27991de54fb0572aeef620c689fc6ee5187c3"
+      },
+      {
+        "path": "apps/distribution-worker/src/online-video-download.ts",
+        "mode": "imported",
+        "sourceSha256": "6a36d760f24c4569e5d8787502eb4b7e486a108522717240053028697f06bec3",
+        "importedSha256": "6a36d760f24c4569e5d8787502eb4b7e486a108522717240053028697f06bec3"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-adaptive-transcription.test.ts",
+        "mode": "imported",
+        "sourceSha256": "08427a1010b9149ed5ae1428b844252865a12af4e1ae9277f4c3025d9754a2fd",
+        "importedSha256": "08427a1010b9149ed5ae1428b844252865a12af4e1ae9277f4c3025d9754a2fd"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-adaptive-transcription.ts",
+        "mode": "imported",
+        "sourceSha256": "810e87944cd0698bdd0adb4c54a8212e3e11dd5546f60e7a3e2bc91b3fbf845d",
+        "importedSha256": "810e87944cd0698bdd0adb4c54a8212e3e11dd5546f60e7a3e2bc91b3fbf845d"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-boundary-review.test.ts",
+        "mode": "already-present",
+        "sourceSha256": "9425489682bdabb7af7478a5cdb2a5429d9533d82232e7058e350a2c44624a72",
+        "importedSha256": "9425489682bdabb7af7478a5cdb2a5429d9533d82232e7058e350a2c44624a72"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-boundary-review.ts",
+        "mode": "already-present",
+        "sourceSha256": "6659e5bb34971cd4fc1958cf13b01506c343ae1a6be790c82fc0005739c2f136",
+        "importedSha256": "6659e5bb34971cd4fc1958cf13b01506c343ae1a6be790c82fc0005739c2f136"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-checkpoints.test.ts",
+        "mode": "imported",
+        "sourceSha256": "66e29d4b8d95456f61109740fb30d736dc445588efbc2f29d5f86b6cabf31051",
+        "importedSha256": "66e29d4b8d95456f61109740fb30d736dc445588efbc2f29d5f86b6cabf31051"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-checkpoints.ts",
+        "mode": "imported",
+        "sourceSha256": "45eb214167800a80a6e910f69a490d605a6335d33fef3d330ffd560b388b628f",
+        "importedSha256": "45eb214167800a80a6e910f69a490d605a6335d33fef3d330ffd560b388b628f"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-generation.test.ts",
+        "mode": "imported",
+        "sourceSha256": "7f36a88e63c8da9f4361bbcb632aa070c1869a223180796e63285a77e8a4cd75",
+        "importedSha256": "7f36a88e63c8da9f4361bbcb632aa070c1869a223180796e63285a77e8a4cd75"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-generation.ts",
+        "mode": "imported",
+        "sourceSha256": "368850369a088ec48f8954831f80e242383ce17a0dceae3bea908564ea2e140a",
+        "importedSha256": "368850369a088ec48f8954831f80e242383ce17a0dceae3bea908564ea2e140a"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-presentation-review.test.ts",
+        "mode": "imported",
+        "sourceSha256": "d2820e273c82c222b1107ba2f5e3f75977bf05cc38a20025cba27ff436ca3abe",
+        "importedSha256": "d2820e273c82c222b1107ba2f5e3f75977bf05cc38a20025cba27ff436ca3abe"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-presentation-review.ts",
+        "mode": "imported",
+        "sourceSha256": "05cc0d5200d3451931141904420c6fd7967d46605a33fee6f84ce4f54a5c5b5a",
+        "importedSha256": "05cc0d5200d3451931141904420c6fd7967d46605a33fee6f84ce4f54a5c5b5a"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-sarvam-section-retry.test.ts",
+        "mode": "imported",
+        "sourceSha256": "51fb6839e2b66b5fc534c8d978682c881069eb2e8de8b832d35f8479f8fadb21",
+        "importedSha256": "51fb6839e2b66b5fc534c8d978682c881069eb2e8de8b832d35f8479f8fadb21"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-sarvam-section-retry.ts",
+        "mode": "imported",
+        "sourceSha256": "5aa9d301c0d1ba911ff546c69abe8a5c156091e062e159c5ff422f381321bbd3",
+        "importedSha256": "5aa9d301c0d1ba911ff546c69abe8a5c156091e062e159c5ff422f381321bbd3"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-sarvam.test.ts",
+        "mode": "imported",
+        "sourceSha256": "3097160cbf767dddca12e5d502d19b655153b862ffa4fc6fd73a46974a63c481",
+        "importedSha256": "3097160cbf767dddca12e5d502d19b655153b862ffa4fc6fd73a46974a63c481"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-sarvam.ts",
+        "mode": "imported",
+        "sourceSha256": "88b3a13fff232823f8cbf594d685d3e69363ef37869081132b5a90968416bc21",
+        "importedSha256": "88b3a13fff232823f8cbf594d685d3e69363ef37869081132b5a90968416bc21"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-transcription-sections.test.ts",
+        "mode": "imported",
+        "sourceSha256": "775845cc34f75489ae91d1af8780bce5727793ae69aa03e7833966c936af6ef9",
+        "importedSha256": "775845cc34f75489ae91d1af8780bce5727793ae69aa03e7833966c936af6ef9"
+      },
+      {
+        "path": "apps/distribution-worker/src/studio-transcription-sections.ts",
+        "mode": "imported",
+        "sourceSha256": "d3d3a67551ea5fe537f174a32ee553ec0a915312355dc473fe014f7ba38f46ce",
+        "importedSha256": "d3d3a67551ea5fe537f174a32ee553ec0a915312355dc473fe014f7ba38f46ce"
+      },
+      {
+        "path": "docs/runbooks/studio-generation-recovery.md",
+        "mode": "three-way-merged",
+        "sourceSha256": "fec92e2330334b00f10ae9a5cf77b20016dafce7ae9dd8b3f80e6bef08b2af7b",
+        "importedSha256": "dbce435ef767a45414ba14c36b80ef919abb9ac89bfe2dc869d10e5fb5ac212a"
+      },
+      {
+        "path": "packages/distribution-db/src/repository.integration.test.ts",
+        "mode": "three-way-merged",
+        "sourceSha256": "208837faf7df4794c7bf79087a990636542f856fc8f560581d35a5dc30318f24",
+        "importedSha256": "807bfe76a4df2dce02eb349eeb91c2256e29ad2c590787b6ced6302b26b788eb"
+      },
+      {
+        "path": "packages/distribution-db/src/schema.ts",
+        "mode": "imported",
+        "sourceSha256": "4f9055fa5361426d87bce57e1d25178bf681d49d476b5969117d3bec1b40e73c",
+        "importedSha256": "4f9055fa5361426d87bce57e1d25178bf681d49d476b5969117d3bec1b40e73c"
+      },
+      {
+        "path": "packages/distribution-db/src/studio-repository.ts",
+        "mode": "imported",
+        "sourceSha256": "977a6d7c9daee3e860384b58dfeef8c8fc90870ef82dbac20129a9c735f0a717",
+        "importedSha256": "977a6d7c9daee3e860384b58dfeef8c8fc90870ef82dbac20129a9c735f0a717"
+      },
+      {
+        "path": "packages/distribution-domain/src/content.test.ts",
+        "mode": "imported",
+        "sourceSha256": "a7b1c6f235738f975d4ec521438e0ce3c6b076d1fe8a4a5f62852523a5c50be4",
+        "importedSha256": "a7b1c6f235738f975d4ec521438e0ce3c6b076d1fe8a4a5f62852523a5c50be4"
+      },
+      {
+        "path": "packages/distribution-domain/src/online-video.ts",
+        "mode": "imported",
+        "sourceSha256": "9a8219563a3a172d7b19af91a81300d91ee634f4be7f062821e58d1f374cc14e",
+        "importedSha256": "9a8219563a3a172d7b19af91a81300d91ee634f4be7f062821e58d1f374cc14e"
+      },
+      {
+        "path": "packages/distribution-domain/src/studio-boundary-review.test.ts",
+        "mode": "imported",
+        "sourceSha256": "ec446ffb8e6b1d54aa2e3d2cfafc575f3dcc1fc45ef0706cef5d8a9f58441203",
+        "importedSha256": "ec446ffb8e6b1d54aa2e3d2cfafc575f3dcc1fc45ef0706cef5d8a9f58441203"
+      },
+      {
+        "path": "packages/distribution-domain/src/studio-boundary-review.ts",
+        "mode": "already-present",
+        "sourceSha256": "6f05d160473c0b678ad62b1f4ee3b13720baa30a93f8338fa130bfde8e74cfdd",
+        "importedSha256": "6f05d160473c0b678ad62b1f4ee3b13720baa30a93f8338fa130bfde8e74cfdd"
+      },
+      {
+        "path": "packages/distribution-domain/src/studio-presentation.ts",
+        "mode": "imported",
+        "sourceSha256": "3e4a929a0d1dbd0cda0a219c6163cb969ce975e8b1a225c7f313c1885f07e112",
+        "importedSha256": "3e4a929a0d1dbd0cda0a219c6163cb969ce975e8b1a225c7f313c1885f07e112"
+      },
+      {
+        "path": "packages/distribution-domain/src/uploads.ts",
+        "mode": "imported",
+        "sourceSha256": "e00e82b1524da4c5e7455462b51f745e04bff5d83242445aad220aac87aa01a4",
+        "importedSha256": "e00e82b1524da4c5e7455462b51f745e04bff5d83242445aad220aac87aa01a4"
+      }
+    ],
+    "migration": {
+      "source": "0022_large_online_masters",
+      "standalone": "0023_large_online_masters",
+      "reason": "Preserve the already committed 0022 independent operator identity migration. The 0023 snapshot is generated from the standalone schema."
+    },
+    "containsRuntimeSecrets": false,
+    "dataCopied": false,
+    "preservesStandaloneIdentity": true
   }
 }

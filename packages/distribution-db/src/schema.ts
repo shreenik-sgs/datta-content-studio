@@ -106,7 +106,7 @@ export const distributionContentVersion = distributionSchema.table(
       columns: [table.masterId, table.isTest],
       foreignColumns: [distributionContentMaster.id, distributionContentMaster.isTest],
     }),
-    check("content_version_bytes", sql`${table.byteSize} > 0 AND ${table.byteSize} <= 2147483648`),
+    check("content_version_bytes", sql`${table.byteSize} > 0 AND ${table.byteSize} <= 21474836480`),
     check("content_version_sha256", sql`${table.sha256} ~ '^[a-f0-9]{64}$'`),
   ],
 );

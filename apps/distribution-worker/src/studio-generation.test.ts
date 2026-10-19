@@ -246,6 +246,13 @@ describe("automatic Studio generation with real media", () => {
         },
       });
       expect(review).toHaveBeenCalledTimes(2);
+      expect(
+        vi
+          .mocked(boundaries.reviewStudioClipBoundaries)
+          .mock.calls.some(
+            ([input]) => input.fileStartMs === 0 && input.sourcePath.endsWith(".mp4"),
+          ),
+      ).toBe(true);
       expect(result.outputs).toHaveLength(1);
       if (youtubeClosing) {
         expect(result.provenance).toMatchObject({
@@ -414,6 +421,82 @@ describe("automatic Studio generation with real media", () => {
     },
     90000,
   );
+  it("holds the finished file when blind audio review contradicts a passed source and presentation", async () => {
+    vi.spyOn(intelligence, "generateStudioPlan").mockImplementation(async ({ pkg, transcript }) =>
+      createLocalStudioPlan(pkg, transcript),
+    );
+    vi.spyOn(quality, "reviewStudioContent").mockResolvedValue([
+      {
+        channel: "youtube",
+        language: "en",
+        openingComplete: true,
+        endingComplete: true,
+        contextComplete: true,
+        attributionCorrect: true,
+        captionsFaithful: true,
+        copySupported: true,
+        reason: "Complete source fixture.",
+      },
+    ]);
+    vi.spyOn(presentation, "screenStudioSource").mockResolvedValue({
+      openingComplete: true,
+      endingComplete: true,
+      naturalStart: true,
+      naturalEnd: true,
+      reason: "Source passed.",
+      scenes: [],
+      illustrations: [],
+    });
+    vi.spyOn(presentation, "reviewStudioPresentation").mockResolvedValue({
+      illustrationsRelevant: true,
+      textIntact: true,
+      subjectIntact: true,
+      captionsClear: true,
+      naturalBoundaries: true,
+      reason: "Broad presentation passed.",
+    });
+    const boundary = vi.mocked(boundaries.reviewStudioClipBoundaries);
+    const original = boundary.getMockImplementation();
+    if (!original) throw Error("Missing boundary fixture");
+    boundary.mockImplementation(async (input) => {
+      const value = await original(input);
+      return input.fileStartMs === 0
+        ? {
+            ...value,
+            ending: {
+              ...value.ending,
+              verdict: "incomplete",
+              cutDuringWord: true,
+              audibleWords: "Clipped final syllable",
+              reason: "Actual finished audio cuts off.",
+            },
+          }
+        : value;
+    });
+    const write = vi.spyOn(store, "writeDerivedDescriptor");
+    await expect(
+      generateStudioPackage({
+        claim: {
+          ...claim,
+          externalProcessing: { allowed: true, reason: null },
+          package: {
+            ...claim.package,
+            request: { ...claim.package.request, channels: ["youtube"] },
+          },
+        },
+        store,
+        env: {
+          ...env,
+          STUDIO_INTELLIGENCE_PROVIDER: "gemini",
+          STUDIO_GEMINI_API_KEY: "synthetic",
+          STUDIO_GEMINI_MODEL: "gemini-test",
+        },
+      }),
+    ).rejects.toThrow("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
+    expect(boundary.mock.calls.some(([input]) => input.fileStartMs === 0)).toBe(true);
+    expect(write.mock.calls.some(([input]) => input.mimeType === "video/mp4")).toBe(false);
+  }, 30000);
+
   it("holds an abrupt actual ending even when the transcript reviewer passed it", async () => {
     vi.spyOn(intelligence, "generateStudioPlan").mockImplementation(async ({ pkg, transcript }) =>
       createLocalStudioPlan(pkg, transcript),

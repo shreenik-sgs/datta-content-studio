@@ -4,6 +4,7 @@ import {
   STUDIO_LANGUAGES,
   type StudioContentReview,
   type StudioPackage,
+  type StudioPlan,
   type StudioTranscript,
   createLocalStudioPlan,
 } from "@satsang/distribution-domain";
@@ -172,6 +173,60 @@ it("invalidates saved drafts when curator guidance changes", async () => {
     cache,
   );
   expect(spy).toHaveBeenCalled();
+});
+
+it("rechecks older media evidence without redrafting, then reuses only the current review", async () => {
+  const generate = mockPlans();
+  const cache = recovery(true);
+  const small = {
+    ...request,
+    pkg: {
+      ...pkg,
+      request: { ...pkg.request, channels: ["youtube" as const], languages: ["en" as const] },
+    },
+  };
+  const reviewMedia = vi.fn(async (_plan: StudioPlan, checks: StudioContentReview[]) => checks);
+  const initial = await generateCheckpointedStudioPlan(small, cache, { reviewMedia });
+  generate.mockClear();
+  reviewMedia.mockClear();
+  const current = { reviewMedia, mediaReviewPolicy: "blind-audio-v2" };
+  expect(await generateCheckpointedStudioPlan(small, cache, current)).toEqual(initial);
+  expect(generate).not.toHaveBeenCalled();
+  expect(reviewMedia).toHaveBeenCalledTimes(1);
+  reviewMedia.mockClear();
+  expect(await generateCheckpointedStudioPlan(small, cache, current)).toEqual(initial);
+  expect(generate).not.toHaveBeenCalled();
+  expect(reviewMedia).not.toHaveBeenCalled();
+});
+
+it("repairs a newly detected native cut instead of accepting the older saved pass", async () => {
+  const generate = mockPlans();
+  const cache = recovery(true);
+  const small = {
+    ...request,
+    pkg: {
+      ...pkg,
+      request: { ...pkg.request, channels: ["youtube" as const], languages: ["en" as const] },
+    },
+  };
+  const reviewMedia = vi.fn(async (_plan: StudioPlan, checks: StudioContentReview[]) => checks);
+  await generateCheckpointedStudioPlan(small, cache, { reviewMedia });
+  generate.mockClear();
+  reviewMedia.mockImplementation(async (_plan, checks) =>
+    checks.map((check) => ({
+      ...check,
+      endingComplete: false,
+      reason: "Audible sentence is clipped.",
+    })),
+  );
+  await expect(
+    generateCheckpointedStudioPlan(small, cache, {
+      reviewMedia,
+      mediaReviewPolicy: "blind-audio-v2",
+    }),
+  ).rejects.toThrow("STUDIO_VIDEO_REVIEW_REQUIRED");
+  expect(generate).toHaveBeenCalledTimes(3);
+  expect(generate.mock.calls.every(([input]) => input.contentReviewCorrection)).toBe(true);
 });
 
 it("uses an explicitly configured backup for availability/quota failures and records actual providers", async () => {

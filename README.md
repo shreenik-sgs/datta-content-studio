@@ -83,3 +83,12 @@ imported from a consistent snapshot, subsequently committed as `6e9da508` in the
 source worktree on 18 October 2026. File hashes and source
 provenance are recorded in `migration/source.json`; the original worktree and its
 video-processing jobs remain untouched.
+
+The latest Hub fixes through source commit `c74f881a` are now included: finished-video
+audio boundary checks, safer portrait framing, 20 GiB online masters, resumable
+capacity-limited transcription, bounded per-section rate-limit recovery, and clearer
+progress messages. Their source commits and file hashes are recorded in
+`migration/source.json`. Run the standalone `0023_large_online_masters` migration
+before using the larger online-master capacity; `0022` remains the independent
+operator identity migration. No accounts, provider secrets, or generated videos
+are included in this source-code import.
