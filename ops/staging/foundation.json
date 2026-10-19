@@ -1,0 +1,591 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Isolated Datta Content Studio staging. Never targets Sannidhi ECS, databases or media. Persistent data retained on deletion.",
+  "Parameters": {
+    "Ami": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
+    },
+    "HostedZoneId": {
+      "Type": "AWS::Route53::HostedZone::Id"
+    },
+    "Hostname": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9.-]+",
+      "Default": "studio-staging.sgsdattasannidhi.org"
+    }
+  },
+  "Resources": {
+    "Vpc": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.74.0.0/16",
+        "EnableDnsHostnames": true,
+        "EnableDnsSupport": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ]
+      }
+    },
+    "GatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "Subnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "CidrBlock": "10.74.1.0/24",
+        "AvailabilityZone": {
+          "Fn::Sub": "${AWS::Region}a"
+        },
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ]
+      }
+    },
+    "RouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ]
+      }
+    },
+    "InternetRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      },
+      "DependsOn": "GatewayAttachment"
+    },
+    "SubnetRoute": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        },
+        "SubnetId": {
+          "Ref": "Subnet"
+        }
+      }
+    },
+    "S3Endpoint": {
+      "Type": "AWS::EC2::VPCEndpoint",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "ServiceName": {
+          "Fn::Sub": "com.amazonaws.${AWS::Region}.s3"
+        },
+        "RouteTableIds": [
+          {
+            "Ref": "RouteTable"
+          }
+        ]
+      }
+    },
+    "WebSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "GroupDescription": "Content Studio staging HTTPS only; administration through SSM",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ]
+      }
+    },
+    "Assets": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "datta-content-studio-staging-${AWS::AccountId}-${AWS::Region}"
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "abort-incomplete-uploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ],
+        "AccelerateConfiguration": {
+          "AccelerationStatus": "Enabled"
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "AssetPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "Assets"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": ["Assets", "Arn"]
+                },
+                {
+                  "Fn::Sub": "${Assets.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Images": {
+      "Type": "AWS::ECR::Repository",
+      "Properties": {
+        "RepositoryName": "datta-content-studio-staging",
+        "ImageTagMutability": "IMMUTABLE",
+        "ImageScanningConfiguration": {
+          "ScanOnPush": true
+        },
+        "EncryptionConfiguration": {
+          "EncryptionType": "AES256"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ]
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "HostRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": "ContentStudioStagingOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["s3:ListBucket"],
+                  "Resource": {
+                    "Fn::GetAtt": ["Assets", "Arn"]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": ["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload"],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "${Assets.Arn}/test/*"
+                    },
+                    {
+                      "Fn::Sub": "${Assets.Arn}/releases/*"
+                    },
+                    {
+                      "Fn::Sub": "${Assets.Arn}/imports/*"
+                    },
+                    {
+                      "Fn::Sub": "${Assets.Arn}/backups/*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": ["s3:DeleteObject"],
+                  "Resource": {
+                    "Fn::Sub": "${Assets.Arn}/test/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": ["ssm:GetParameter"],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/datta-content-studio/staging/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": ["ecr:GetAuthorizationToken"],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:PutImage"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": ["Images", "Arn"]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ]
+      }
+    },
+    "HostProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "HostRole"
+          }
+        ]
+      }
+    },
+    "Host": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "Ami"
+        },
+        "InstanceType": "t4g.large",
+        "SubnetId": {
+          "Ref": "Subnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "WebSecurityGroup"
+          }
+        ],
+        "IamInstanceProfile": {
+          "Ref": "HostProfile"
+        },
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpPutResponseHopLimit": 2
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 60,
+              "VolumeType": "gp3",
+              "Encrypted": true,
+              "DeleteOnTermination": true
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": "#!/bin/bash\nset -euo pipefail\numask 077\ndnf install -y docker\nsystemctl enable --now docker\nmkdir -p /opt/content-studio\nprintf '{\"log-driver\":\"json-file\",\"log-opts\":{\"max-size\":\"20m\",\"max-file\":\"3\"}}\\n' > /etc/docker/daemon.json\nsystemctl restart docker\ntouch /opt/content-studio/bootstrap-complete\n"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          },
+          {
+            "Key": "Name",
+            "Value": "datta-content-studio-staging"
+          }
+        ]
+      },
+      "DependsOn": ["InternetRoute", "SubnetRoute"]
+    },
+    "DataVolume": {
+      "Type": "AWS::EC2::Volume",
+      "Properties": {
+        "AvailabilityZone": {
+          "Fn::GetAtt": ["Host", "AvailabilityZone"]
+        },
+        "Size": 80,
+        "VolumeType": "gp3",
+        "Encrypted": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          },
+          {
+            "Key": "Name",
+            "Value": "datta-content-studio-staging-data"
+          }
+        ]
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "DataAttachment": {
+      "Type": "AWS::EC2::VolumeAttachment",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "Host"
+        },
+        "VolumeId": {
+          "Ref": "DataVolume"
+        },
+        "Device": "/dev/sdf"
+      }
+    },
+    "Address": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc",
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "Datta Content Studio"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          }
+        ]
+      },
+      "DependsOn": "GatewayAttachment"
+    },
+    "AddressAttachment": {
+      "Type": "AWS::EC2::EIPAssociation",
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": ["Address", "AllocationId"]
+        },
+        "InstanceId": {
+          "Ref": "Host"
+        }
+      }
+    },
+    "Dns": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "HostedZoneId": {
+          "Ref": "HostedZoneId"
+        },
+        "Name": {
+          "Ref": "Hostname"
+        },
+        "Type": "A",
+        "TTL": "60",
+        "ResourceRecords": [
+          {
+            "Ref": "Address"
+          }
+        ]
+      }
+    },
+    "HostFailureAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": "Content Studio staging host status check failed",
+        "Namespace": "AWS/EC2",
+        "MetricName": "StatusCheckFailed",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "Host"
+            }
+          }
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 3,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "missing"
+      }
+    }
+  },
+  "Outputs": {
+    "InstanceId": {
+      "Value": {
+        "Ref": "Host"
+      }
+    },
+    "Bucket": {
+      "Value": {
+        "Ref": "Assets"
+      }
+    },
+    "Repository": {
+      "Value": {
+        "Fn::GetAtt": ["Images", "RepositoryUri"]
+      }
+    },
+    "DataVolumeId": {
+      "Value": {
+        "Ref": "DataVolume"
+      }
+    },
+    "Origin": {
+      "Value": {
+        "Fn::Sub": "https://${Hostname}"
+      }
+    }
+  }
+}

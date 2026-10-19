@@ -26,6 +26,8 @@ private-assets
 private-runtime
 secrets
 operator-credentials*
+outputs
+deployments
 .verify-*.mjs
 migration
 dumps

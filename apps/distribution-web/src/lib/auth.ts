@@ -22,19 +22,18 @@ export function trustedDistributionOrigin(value: string | undefined): string | n
   }
 }
 export const STUDIO_SESSION_COOKIE = "dcs_session";
-/** Explicit local TEST aliases share the underlying email's password and rate limit. */
-export function localStudioLoginAliases(
+/** Explicit TEST usernames share the underlying email's password and rate limit. */
+export function studioTestLoginAliases(
   env: Record<string, string | undefined> = process.env,
 ): Record<string, string> {
   const origin = trustedDistributionOrigin(env.DISTRIBUTION_APP_ORIGIN);
-  if (
-    env.DISTRIBUTION_HUB_STAGE !== "TEST" ||
-    !origin ||
-    !["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname)
-  )
-    return {};
+  if (env.DISTRIBUTION_HUB_STAGE !== "TEST" || !origin) return {};
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname);
   try {
-    const parsed: unknown = JSON.parse(env.STUDIO_LOCAL_LOGIN_ALIASES_JSON ?? "{}");
+    // Hosted staging must opt in separately; localhost aliases never leak into a deployment.
+    const parsed: unknown = JSON.parse(
+      (local ? env.STUDIO_LOCAL_LOGIN_ALIASES_JSON : env.STUDIO_TEST_LOGIN_ALIASES_JSON) ?? "{}",
+    );
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return Object.fromEntries(
       Object.entries(parsed)

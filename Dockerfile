@@ -112,11 +112,12 @@ FROM distribution-studio AS distribution-studio-verification
 USER root
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/verification-browsers
 RUN ./node_modules/.bin/playwright install --with-deps chromium \
-    && apt-get update && apt-get install -y --no-install-recommends xvfb xauth \
+    && apt-get update && apt-get install -y --no-install-recommends xvfb xauth x11-utils \
     && rm -rf /var/lib/apt/lists/* \
     && chmod -R a+rX /opt/verification-browsers
+COPY --chmod=0755 ops/studio-verification-entrypoint.sh /usr/local/bin/studio-verification-entrypoint
 USER node
-CMD ["xvfb-run", "-a", "./node_modules/.bin/tsx", "src/studio-index.ts"]
+CMD ["studio-verification-entrypoint", "./node_modules/.bin/tsx", "src/studio-index.ts"]
 
 # Independent signed-cache resolver: no database, private signing key or Hub UI.
 # Its current local TEST listener is loopback-only; use a shared/host namespace.

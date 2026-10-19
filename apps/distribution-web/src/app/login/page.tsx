@@ -1,10 +1,10 @@
-import { localStudioLoginAliases } from "../../lib/auth";
+import { studioTestLoginAliases } from "../../lib/auth";
 
 export default async function Login({
   searchParams,
 }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
-  const aliasesEnabled = Object.keys(localStudioLoginAliases()).length > 0;
+  const aliasesEnabled = Object.keys(studioTestLoginAliases()).length > 0;
   return (
     <main className="shell">
       <h1>Sign in to Datta Content Studio</h1>
