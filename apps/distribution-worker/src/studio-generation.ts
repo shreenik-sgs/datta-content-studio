@@ -1093,6 +1093,7 @@ export async function generateStudioPackage(input: {
           closingDestination:
             (claim.package.request.youtubeClosing ? "youtube" : undefined) ??
             (prior && input.closingDestinations?.[prior.id]) ??
+            prior?.closingDestination ??
             prior?.presentationReview?.closingCard?.destination ??
             "app",
           start: range.startMs,
@@ -1107,8 +1108,10 @@ export async function generateStudioPackage(input: {
         const destination =
           (claim.package.request.youtubeClosing ? "youtube" : undefined) ??
           (prior && input.closingDestinations?.[prior.id]) ??
+          prior?.closingDestination ??
           prior?.presentationReview?.closingCard?.destination ??
           "app";
+        output.closingDestination = destination;
         const closing = {
           bytes: await studioClosingCard(
             destination === "youtube" ? logo : appLogo,

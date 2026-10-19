@@ -958,6 +958,7 @@ describe("automatic Studio generation with real media", () => {
         asset: null,
         sourceSegmentIds: [segment.id],
         captionCues: [{ ...segment, text: "Corrected subtitle." }],
+        closingDestination: "youtube" as const,
         mediaEdits: {
           ...STUDIO_MEDIA_DEFAULTS,
           captions: captionsEnabled ? ("on" as const) : ("off" as const),
@@ -988,6 +989,7 @@ describe("automatic Studio generation with real media", () => {
       expect(output?.endMs).toBe(segment.endMs);
       expect(output?.captionCues?.[0]?.text).toBe("Corrected subtitle.");
       expect(output?.mediaEdits).toEqual(edited.mediaEdits);
+      expect(output?.closingDestination).toBe("youtube");
       expect(output?.fileVersion).toBe(2);
       if (!captionsEnabled) {
         expect(output?.captions).toEqual([]);

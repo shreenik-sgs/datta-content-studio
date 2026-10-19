@@ -1466,6 +1466,65 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       studio.publish(f.reviewer, pkg.id, { expectedRevision: edited.revision }),
     ).rejects.toThrow("STUDIO_NOT_APPROVED");
   });
+  it("retains a legacy closing destination when manual edits invalidate its review", async () => {
+    const f = await fixture({ channels: ["youtube"] });
+    const result = generated(f.pkg);
+    const output = result.outputs[0];
+    if (!output?.asset) throw Error("MISSING_OUTPUT");
+    output.presentationReview = {
+      policy: "source-safe-portrait-v1",
+      sourceSha256: f.pkg.source.sha256,
+      renderedSha256: output.asset.sha256,
+      fileVersion: 1,
+      model: "fixture",
+      reviewedAt: new Date().toISOString(),
+      framing: "full-picture",
+      repairs: 0,
+      source: {
+        openingComplete: true,
+        endingComplete: true,
+        naturalStart: true,
+        naturalEnd: true,
+        reason: "Fixture",
+        scenes: [],
+      },
+      checks: {
+        illustrationsRelevant: true,
+        textIntact: true,
+        subjectIntact: true,
+        captionsClear: true,
+        naturalBoundaries: true,
+        reason: "Fixture",
+      },
+      closingCard: studioClosingCardPlan(2000, { destination: "youtube" }),
+    };
+    const completed = await studio.completeGeneration(await claim(f.pkg), result);
+    if (!completed.accepted) throw Error(completed.reason);
+    const corrected = await studio.revise(f.ctx, f.pkg.id, {
+      expectedRevision: completed.package.revision,
+      comment: "Adjust speech level only",
+      outputs: [
+        {
+          id: output.id,
+          title: output.title,
+          body: output.body,
+          included: true,
+          mediaEdits: { ...STUDIO_MEDIA_DEFAULTS, speechLevel: "louder" },
+        },
+      ],
+    });
+    expect(corrected.outputs[0]).toMatchObject({
+      closingDestination: "youtube",
+      presentationReview: null,
+      asset: null,
+    });
+    const queued = await studio.enqueueGeneration(f.ctx, f.pkg.id, {
+      expectedRevision: corrected.revision,
+      outputIds: [output.id],
+      mode: "render",
+    });
+    expect(queued.outputs[0]?.closingDestination).toBe("youtube");
+  });
   it("permits review and export but refuses publishing to an uncreated closing-card channel", async () => {
     const f = await fixture({ channels: ["youtube"] });
     const result = generated(f.pkg);

@@ -234,6 +234,12 @@ export function validateStudioOutputs(
   );
   const destinations = new Set<string>();
   for (const output of outputs) {
+    if (
+      output.closingDestination !== undefined &&
+      (!["app", "youtube"].includes(output.closingDestination) ||
+        !["short", "reel"].includes(output.format))
+    )
+      throw Error("INVALID_STUDIO_OUTPUTS");
     if (output.mediaEdits !== undefined) {
       if (!["short", "reel"].includes(output.format)) throw Error("INVALID_STUDIO_MEDIA_EDITS");
       validateStudioMediaEdits(output.mediaEdits);

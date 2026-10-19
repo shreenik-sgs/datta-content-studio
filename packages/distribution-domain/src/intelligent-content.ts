@@ -50,6 +50,8 @@ export type StudioTranscript = {
   recognition?: { provider: "sarvam" | "openai"; model: string };
 };
 export type StudioOutput = {
+  /** Retained across invalidated render reviews; configured package branding takes precedence. */
+  closingDestination?: "app" | "youtube";
   mediaEdits?: import("./studio-media-edits").StudioMediaEdits;
   postArt?: import("./studio-post-art").StudioPostArt | null;
   presentationReview?: import("./studio-presentation").StudioPresentationReview | null;

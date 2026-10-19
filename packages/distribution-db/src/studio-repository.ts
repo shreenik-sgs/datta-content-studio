@@ -1088,6 +1088,9 @@ export function createIntelligentContentRepository(
               : {}),
             ...(captionCues ? { captionCues } : {}),
             ...(mediaEdits ? { mediaEdits } : {}),
+            ...(output.presentationReview?.closingCard?.destination
+              ? { closingDestination: output.presentationReview.closingCard.destination }
+              : {}),
             ...(changed
               ? {
                   asset: null,
