@@ -48,6 +48,8 @@ export function PlaylistCuration({
     const child = items.find((value) => value.id === id);
     return child ? [child] : [];
   });
+  const total = item.childIds?.length ?? 0;
+  const loadingRecordings = children.length < total;
   const ready = children.filter((child) => child.status === "COMPLETE").length;
   const plan = item.curation;
   const members = Object.values(plan?.items ?? {});
@@ -166,7 +168,9 @@ export function PlaylistCuration({
       )}
       <p>
         <strong>
-          {ready} of {children.length} recordings downloaded
+          {loadingRecordings
+            ? "Checking download progress…"
+            : `${ready} of ${total} recordings downloaded`}
         </strong>
       </p>
       {plan && (
@@ -174,13 +178,13 @@ export function PlaylistCuration({
           <progress
             aria-label="Recordings with generated content"
             value={generated}
-            max={children.length || 1}
+            max={total || 1}
           />
           <dl>
             <div>
               <dt>Content generated</dt>
               <dd>
-                {generated} of {children.length}
+                {generated} of {total}
               </dd>
             </div>
             <div>
@@ -271,9 +275,8 @@ export function PlaylistCuration({
         >
           <h3>One setup for the whole bundle</h3>
           <p>
-            Confirm the shared owner and permissions, then choose the outputs for all{" "}
-            {children.length} videos. Downloads and generation continue automatically, even if you
-            leave this page.
+            Confirm the shared owner and permissions, then choose the outputs for all {total}{" "}
+            videos. Downloads and generation continue automatically, even if you leave this page.
           </p>
           <fieldset disabled={busy}>
             <label>
@@ -402,9 +405,7 @@ export function PlaylistCuration({
             </p>
             {error && <p role="alert">{error}</p>}
             <button type="submit" className="button primary">
-              {busy
-                ? "Starting generation…"
-                : `Generate curated content for all ${children.length} videos`}
+              {busy ? "Starting generation…" : `Generate curated content for all ${total} videos`}
             </button>
           </fieldset>
         </form>
@@ -426,7 +427,7 @@ export function PlaylistCuration({
       )}
       {plan && (
         <p>
-          {planned} of {children.length} recordings in curation · {approved} approved
+          {planned} of {total} recordings in curation · {approved} approved
         </p>
       )}
       {reviewable && onReview && (
@@ -460,7 +461,7 @@ export function PlaylistCuration({
           </button>
         )}
       <details>
-        <summary>Progress for all {children.length} videos</summary>
+        <summary>Progress for all {total} videos</summary>
         <ol className="playlist-progress">
           {children.slice(recordingPage * 20, (recordingPage + 1) * 20).map((child) => {
             const progress = plan?.items[child.id];

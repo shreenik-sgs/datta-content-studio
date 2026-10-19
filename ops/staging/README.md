@@ -38,6 +38,11 @@ Media migration is separate from metadata import. Verify byte size and SHA-256
 against the export inventory. Count only current included outputs, not historical
 revisions, when confirming the expected 95 Shorts. Preserve source recordings and
 revision history; copying draft assets never approves or publishes them.
+Multipart uploads must retain the whole-file SHA-256 in the `sha256` object metadata.
+S3's composite SHA-256 differs from that whole-file hash. The asset reader validates
+the checksum type and metadata, then hashes all downloaded bytes before serving them.
+Include authenticated video range requests in migration checks; an S3 HEAD alone
+does not prove the app can play an imported file.
 
 The verification worker uses an authenticated X display with a bounded readiness
 probe. Do not restore the `xvfb-run` wrapper that stalled before worker startup.

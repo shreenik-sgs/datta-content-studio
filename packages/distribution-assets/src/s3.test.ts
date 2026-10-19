@@ -154,6 +154,54 @@ describe("private S3 storage with no network", () => {
     }
     expect(transport.objects.size).toBe(0);
   });
+  it("reads migrated multipart masters and previews with full byte verification", async () => {
+    const transport = new MemoryS3();
+    const store = createS3AssetStore(config, transport);
+    const original = await store.write(input);
+    const video = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50]);
+    const preview = derived("preview.mp4", video, "video/mp4");
+    await store.writeDerivedDescriptor(preview, video);
+    for (const [asset, expected, read, remove] of [
+      [original, master, () => store.read(original), () => store.removeUnreferenced(original)],
+      [
+        preview,
+        video,
+        () => store.readDerivedDescriptor(preview),
+        () => store.removeDerivedUnreferenced(preview),
+      ],
+    ] as const) {
+      transport.responseOverride = {
+        ChecksumType: "COMPOSITE",
+        ChecksumSHA256: `${createHash("sha256").update("part hashes").digest("base64")}-5`,
+        Metadata: { sha256: asset.sha256 },
+      };
+      expect(await read()).toEqual(expected);
+      transport.responseOverride.Body = Readable.from([Buffer.alloc(expected.length, 65)]);
+      await expect(remove()).rejects.toThrow("ASSET_INTEGRITY_FAILED");
+      expect(transport.calls.some((command) => command instanceof DeleteObjectCommand)).toBe(false);
+    }
+  });
+  it.each([
+    { Metadata: undefined },
+    { Metadata: { sha256: "0".repeat(64) } },
+    { ChecksumSHA256: "wrong-5" },
+    { ChecksumSHA256: `${"A".repeat(43)}=-0` },
+    { ChecksumSHA256: `${"A".repeat(43)}=-10001` },
+    { ChecksumType: "FULL_OBJECT" },
+    { ChecksumType: undefined },
+    { ChecksumType: "unknown" },
+  ])("rejects unbound or malformed multipart checksums: %j", async (change) => {
+    const transport = new MemoryS3();
+    const store = createS3AssetStore(config, transport);
+    const asset = await store.write(input);
+    transport.responseOverride = {
+      ChecksumType: "COMPOSITE",
+      ChecksumSHA256: `${"A".repeat(43)}=-5`,
+      Metadata: { sha256: asset.sha256 },
+      ...change,
+    };
+    await expect(store.read(asset)).rejects.toThrow("ASSET_INTEGRITY_FAILED");
+  });
   it("rejects foreign keys, invalid metadata and unbounded sizes before any request", async () => {
     const transport = new MemoryS3();
     const store = createS3AssetStore(config, transport);

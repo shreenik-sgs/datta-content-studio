@@ -238,3 +238,38 @@ it("applies Gurubhavana branding and YouTube-only outputs to every series member
   );
   await act(async () => root.unmount());
 });
+
+it("uses the full bundle count while recording details are still loading", async () => {
+  const item: OnlineImport = {
+    ...parent,
+    curation: {
+      requestedBy: "curator",
+      confirmedAt: parent.createdAt,
+      rights: {
+        owner: "owner",
+        authorizationBasis: "permission",
+        privacyClass: "PUBLIC" as const,
+        territories: ["WORLDWIDE"],
+        channels: ["youtube"],
+        releaseAt: null,
+        expiresAt: null,
+      },
+      request: {
+        languages: ["en" as const],
+        channels: ["youtube" as const],
+        captions: true,
+        instructions: "",
+      },
+      items: Object.fromEntries(
+        (parent.childIds ?? []).map((id) => [id, { packageId: id, status: "DRAFT" as const }]),
+      ),
+    },
+  };
+  const { host, root } = await mount(item, items.slice(0, 2));
+  expect(host.textContent).toContain("Checking download progress");
+  expect(host.textContent).toContain("16 of 16 recordings in curation");
+  expect(host.textContent).toContain("Progress for all 16 videos");
+  expect(host.textContent).not.toContain("16 of 2");
+  expect(host.querySelector("progress")?.max).toBe(16);
+  await act(async () => root.unmount());
+});

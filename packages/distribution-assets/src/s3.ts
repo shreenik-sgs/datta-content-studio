@@ -181,12 +181,21 @@ export function createS3AssetStore(
     );
   }
   function validateResponse(response: GetObjectCommandOutput, asset: DerivedPrivateAsset) {
+    // Multipart SHA-256 is a checksum of part checksums, not the whole-file digest.
+    // Bind migrated multipart objects to the descriptor via protected metadata; both
+    // readVerified and streamMaster still hash every byte before returning or deleting.
+    const composite = response.ChecksumType === "COMPOSITE";
+    const validChecksum = composite
+      ? /^[A-Za-z0-9+/]{43}=-(?:[1-9][0-9]{0,3}|10000)$/.test(response.ChecksumSHA256 ?? "") &&
+        response.Metadata?.sha256 === asset.sha256
+      : (response.ChecksumType === undefined || response.ChecksumType === "FULL_OBJECT") &&
+        response.ChecksumSHA256 === Buffer.from(asset.sha256, "hex").toString("base64");
     if (
       response.ContentLength !== asset.byteSize ||
       response.ContentType !== asset.mimeType ||
       (response.ContentEncoding !== undefined && response.ContentEncoding !== "identity") ||
       response.ServerSideEncryption !== "AES256" ||
-      response.ChecksumSHA256 !== Buffer.from(asset.sha256, "hex").toString("base64") ||
+      !validChecksum ||
       !response.ETag ||
       response.ETag !== response.ETag.trim() ||
       !/^"[A-Za-z0-9-]+"$/.test(response.ETag) ||
