@@ -200,7 +200,7 @@ it("counts a no-excerpt assessment separately and does not offer an unchanged bu
   await act(async () => root.unmount());
 });
 
-it("applies Gurubhavana branding and YouTube-only outputs to every series member", async () => {
+it("keeps source ownership and uses the confirmed subscription channel for every series member", async () => {
   const { host, root, send } = await mount({
     ...parent,
     source: { ...parent.source, kind: "bundle" },
@@ -226,8 +226,8 @@ it("applies Gurubhavana branding and YouTube-only outputs to every series member
         allCompleteMessages: true,
         sourceBranding: "bala-swamiji",
         youtubeClosing: {
-          label: "Gurubhavana ADPT",
-          url: "https://www.youtube.com/@gurubhavanaadpt",
+          label: "Sri Datta Vijayananda Teertha Swamiji",
+          url: "https://www.youtube.com/@SriDattaVijayanandaTeertha",
         },
       }),
       rights: expect.objectContaining({

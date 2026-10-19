@@ -6,6 +6,10 @@ export const STUDIO_MORE_TEACHINGS_URL = "https://sgsdattasannidhi.org/";
 export const STUDIO_YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@sgsswamiji";
 /** A package-specific subscription destination; never changes the source attribution. */
 export type StudioYoutubeClosing = { label: string; url: string };
+export const STUDIO_BALA_YOUTUBE_CLOSING: StudioYoutubeClosing = {
+  label: "Sri Datta Vijayananda Teertha Swamiji",
+  url: "https://www.youtube.com/@SriDattaVijayanandaTeertha",
+};
 export function studioYoutubeClosing(value: StudioYoutubeClosing): StudioYoutubeClosing {
   if (
     !value ||

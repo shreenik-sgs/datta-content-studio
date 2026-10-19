@@ -7,6 +7,7 @@ import {
 import {
   ONLINE_IMPORT_ERRORS,
   type OnlineImport,
+  STUDIO_BALA_YOUTUBE_CLOSING,
   STUDIO_CHANNELS,
   STUDIO_LANGUAGES,
   studioChannelLabel,
@@ -93,10 +94,7 @@ export function PlaylistCuration({
       ...(sourceBranding === "bala-swamiji"
         ? {
             sourceBranding,
-            youtubeClosing: {
-              label: "Gurubhavana ADPT",
-              url: "https://www.youtube.com/@gurubhavanaadpt",
-            },
+            youtubeClosing: STUDIO_BALA_YOUTUBE_CLOSING,
           }
         : {}),
     });
@@ -295,14 +293,14 @@ export function PlaylistCuration({
               >
                 <option value="">Sri Ganapathy Sachchidananda Swamiji · @sgsswamiji</option>
                 <option value="bala-swamiji">
-                  Sri Bala Swamiji · Gurubhavana ADPT · YouTube Shorts
+                  Sri Datta Vijayananda Teertha Swamiji · YouTube Shorts
                 </option>
               </select>
             </label>
             {sourceBranding === "bala-swamiji" && (
               <p>
-                Every Short credits Sri Datta Vijayananda Teertha Swamiji and ends with “Subscribe
-                to Gurubhavana ADPT.”
+                Every Short credits Sri Datta Vijayananda Teertha Swamiji. The green closing card
+                and subscription description point to @SriDattaVijayanandaTeertha.
               </p>
             )}
             <details className="playlist-options">
