@@ -1,10 +1,10 @@
 "use client";
 
 import { DISTRIBUTION_LANGUAGE_NAMES } from "@satsang/distribution-contracts";
-import { studioChannelLabel } from "@satsang/distribution-domain";
+import { studioChannelLabel, studioNeedsSuitabilityReview } from "@satsang/distribution-domain";
 import { useState } from "react";
 import { studioOutputLength, studioOutputState } from "../lib/studio-lineage";
-import { type PublicStudioPackage, STUDIO_STATUS_LABELS } from "../lib/studio-model";
+import { type PublicStudioPackage, studioStatusLabel } from "../lib/studio-model";
 import { useHubTimestamp } from "./hub-locale";
 import "./studio-lineage.css";
 
@@ -39,7 +39,9 @@ export function PlaylistFiles({
     .filter((group) => group.shown.length);
   const skipped = packages.filter(
     (value) =>
-      !value.outputs.length && value.status === "DRAFT" && value.provenance?.skippedChannels.length,
+      !value.outputs.length &&
+      ((value.status === "DRAFT" && value.provenance?.skippedChannels.length) ||
+        (value.status === "FAILED" && studioNeedsSuitabilityReview(value.failure))),
   );
   const waiting = packages.filter((value) => !value.outputs.length && !skipped.includes(value));
   return (
@@ -193,7 +195,11 @@ export function PlaylistFiles({
             {skipped.map((value) => (
               <li key={value.id}>
                 {value.source.title}:{" "}
-                {value.provenance?.skippedChannels.map((skip) => skip.reason).join(" ")}
+                {value.provenance?.skippedChannels.map((skip) => skip.reason).join(" ") ||
+                  "No complete, self-contained excerpt passed the content checks."}{" "}
+                <button type="button" className="button" onClick={() => onOpen(value)}>
+                  Review source
+                </button>
               </li>
             ))}
           </ul>
@@ -205,7 +211,7 @@ export function PlaylistFiles({
           <ul>
             {waiting.map((value) => (
               <li key={value.id}>
-                {value.source.title} · {STUDIO_STATUS_LABELS[value.status]}{" "}
+                {value.source.title} · {studioStatusLabel(value)}{" "}
                 <button type="button" className="button" onClick={() => onOpen(value)}>
                   Open workflow
                 </button>

@@ -28,6 +28,7 @@ export function OnlineImportPanel({
   completeOnly = false,
   onGroupedMasters,
   onBundleSelection,
+  initialBundleId,
 }: {
   locale: string;
   showForm: boolean;
@@ -36,12 +37,13 @@ export function OnlineImportPanel({
   completeOnly?: boolean;
   onGroupedMasters?: (ids: string[]) => void;
   onBundleSelection?: (open: boolean) => void;
+  initialBundleId?: string | undefined;
 }) {
   const [seriesMode, setSeriesMode] = useState(false);
   const [offset, setOffset] = useState(0);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
-  const [selectedBundle, setSelectedBundle] = useState<string | null>(null);
-  const [reviewing, setReviewing] = useState(false);
+  const [selectedBundle, setSelectedBundle] = useState<string | null>(initialBundleId ?? null);
+  const [reviewing, setReviewing] = useState(Boolean(initialBundleId));
   const canCurate = capabilities.includes("content.create");
   const [available, setAvailable] = useState<boolean | null>(null);
   const [activeImportId, setActiveImportId] = useState<string | null>(null);
@@ -224,6 +226,27 @@ export function OnlineImportPanel({
             item.status !== "COMPLETE",
   );
   const reviewItem = items.find((item) => item.id === selectedBundle);
+  if (selectedBundle && !reviewItem)
+    return (
+      <section className="panel" aria-label="Series files">
+        <p role={progressError ? "alert" : "status"}>
+          {progressError ||
+            (available === null
+              ? "Loading series files…"
+              : "This playlist or series is no longer available in this workspace.")}
+        </p>
+        <button
+          className="button"
+          type="button"
+          onClick={() => {
+            setSelectedBundle(null);
+            setReviewing(false);
+          }}
+        >
+          Back to sources
+        </button>
+      </section>
+    );
   if (reviewing && reviewItem?.curation)
     return (
       <StudioPanel

@@ -33,6 +33,29 @@ const second = {
   })),
 };
 
+it("explains reviewed parts with no suitable excerpt instead of implying they are still generating", async () => {
+  const { host, root } = setup();
+  const onOpen = vi.fn();
+  const empty = {
+    ...first,
+    outputs: [],
+    status: "FAILED" as const,
+    failure: "STUDIO_NO_SUITABLE_CHANNELS",
+  };
+  try {
+    await act(async () =>
+      root.render(<PlaylistFiles packages={[empty]} onOpen={onOpen} onPreview={vi.fn()} />),
+    );
+    expect(host.textContent).toContain("1 sections checked — no complete teaching selected");
+    expect(host.textContent).not.toContain("still need generated files");
+    expect(host.textContent).not.toContain("as generation finishes");
+    await act(async () => host.querySelector("button")?.click());
+    expect(onOpen).toHaveBeenCalledWith(empty);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("shows every recording's files immediately, filters by channel and previews without entering a workflow", async () => {
   const { host, root } = setup();
   const onPreview = vi.fn();

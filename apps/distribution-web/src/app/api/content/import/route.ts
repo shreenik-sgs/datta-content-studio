@@ -60,9 +60,13 @@ export async function GET(request: Request) {
     const query = z
       .object({
         rootId: z.string().uuid().optional(),
+        masterId: z.string().uuid().optional(),
         offset: z.coerce.number().int().min(0).max(1000000).default(0),
       })
+      .refine((value) => !value.masterId || (!value.rootId && value.offset === 0))
       .parse(Object.fromEntries(new URL(request.url).searchParams));
+    if (query.masterId)
+      return json({ bundles: await repo.bundlesForMaster(auth.context, query.masterId) });
     const items = await repo.list(auth.context, { ...query, summaries: !query.rootId });
     return json({
       items,

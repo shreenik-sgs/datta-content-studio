@@ -305,6 +305,49 @@ suite("storage cleanup on isolated local PostgreSQL", () => {
       ),
     ).rejects.toThrow("CONTENT_REMOVED");
   });
+
+  it("finds every series containing a reused master, excludes deleted membership and isolates TEST", async () => {
+    const f = await fixture();
+    const imports = createOnlineImportRepository(runtime, authority);
+    const child = await imports.enqueue(f.ctx, {
+      url: "https://www.youtube.com/watch?v=seriesnav01",
+      language: "en",
+      category: "other",
+    });
+    const roots = [];
+    for (const list of ["PLseriesnavigation1", "PLseriesnavigation2"]) {
+      const root = await imports.enqueue(f.ctx, {
+        url: `https://www.youtube.com/playlist?list=${list}`,
+        includePlaylist: true,
+        language: "en",
+        category: "other",
+      });
+      await migration.query(
+        "UPDATE distribution.online_import SET child_ids=$2,title=$3 WHERE id=$1",
+        [root.id, JSON.stringify([child.id]), list],
+      );
+      roots.push(root);
+    }
+    await migration.query(
+      "UPDATE distribution.online_import SET master_id=$2,parent_id=$3 WHERE id=$1",
+      [child.id, f.master.id, roots[0]?.id],
+    );
+    expect((await imports.bundlesForMaster(f.ctx, f.master.id)).map((bundle) => bundle.id)).toEqual(
+      expect.arrayContaining(roots.map((root) => root.id)),
+    );
+    expect(await imports.bundlesForMaster({ ...f.ctx, isTest: false }, f.master.id)).toEqual([]);
+    await expect(imports.bundlesForMaster({ ...f.ctx, roles: [] }, f.master.id)).rejects.toThrow();
+    await migration.query("UPDATE distribution.online_import SET deleted_at=now() WHERE id=$1", [
+      roots[0]?.id,
+    ]);
+    expect(await imports.bundlesForMaster(f.ctx, f.master.id)).toEqual([
+      { id: roots[1]?.id, title: "PLseriesnavigation2", recordings: 1 },
+    ]);
+    await migration.query("UPDATE distribution.online_import SET deleted_at=now() WHERE id=$1", [
+      child.id,
+    ]);
+    expect(await imports.bundlesForMaster(f.ctx, f.master.id)).toEqual([]);
+  });
   it("downloads one initial playlist recording, then at most three ahead of generation after shared setup", async () => {
     await migration.query(
       "UPDATE distribution.online_import SET status='FAILED' WHERE deleted_at IS NULL",

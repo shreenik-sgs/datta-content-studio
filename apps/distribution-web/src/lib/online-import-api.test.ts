@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   list: vi.fn(),
   ready: vi.fn(),
   groupedMasters: vi.fn(),
+  bundlesForMaster: vi.fn(),
 }));
 vi.mock("./runtime", () => ({ access: m.access, distributionPool: vi.fn() }));
 vi.mock("@satsang/distribution-db", () => ({
@@ -105,4 +106,26 @@ it("accepts a 60-link bundle through the same authenticated import endpoint", as
   m.enqueueBundle.mockClear();
   expect((await POST(request({ ...data, isTest: false }))).status).toBe(400);
   expect(m.enqueueBundle).not.toHaveBeenCalled();
+});
+
+it("looks up a recording's series without listing other sources or exposing another world", async () => {
+  const id = "00000000-0000-4000-8000-000000000001";
+  const bundles = [{ id, title: "Series", recordings: 51 }];
+  m.bundlesForMaster.mockResolvedValue(bundles);
+  const response = await GET(new Request(`http://localhost?masterId=${id}`));
+  expect(await response.json()).toEqual({ bundles });
+  expect(m.bundlesForMaster).toHaveBeenCalledWith(context, id);
+  expect(m.list).not.toHaveBeenCalled();
+  expect(m.groupedMasters).not.toHaveBeenCalled();
+  m.bundlesForMaster.mockClear();
+  for (const query of [
+    "masterId=invalid",
+    `masterId=${id}&rootId=${id}`,
+    `masterId=${id}&offset=20`,
+  ])
+    expect((await GET(new Request(`http://localhost?${query}`))).status).toBe(400);
+  expect(m.bundlesForMaster).not.toHaveBeenCalled();
+  m.access.mockResolvedValue({ ok: false, response: Response.json({}, { status: 403 }) });
+  expect((await GET(new Request(`http://localhost?masterId=${id}`))).status).toBe(403);
+  expect(m.bundlesForMaster).not.toHaveBeenCalled();
 });

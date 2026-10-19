@@ -49,6 +49,7 @@ type Props = {
   analyticsEnabled?: boolean;
   initialMasterId?: string | undefined;
   initialStudioPackageId?: string | undefined;
+  initialBundleId?: string | undefined;
   initialView?: "content" | "studio" | "complete";
 };
 type View = "content" | "approvals" | "releases" | "campaigns" | "studio" | "complete";
@@ -119,13 +120,17 @@ export function ContentLibrary({
   initialView,
   initialMasterId,
   initialStudioPackageId,
+  initialBundleId,
 }: Props) {
   const t = useCallback((key: DistributionTextKey) => distributionText(locale, key), [locale]);
   const [items, setItems] = useState<ContentMaster[]>([]);
   const [selected, setSelected] = useState<ContentMaster | null>(null);
   const contentWorkflow =
     capabilities.includes("content.create") || capabilities.includes("content.review");
-  const [view, setView] = useState<View>(initialView ?? (contentWorkflow ? "studio" : "content"));
+  const [view, setView] = useState<View>(
+    initialBundleId ? "studio" : (initialView ?? (contentWorkflow ? "studio" : "content")),
+  );
+  const [bundleEntry, setBundleEntry] = useState(initialBundleId);
   const [search, setSearch] = useState("");
   const archive = "active" as const;
   const [initialPackageId, setInitialPackageId] = useState<string | undefined>();
@@ -150,7 +155,7 @@ export function ContentLibrary({
   }, [initialMasterId, initialStudioPackageId]);
   const [adding, setAdding] = useState(false);
   const [packageOpen, setPackageOpen] = useState(false);
-  const [bundleOpen, setBundleOpen] = useState(false);
+  const [bundleOpen, setBundleOpen] = useState(Boolean(initialBundleId));
   const [groupedMasterIds, setGroupedMasterIds] = useState<string[]>([]);
   const [liveMasterIds, setLiveMasterIds] = useState<string[]>([]);
   const liveMastersLoaded = useCallback((ids: string[]) => setLiveMasterIds(ids), []);
@@ -413,6 +418,7 @@ export function ContentLibrary({
         (view === "releases" && item.state === "APPROVED")),
   );
   function reset() {
+    setBundleEntry(undefined);
     setAdding(false);
     setSelected(null);
     setInitialPackageId(undefined);
@@ -508,6 +514,7 @@ export function ContentLibrary({
                   key={tab}
                   aria-current={view === tab ? "page" : undefined}
                   onClick={(event) => {
+                    setBundleEntry(undefined);
                     setView(tab);
                     setPackageOpen(false);
                     setBundleOpen(false);
@@ -576,7 +583,8 @@ export function ContentLibrary({
             )}
             {(view === "studio" || view === "complete") && !packageOpen && contentWorkflow && (
               <OnlineImportPanel
-                key={view}
+                key={`imports-${view}-${workspaceVisit}`}
+                initialBundleId={bundleEntry}
                 locale={locale}
                 showForm={false}
                 capabilities={capabilities}

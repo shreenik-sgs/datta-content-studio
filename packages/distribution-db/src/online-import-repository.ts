@@ -431,6 +431,24 @@ export function createOnlineImportRepository(
       }
       return items;
     },
+    bundlesForMaster: async (context: DistributionContext, masterId: string) => {
+      await requireDistributionCapability(pool, context, ["content.create", "content.review"]);
+      const rows = await pool.query(
+        `SELECT DISTINCT p.id, p.title, jsonb_array_length(p.child_ids) AS recordings
+         FROM distribution.online_import i
+         JOIN distribution.content_master m ON m.id=i.master_id AND m.is_test=i.is_test
+         JOIN distribution.online_import p ON p.is_test=i.is_test AND p.child_ids ? i.id::text
+         WHERE i.is_test=$1 AND i.master_id=$2 AND i.deleted_at IS NULL
+           AND m.deleted_at IS NULL AND p.deleted_at IS NULL
+         ORDER BY p.title,p.id`,
+        [distributionWorld(context), masterId],
+      );
+      return rows.rows.map((row) => ({
+        id: row.id as string,
+        title: (row.title as string | null) ?? "Playlist or series",
+        recordings: row.recordings as number,
+      }));
+    },
     groupedMasters: async (context: DistributionContext) => {
       await requireDistributionCapability(pool, context, ["content.create", "content.review"]);
       return (

@@ -32,6 +32,7 @@ import {
 import { useHubTimestamp } from "./hub-locale";
 import { PlaylistFiles } from "./playlist-files";
 import { PlaylistReviewNavigation } from "./playlist-review-navigation";
+import { SeriesNavigation } from "./series-navigation";
 import { StorageCleanup } from "./storage-cleanup";
 import { StudioCorrectionComparison, StudioCorrections } from "./studio-corrections";
 import { StudioGenerationProgressView } from "./studio-generation-progress";
@@ -796,6 +797,12 @@ export function StudioPanel({
             setError("");
             setNotice("");
           }}
+        />
+      )}
+      {value && !bundle && (
+        <SeriesNavigation
+          masterId={value.source.masterId}
+          disabled={busy || editing || regenerating}
         />
       )}
       <div

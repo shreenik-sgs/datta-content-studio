@@ -1,6 +1,7 @@
 import { distributionText } from "@satsang/distribution-contracts";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { z } from "zod";
 import { analyticsEnabled } from "../lib/analytics-policy";
 import { trustedDistributionOrigin } from "../lib/auth";
 import { access } from "../lib/runtime";
@@ -11,10 +12,11 @@ export const dynamic = "force-dynamic";
 export default async function DistributionHome({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; master?: string; package?: string }>;
+  searchParams: Promise<{ view?: string; master?: string; package?: string; bundle?: string }>;
 }) {
   const query = await searchParams;
   const requestedView = query.view;
+  const bundleId = z.string().uuid().safeParse(query.bundle);
   const origin = trustedDistributionOrigin(process.env.DISTRIBUTION_APP_ORIGIN);
   const auth = await access(
     new Request(`${origin ?? "http://localhost"}/distribution`, {
@@ -46,8 +48,11 @@ export default async function DistributionHome({
   }
   return (
     <ContentLibrary
+      initialBundleId={bundleId.success ? bundleId.data : undefined}
       initialMasterId={
-        query.master && /^[a-f0-9-]{36}$/.test(query.master) ? query.master : undefined
+        !bundleId.success && query.master && /^[a-f0-9-]{36}$/.test(query.master)
+          ? query.master
+          : undefined
       }
       initialStudioPackageId={
         query.package && /^[a-f0-9-]{36}$/.test(query.package) ? query.package : undefined

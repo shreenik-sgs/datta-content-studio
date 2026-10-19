@@ -3,11 +3,109 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { OnlineImportPanel } from "./online-import-panel";
+import { value } from "./studio-workflow-fixture";
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
+});
+
+it("opens a bookmarked series directly at all files, including recordings beyond the first page", async () => {
+  vi.stubGlobal("React", React);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const bundleId = "00000000-0000-4000-8000-000000000001";
+  const packages = Array.from({ length: 51 }, (_, index) => ({
+    ...structuredClone(value),
+    id: `package-${index}`,
+    source: { ...value.source, masterId: `master-${index}`, title: `Recording ${index + 1}` },
+  }));
+  const children = packages.map((pkg, index) => ({
+    id: `child-${index}`,
+    masterId: pkg.source.masterId,
+  }));
+  const parent = {
+    id: bundleId,
+    title: "Entire series",
+    source: { provider: "youtube", kind: "bundle" },
+    childIds: children.map((child) => child.id),
+    curation: {
+      items: Object.fromEntries(
+        children.map((child, index) => [
+          child.id,
+          { packageId: packages[index]?.id, status: "DRAFT" },
+        ]),
+      ),
+    },
+  };
+  const fetcher = vi.fn(async (url: string, options?: RequestInit) => {
+    expect(options?.method ?? "GET").toBe("GET");
+    if (url === `/distribution/api/content/import?rootId=${bundleId}`)
+      return Response.json({ items: [parent, ...children], available: true });
+    if (url.includes("/distribution/api/studio?")) {
+      expect(new URL(url, "http://localhost").searchParams.get("playlistId")).toBe(bundleId);
+      return Response.json({
+        packages,
+        readiness: {
+          generation: { available: true },
+          publishing: { available: false },
+          channels: [],
+        },
+      });
+    }
+    throw Error(`Unexpected request ${url}`);
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <OnlineImportPanel
+          locale="en"
+          showForm={false}
+          initialBundleId={bundleId}
+          onOpen={vi.fn()}
+        />,
+      ),
+    );
+    expect(host.textContent).toContain("51 files across 51 recordings");
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(51);
+    expect(host.textContent).toContain("Recording 51");
+    expect(host.querySelector('[aria-label="Content workflow"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("explains a removed bookmarked series without falling back to an unrelated source", async () => {
+  vi.stubGlobal("React", React);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ items: [], available: true })),
+  );
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <OnlineImportPanel
+          locale="en"
+          showForm={false}
+          initialBundleId="missing"
+          onOpen={vi.fn()}
+        />,
+      ),
+    );
+    expect(host.textContent).toContain("no longer available in this workspace");
+    expect(host.textContent).toContain("Back to sources");
+    expect(host.querySelector('[aria-label="Content workflow"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+  }
 });
 it("removes a stale import-progress warning when the next poll succeeds", async () => {
   vi.useFakeTimers();
