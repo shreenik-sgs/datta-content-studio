@@ -272,10 +272,11 @@ it("preserves historical green-card evidence without treating its source as a ne
 
 it("retains reviewed v4/v5 cards while new cards display the destination channel", () => {
   const current = studioClosingCardPlan(60000);
-  expect(current.policy).toBe("green-channel-watch-subscribe-closing-card-v6");
+  expect(current.policy).toBe("green-plain-text-closing-card-v7");
   for (const policy of [
     "green-subscribe-closing-card-v4",
     "green-watch-subscribe-closing-card-v5",
+    "green-channel-watch-subscribe-closing-card-v6",
   ] as const) {
     expect(() => validateStudioClosingCard({ ...current, policy }, 60000)).not.toThrow();
   }

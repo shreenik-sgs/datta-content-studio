@@ -367,7 +367,7 @@ it("prints the selected destination handle while preserving the rest of the clos
     );
   const first = await render("SriDattaVijayanandaTeertha");
   const second = await render("gurubhavanaadpt");
-  const region = { left: 60, top: 805, width: 900, height: 64 };
+  const region = { left: 60, top: 1265, width: 900, height: 64 };
   const before = await sharp(first).extract(region).raw().toBuffer();
   const after = await sharp(second).extract(region).raw().toBuffer();
   expect(before.equals(after)).toBe(false);
@@ -379,10 +379,29 @@ it("prints the selected destination handle while preserving the rest of the clos
             create: { width: 1080, height: 64, channels: 4, background: "#000" },
           },
           left: 0,
-          top: 805,
+          top: 1265,
         },
       ])
       .raw()
       .toBuffer();
   expect((await clearHandle(first)).equals(await clearHandle(second))).toBe(true);
+});
+
+it("uses plain text without a filled subscribe button above the destination", async () => {
+  const card = await studioClosingCard(
+    Buffer.alloc(0),
+    "forest",
+    "youtube",
+    {
+      label: "Sri Datta Vijayananda Teertha Swamiji",
+      url: "https://www.youtube.com/@gurubhavanaadpt",
+    },
+    "bala-swamiji",
+  );
+  // The old pill occupied this strip. It must now be uninterrupted green space
+  // between the invitation and the separate channel handle, not a click target.
+  const gap = await sharp(
+    await sharp(card).extract({ left: 290, top: 1240, width: 420, height: 20 }).png().toBuffer(),
+  ).stats();
+  expect(gap.channels.slice(0, 3).every((c) => c.max < 80 && c.stdev < 4)).toBe(true);
 });

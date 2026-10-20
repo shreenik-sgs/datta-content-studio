@@ -123,3 +123,12 @@ On `STUDIO_CLOSING_PRESERVATION_FAILED`, retain the existing draft and inspect t
 comparison; do not bypass the check. On `STUDIO_CLOSING_TIMELINE_CHANGED`, use an
 explicit editor render after reviewing the timeline. Provider failures cannot stop
 a card-only update because that path does not call a speech, translation or AI service.
+
+
+The `green-plain-text-closing-card-v7` YouTube template replaces the imitation
+Subscribe button with “Watch full videos and subscribe on YouTube” in plain text,
+followed by the actual destination handle on its own line. MP4 text is not
+interactive; YouTube supplies the real Subscribe control. Preserve v6 evidence
+on existing revisions and use the same selected-draft closing refresh and
+preservation checks to apply v7. Never label a metadata-only change as a rendered
+card update.

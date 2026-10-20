@@ -136,10 +136,10 @@ export async function studioClosingCard(
   );
   const watch =
     destination === "youtube"
-      ? await textBlock("Watch full videos on this channel", 40, 820, 52, "#fff8ec")
+      ? await textBlock("Watch full videos and\nsubscribe on YouTube", 44, 820, 112, "#fff8ec", 16)
       : undefined;
   // Render the package's actual destination, not a hard-coded source handle.
-  // Retargeting these v6 pixels requires a preserved-export closing-card refresh.
+  // This is a plain-text invitation, not an interactive control in the exported MP4.
   const channel =
     destination === "youtube" && target
       ? await textBlock(
@@ -158,19 +158,22 @@ export async function studioClosingCard(
     <circle cx="500" cy="500" r="262" fill="none" stroke="${accent}" stroke-width="2"/>
     <image href="data:image/png;base64,${portrait.toString("base64")}" x="250" y="250" width="500" height="500" clip-path="url(#photo)"/>
     ${sourceBranding === "bala-swamiji" ? "" : `<image href="data:image/png;base64,${logo.toString("base64")}" x="454" y="120" width="92" height="92"/>`}
-    <rect x="260" y="1234" width="480" height="94" rx="47" fill="${accent}"/>
-    <text x="500" y="1296" text-anchor="middle" font-family="sans-serif" font-size="44" font-weight="bold" fill="#173c36">${destination === "youtube" ? "Tap Subscribe" : "Discover the app"}</text>
+    ${destination === "app" ? `<rect x="260" y="1234" width="480" height="94" rx="47" fill="${accent}"/><text x="500" y="1296" text-anchor="middle" font-family="sans-serif" font-size="44" font-weight="bold" fill="#173c36">Discover the app</text>` : ""}
   </svg>`;
   // The authentic portrait doubles as the provisional channel mark for this speaker.
   // Keep the caption band empty while the last two seconds of source speech continue.
   return sharp(Buffer.from(svg))
     .composite([
       ...(channel
-        ? [{ input: channel.bytes, left: Math.round(500 - channel.width / 2), top: 810 }]
+        ? [{ input: channel.bytes, left: Math.round(500 - channel.width / 2), top: 1270 }]
         : []),
-      { input: label.bytes, left: Math.round(500 - label.width / 2), top: 930 },
+      {
+        input: label.bytes,
+        left: Math.round(500 - label.width / 2),
+        top: destination === "youtube" ? 880 : 930,
+      },
       ...(watch
-        ? [{ input: watch.bytes, left: Math.round(500 - watch.width / 2), top: 1128 }]
+        ? [{ input: watch.bytes, left: Math.round(500 - watch.width / 2), top: 1100 }]
         : []),
     ])
     .png()
