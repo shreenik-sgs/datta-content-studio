@@ -105,6 +105,7 @@ export type StudioPlannedOutput = {
   sourceSegmentIds: string[];
 };
 export type StudioPlan = {
+  discovery?: import("./studio-discovery").StudioDiscoveryCoverage;
   excludedMessages?: StudioExcludedMessage[];
   outputs: StudioPlannedOutput[];
   skippedChannels: { channel: StudioChannel; reason: string }[];

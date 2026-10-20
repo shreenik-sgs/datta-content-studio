@@ -57,8 +57,14 @@ export function PlaylistCuration({
   const planned = members.filter((value) => value.packageId).length;
   const approved = members.filter((value) => value.status === "APPROVED").length;
   const generated = members.filter((value) =>
-    ["DRAFT", "CHANGES_REQUESTED", "IN_REVIEW", "APPROVED"].includes(value.status ?? ""),
+    value.outputCount !== undefined
+      ? value.outputCount > 0
+      : ["DRAFT", "CHANGES_REQUESTED", "IN_REVIEW", "APPROVED"].includes(value.status ?? ""),
   ).length;
+  const refreshing = members.some(
+    (value) =>
+      (value.outputCount ?? 0) > 0 && ["QUEUED", "GENERATING"].includes(value.status ?? ""),
+  );
   const awaitingApproval = members.filter((value) => value.status === "IN_REVIEW").length;
   const unsuitable = members.filter((value) => studioNeedsSuitabilityReview(value.error)).length;
   const removedContent =
@@ -209,6 +215,12 @@ export function PlaylistCuration({
                   ? "Downloads are paused. Your playlist permissions and output settings are saved."
                   : "Generation runs automatically for every video using your shared settings. You can leave this page and return to this playlist later."}
           </p>
+          {refreshing && (
+            <p>
+              Existing files remain available while updates are generated. Editing and submission
+              resume when each recording finishes.
+            </p>
+          )}
           {unsuitable > 0 && (
             <p>
               {unsuitable} recording(s) need a source or guidance review. See their explanation
@@ -428,6 +440,33 @@ export function PlaylistCuration({
           {planned} of {total} recordings in curation · {approved} approved
         </p>
       )}
+      {canCurate &&
+        !completeOnly &&
+        planned > 0 &&
+        plan?.request.allCompleteMessages &&
+        members.some((m) => ["DRAFT", "FAILED", "CHANGES_REQUESTED"].includes(m.status ?? "")) &&
+        plan.request.channels.every((c) =>
+          ["youtube", "facebook", "instagram", "tiktok"].includes(c),
+        ) && (
+          <section className="card" aria-label="Find additional teachings">
+            <h3>Find more Shorts</h3>
+            <p>
+              Review every recording section by section for additional, distinct teachings. Your
+              existing files and edits stay intact. Only new messages that pass AI review become
+              drafts for your approval.
+            </p>
+            <button
+              type="button"
+              className="button"
+              disabled={
+                busy || members.some((m) => ["QUEUED", "GENERATING"].includes(m.status ?? ""))
+              }
+              onClick={() => void send({ action: "discover-playlist", id: item.id })}
+            >
+              Find more Shorts across this bundle
+            </button>
+          </section>
+        )}
       {reviewable && onReview && (
         <div className="playlist-next-action">
           <p>

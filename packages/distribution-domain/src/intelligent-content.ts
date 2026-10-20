@@ -107,6 +107,7 @@ export type StudioGenerationRequest = {
   captions: boolean;
 };
 export type StudioProvenance = {
+  discovery?: import("./studio-discovery").StudioDiscoveryCoverage;
   excludedMessages?: StudioExcludedMessage[];
   draftingProviders?: { provider: "gemini" | "openai"; model: string }[];
   provider: "local" | "openai" | "gemini";
@@ -148,6 +149,8 @@ export type StudioSource = {
   mimeType: string;
 };
 export type StudioGenerationProgress = {
+  discoverySection?: number;
+  discoverySections?: number;
   phase: "source" | "transcription" | "drafting" | "reviewing" | "rendering" | "complete";
   provider: "local" | "sarvam" | "gemini" | "openai";
   completed: number;
@@ -176,7 +179,7 @@ export type StudioPackage = {
   request: StudioGenerationRequest;
   generation?: {
     outputIds: string[];
-    mode: "ai" | "render" | "closing";
+    mode: "ai" | "render" | "closing" | "discover";
     steadyOpening?: true;
     closingDestinations?: Record<string, "app" | "youtube">;
     illustrationTimings?: import("./studio-presentation").StudioIllustrationTiming[];

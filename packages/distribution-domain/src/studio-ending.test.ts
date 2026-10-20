@@ -269,3 +269,11 @@ it("preserves historical green-card evidence without treating its source as a ne
   expect(() => validateStudioClosingCard(card, 60000)).not.toThrow();
   expect(studioClosingChannel(card)).toEqual({ name: "SriBalaSwamiji" });
 });
+
+it("retains reviewed v4 cards while new cards use the watch-and-subscribe template", () => {
+  const current = studioClosingCardPlan(60000);
+  expect(current.policy).toBe("green-watch-subscribe-closing-card-v5");
+  expect(() =>
+    validateStudioClosingCard({ ...current, policy: "green-subscribe-closing-card-v4" }, 60000),
+  ).not.toThrow();
+});

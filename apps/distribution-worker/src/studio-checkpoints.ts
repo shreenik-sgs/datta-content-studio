@@ -21,6 +21,7 @@ import {
   reviewStudioContent,
 } from "./studio-content-review.js";
 import { generateStudioPlan } from "./studio-intelligence.js";
+import { generateStudioSectionPlan } from "./studio-section-discovery.js";
 
 export type StudioCheckpoints = {
   get: <T>(key: string, fingerprint: string) => T | undefined;
@@ -44,31 +45,44 @@ export const studioFingerprint = (value: unknown) =>
     )
     .digest("hex");
 
+export type StudioPlanReviewOptions = {
+  /** Review changes invalidate evidence, while keeping the paid draft and translation. */
+  mediaReviewPolicy?: string;
+  reviewMedia?: (plan: StudioPlan, checks: StudioContentReview[]) => Promise<StudioContentReview[]>;
+  fallback?: { provider: "openai"; apiKey: string; model: string };
+  onReview?: (
+    checks: StudioContentReview[],
+    evidence: {
+      provider: "gemini" | "openai";
+      model: string;
+      audioIncluded: boolean;
+      reviewedAt?: string;
+    },
+  ) => void;
+  onProvider?: (provider: "gemini" | "openai", model: string, audioIncluded: boolean) => void;
+};
+
 /** Bounded sequential requests avoid an all-language response and bursts against the API quota. */
 export async function generateCheckpointedStudioPlan(
   input: Parameters<typeof generateStudioPlan>[0],
   checkpoints?: StudioCheckpoints,
-  options: {
-    /** Review changes invalidate evidence, while keeping the paid draft and translation. */
-    mediaReviewPolicy?: string;
-    reviewMedia?: (
-      plan: StudioPlan,
-      checks: StudioContentReview[],
-    ) => Promise<StudioContentReview[]>;
-    fallback?: { provider: "openai"; apiKey: string; model: string };
-    onReview?: (
-      checks: StudioContentReview[],
-      evidence: {
-        provider: "gemini" | "openai";
-        model: string;
-        audioIncluded: boolean;
-        reviewedAt?: string;
-      },
-    ) => void;
-    onProvider?: (provider: "gemini" | "openai", model: string, audioIncluded: boolean) => void;
-  } = {},
+  options: StudioPlanReviewOptions = {},
 ): Promise<StudioPlan> {
   if (input.provider === "local") return generateStudioPlan(input);
+  if (
+    !input.discoverySection &&
+    !input.retainedOutputs &&
+    !input.contentReviewCorrection &&
+    !input.pkg.outputs.length &&
+    input.pkg.request.allCompleteMessages &&
+    !input.pkg.source.liveWindow &&
+    (input.transcript.durationMs > 300000 || input.discoveryExcludedOutputs !== undefined) &&
+    input.pkg.request.channels.some((c) =>
+      ["youtube", "facebook", "instagram", "tiktok"].includes(c),
+    )
+  )
+    return generateStudioSectionPlan(input, checkpoints, options, generateCheckpointedStudioPlan);
+
   const mediaReviewPolicy = options.reviewMedia ? options.mediaReviewPolicy : undefined;
   const combined: StudioPlan = { outputs: [], skippedChannels: [], translations: [] };
   const candidateSelection = canSelectInitialStudioCandidates(
@@ -126,6 +140,8 @@ export async function generateCheckpointedStudioPlan(
       const key = `plan:${language}:${index}`;
       const fingerprint = studioFingerprint({
         editorialReview: STUDIO_EDITORIAL_REVIEW_POLICY,
+        discoverySection: input.discoverySection,
+        discoveryExcludedOutputs: input.discoveryExcludedOutputs,
         version: 13,
         ...(input.reviewAudio ? { audioReview: "selected-source-windows-v1" } : {}),
         mediaReview: Boolean(options.reviewMedia),

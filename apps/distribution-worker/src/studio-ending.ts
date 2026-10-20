@@ -113,7 +113,7 @@ export async function studioClosingCard(
     const size = await sharp(bytes).metadata();
     return { bytes, width: size.width ?? width };
   };
-  // One name and one action: readable in five seconds, without repeating an invitation.
+  // Keep the two related actions short enough to read during the five-second closing card.
   const label = await textBlock(
     destination === "youtube" ? studioClosingDisplayName(sourceBranding) : "SGS Datta Sannidhi",
     54,
@@ -121,6 +121,10 @@ export async function studioClosingCard(
     168,
     "#fff8ec",
   );
+  const watch =
+    destination === "youtube"
+      ? await textBlock("Watch full videos on this channel", 40, 820, 52, "#fff8ec")
+      : undefined;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920">
     <defs><linearGradient id="green" x2="0" y2="1"><stop stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient><clipPath id="photo"><circle cx="500" cy="580" r="250"/></clipPath></defs>
     <rect width="1080" height="1920" fill="url(#green)"/>
@@ -133,7 +137,12 @@ export async function studioClosingCard(
   // The authentic portrait doubles as the provisional channel mark for this speaker.
   // Keep the caption band empty while the last two seconds of source speech continue.
   return sharp(Buffer.from(svg))
-    .composite([{ input: label.bytes, left: Math.round(500 - label.width / 2), top: 940 }])
+    .composite([
+      { input: label.bytes, left: Math.round(500 - label.width / 2), top: 940 },
+      ...(watch
+        ? [{ input: watch.bytes, left: Math.round(500 - watch.width / 2), top: 1128 }]
+        : []),
+    ])
     .png()
     .toBuffer();
 }

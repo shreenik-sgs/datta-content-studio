@@ -146,7 +146,7 @@ export const studioRegenerateSchema = z
     expectedRevision: revision,
     request: studioGenerationRequestSchema.optional(),
     outputIds: z.array(z.string().uuid()).min(1).max(200).refine(unique).optional(),
-    mode: z.enum(["ai", "render", "closing"]).default("ai"),
+    mode: z.enum(["ai", "render", "closing", "discover"]).default("ai"),
     steadyOpening: z.literal(true).optional(),
     closingDestinations: z.record(z.string().uuid(), z.enum(["app", "youtube"])).optional(),
     illustrationTimings: z
@@ -164,6 +164,15 @@ export const studioRegenerateSchema = z
       .optional(),
   })
   .strict()
+  .refine(
+    (v) =>
+      v.mode !== "discover" ||
+      (!v.outputIds && !v.closingDestinations && !v.steadyOpening && !v.illustrationTimings),
+    {
+      message: "Additional discovery preserves existing files and takes no file-edit options",
+      path: ["mode"],
+    },
+  )
   .refine(
     (v) =>
       !v.closingDestinations ||

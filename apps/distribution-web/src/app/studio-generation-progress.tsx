@@ -67,6 +67,12 @@ export function StudioGenerationProgressView({
         {value.language ? ` · ${DISTRIBUTION_LANGUAGE_NAMES[value.language]}` : ""}
         {value.channel ? ` · ${studioChannelLabel(value.channel)}` : ""}
       </p>
+      {value.discoverySection && value.discoverySections ? (
+        <p>
+          Reviewing section {value.discoverySection} of {value.discoverySections}. Completed
+          sections are saved for resuming.
+        </p>
+      ) : null}
       <progress
         style={{ width: "100%", maxWidth: 480 }}
         aria-label="Completed work in this stage"

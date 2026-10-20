@@ -20,7 +20,17 @@ export function studioBundleWorkflow(item: OnlineImport) {
   const statuses = (item.childIds ?? []).map((id) => item.curation?.items[id]?.status);
   const count = (...values: string[]) =>
     statuses.filter((status) => values.includes(status ?? "")).length;
-  const generated = count("DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "DISCARDED");
+  const generated = (item.childIds ?? []).filter((id) => {
+    const member = item.curation?.items[id];
+    return member?.outputCount !== undefined
+      ? member.outputCount > 0
+      : ["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "DISCARDED"].includes(
+          member?.status ?? "",
+        );
+  }).length;
+  const refreshing = Object.values(item.curation?.items ?? {}).some(
+    (m) => (m.outputCount ?? 0) > 0 && ["QUEUED", "GENERATING"].includes(m.status ?? ""),
+  );
   const submitted = count("IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "DISCARDED");
   const approved = count("APPROVED");
   const returned = count("CHANGES_REQUESTED");
@@ -45,7 +55,9 @@ export function studioBundleWorkflow(item: OnlineImport) {
     }
     if (step.number === 2 && item.curation) {
       step.state = total > 0 && generated === total ? "done" : "pending";
-      step.label = `${generated} of ${total} recordings ready`;
+      step.label = refreshing
+        ? `${generated} of ${total} recordings have files · updates in progress`
+        : `${generated} of ${total} recordings ready`;
     }
     if (step.number === 3 && submitted) {
       step.state = submitted === total ? "done" : "pending";

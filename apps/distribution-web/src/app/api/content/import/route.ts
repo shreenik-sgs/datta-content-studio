@@ -30,6 +30,7 @@ const schema = z.discriminatedUnion("action", [
       category: z.string().max(60),
     })
     .strict(),
+  z.object({ action: z.literal("discover-playlist"), id: z.string().uuid() }).strict(),
   z.object({ action: z.literal("retry"), id: z.string().uuid() }).strict(),
   z.object({ action: z.literal("resume-playlist"), id: z.string().uuid() }).strict(),
   z
@@ -87,6 +88,20 @@ export async function POST(request: Request) {
     );
     const repo = repository();
     if (!(await repo.ready(auth.context.isTest))) throw Error("ONLINE_IMPORT_DISABLED");
+    if (data.action === "discover-playlist") {
+      const result = await createIntelligentContentRepository(distributionPool(), {
+        authorize: createStudioRoleAuthority(process.env),
+      }).discoverPlaylist(auth.context, data.id);
+      return json(
+        {
+          ...result,
+          item: (await repo.list(auth.context, { rootId: data.id })).find(
+            (item) => item.id === data.id,
+          ),
+        },
+        202,
+      );
+    }
     if (data.action === "import-bundle")
       return json({ item: await repo.enqueueBundle(auth.context, data) }, 202);
     if (data.action === "resume-playlist") {

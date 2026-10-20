@@ -331,3 +331,24 @@ it("uses the authentic Bala portrait with the same green closing card for every 
   ).rejects.toThrow();
   // Four real image renders can exceed the default five seconds on a cold CI font cache.
 }, 30000);
+
+it("adds a readable full-video invitation without encroaching on the final spoken captions", async () => {
+  const card = await studioClosingCard(
+    Buffer.alloc(0),
+    "forest",
+    "youtube",
+    undefined,
+    "bala-swamiji",
+  );
+  const invitation = await sharp(card)
+    .extract({ left: 90, top: 1128, width: 820, height: 52 })
+    .stats();
+  expect(invitation.channels[0]?.max).toBeGreaterThan(200);
+  const captions = await sharp(
+    await sharp(card)
+      .extract({ left: 64, top: STUDIO_SUBTITLE_TOP, width: 884, height: 200 })
+      .png()
+      .toBuffer(),
+  ).stats();
+  expect(captions.channels.slice(0, 3).every((c) => c.stdev < 4)).toBe(true);
+});

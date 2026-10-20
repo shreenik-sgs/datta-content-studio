@@ -45,6 +45,16 @@ it("never treats approval as publication", () => {
   expect(flow.steps[5]?.state).toBe("current");
   expect(flow.steps[5]?.label).toBe("You are here");
 });
+it("retains file availability while a card update is queued without implying it can be submitted", () => {
+  const item = bundle(["GENERATING", "QUEUED"]);
+  if (!item.curation) throw Error("missing fixture");
+  item.curation.items["0"] = { status: "GENERATING", outputCount: 2 };
+  item.curation.items["1"] = { status: "QUEUED", outputCount: 3 };
+  const flow = studioBundleWorkflow(item);
+  expect(flow.current).toBe(2);
+  expect(flow.steps[1]?.label).toBe("2 of 2 recordings have files · updates in progress");
+  expect(flow.steps[2]?.state).toBe("pending");
+});
 it("prioritizes returned files without losing siblings' progress", () => {
   const flow = studioBundleWorkflow(bundle(["APPROVED", "CHANGES_REQUESTED", "GENERATING"]));
   expect(flow.current).toBe(5);

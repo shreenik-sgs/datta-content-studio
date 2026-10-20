@@ -16,6 +16,7 @@ import {
 } from "./intelligent-content";
 import { parseStudioAssetKey } from "./studio-assets";
 import { validateStudioAiReviewEvidence } from "./studio-content-review";
+import { validateStudioDiscoveryCoverage } from "./studio-discovery";
 import { studioRenderedDurationMs, studioYoutubeClosing } from "./studio-ending";
 import { studioCaptionsEnabled, validateStudioMediaEdits } from "./studio-media-edits";
 import {
@@ -210,6 +211,7 @@ export function validateStudioProvenance(input: StudioProvenance): void {
     ids.add(segment.id);
     previous = segment.startMs;
   }
+  if (input.discovery) validateStudioDiscoveryCoverage(input.discovery, transcript);
 }
 export function validateStudioOutputs(
   outputs: StudioOutput[],

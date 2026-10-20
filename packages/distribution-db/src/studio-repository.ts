@@ -17,6 +17,7 @@ import {
   type StudioTranscript,
   appendStudioMessage,
   assertStudioCorrectionIsolation,
+  assertStudioDiscoveryIsolation,
   contentExportDecision,
   requireContentRevision,
   requireIndependentContentReview,
@@ -153,6 +154,9 @@ const knownFailures = new Set([
   "STUDIO_CLIP_TOO_LONG",
   "STUDIO_VIDEO_REVIEW_REQUIRED",
   "STUDIO_VIDEO_REVIEW_INVALID",
+  "STUDIO_DISCOVERY_REVIEW_INVALID",
+  "STUDIO_DISCOVERY_ISOLATION_REQUIRED",
+  "INVALID_STUDIO_DISCOVERY_COVERAGE",
   "STUDIO_PRESENTATION_REVIEW_INVALID",
   "STUDIO_CLOSING_CARD_INVALID",
   "STUDIO_OPENING_CARD_INVALID",
@@ -588,7 +592,7 @@ export function createIntelligentContentRepository(
       expectedRevision: number;
       request?: StudioGenerationRequest | undefined;
       outputIds?: string[] | undefined;
-      mode?: "ai" | "render" | "closing" | undefined;
+      mode?: "ai" | "render" | "closing" | "discover" | undefined;
       steadyOpening?: true | undefined;
       closingDestinations?: Record<string, "app" | "youtube"> | undefined;
       illustrationTimings?:
@@ -604,7 +608,18 @@ export function createIntelligentContentRepository(
       throw new Error("INVALID_STUDIO_TRANSITION");
     await sourceCurrent(client, pkg);
     const request = input.request ?? pkg.request;
-    const outputIds = studioCorrectionTargets(pkg, input.outputIds);
+    if (
+      input.mode === "discover" &&
+      (input.outputIds?.length ||
+        input.steadyOpening ||
+        input.closingDestinations ||
+        input.illustrationTimings ||
+        !request.allCompleteMessages ||
+        request.channels.some((c) => !["youtube", "facebook", "instagram", "tiktok"].includes(c)))
+    )
+      throw Error("STUDIO_SELECT_OUTPUTS");
+    const outputIds =
+      input.mode === "discover" ? [] : studioCorrectionTargets(pkg, input.outputIds);
     if (
       request.youtubeClosing &&
       Object.values(input.closingDestinations ?? {}).some(
@@ -640,19 +655,22 @@ export function createIntelligentContentRepository(
     const next = await save(client, pkg, ctx.userId, "GENERATION_REQUESTED", {
       status: "QUEUED",
       request,
-      generation: outputIds.length
-        ? {
-            outputIds,
-            mode: input.mode ?? "ai",
-            ...(input.closingDestinations
-              ? { closingDestinations: input.closingDestinations }
-              : {}),
-            ...(input.steadyOpening ? { steadyOpening: true as const } : {}),
-            ...(input.illustrationTimings
-              ? { illustrationTimings: input.illustrationTimings }
-              : {}),
-          }
-        : null,
+      generation:
+        input.mode === "discover"
+          ? { outputIds: [], mode: "discover" as const }
+          : outputIds.length
+            ? {
+                outputIds,
+                mode: input.mode ?? "ai",
+                ...(input.closingDestinations
+                  ? { closingDestinations: input.closingDestinations }
+                  : {}),
+                ...(input.steadyOpening ? { steadyOpening: true as const } : {}),
+                ...(input.illustrationTimings
+                  ? { illustrationTimings: input.illustrationTimings }
+                  : {}),
+              }
+            : null,
       approval: null,
       failure: null,
       contributorIds: [...new Set([...pkg.contributorIds, ctx.userId])],
@@ -701,6 +719,40 @@ export function createIntelligentContentRepository(
           [row.id, isTest, pkg.id],
         );
         return true;
+      }),
+    discoverPlaylist: (ctx: DistributionContext, id: string) =>
+      transaction(async (client) => {
+        await access(client, ctx, "content.create");
+        if (!(await fresh(ctx.userId, ctx.isTest, "content.create")))
+          throw Error("REQUESTER_ROLE_REVOKED");
+        const row = (
+          await client.query(
+            "SELECT * FROM distribution.online_import WHERE id=$1 AND is_test=$2 AND deleted_at IS NULL FOR UPDATE",
+            [id, ctx.isTest],
+          )
+        ).rows[0];
+        if (!row || !isOnlineBundle(row.source) || !row.curation) throw Error("PLAYLIST_NOT_READY");
+        const plan = row.curation as PlaylistCuration;
+        let queued = 0;
+        for (const member of Object.values(plan.items).sort((a, b) =>
+          (a.packageId ?? "").localeCompare(b.packageId ?? ""),
+        )) {
+          if (!member.packageId) continue;
+          const pkg = await load(client, ctx.isTest, member.packageId, true);
+          if (!studioCanEdit(pkg.status, ["content.create"]) || pkg.approval) continue;
+          await requestGeneration(client, ctx, pkg.id, {
+            expectedRevision: pkg.revision,
+            mode: "discover",
+          });
+          member.status = "QUEUED";
+          Reflect.deleteProperty(member, "error");
+          queued++;
+        }
+        await client.query(
+          "UPDATE distribution.online_import SET curation=$3,updated_at=now() WHERE id=$1 AND is_test=$2",
+          [id, ctx.isTest, plan],
+        );
+        return { queued };
       }),
     configurePlaylist: (
       ctx: DistributionContext,
@@ -977,7 +1029,7 @@ export function createIntelligentContentRepository(
         expectedRevision: number;
         request?: StudioGenerationRequest | undefined;
         outputIds?: string[] | undefined;
-        mode?: "ai" | "render" | "closing" | undefined;
+        mode?: "ai" | "render" | "closing" | "discover" | undefined;
         steadyOpening?: true | undefined;
         closingDestinations?: Record<string, "app" | "youtube"> | undefined;
         illustrationTimings?:
@@ -1590,7 +1642,9 @@ export function createIntelligentContentRepository(
             return { accepted: false, reason: "STUDIO_EXTERNAL_PROCESSING_NOT_AUTHORIZED" };
           }
         }
-        if (pkg.generation)
+        if (pkg.generation?.mode === "discover")
+          assertStudioDiscoveryIsolation(pkg.outputs, result.outputs);
+        else if (pkg.generation)
           assertStudioCorrectionIsolation(pkg.outputs, result.outputs, pkg.generation.outputIds);
         validateStudioOutputs(result.outputs, {
           packageId: pkg.id,

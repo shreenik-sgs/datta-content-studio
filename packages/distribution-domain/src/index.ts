@@ -136,3 +136,5 @@ export * from "./studio-audio-analysis";
 export * from "./storage-cleanup";
 
 export * from "./studio-source-branding";
+
+export * from "./studio-discovery";

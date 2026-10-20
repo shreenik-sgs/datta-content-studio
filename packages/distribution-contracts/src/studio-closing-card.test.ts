@@ -85,3 +85,18 @@ it("requires an explicit channel target and YouTube-only scope for alternate sou
   ])
     expect(studioGenerationRequestSchema.safeParse({ ...request, ...change }).success).toBe(false);
 });
+
+it("keeps additional discovery separate from existing-file repair", () => {
+  expect(studioRegenerateSchema.parse({ expectedRevision: 3, mode: "discover" })).toEqual({
+    expectedRevision: 3,
+    mode: "discover",
+  });
+  for (const change of [
+    { outputIds: [id] },
+    { steadyOpening: true },
+    { closingDestinations: { [id]: "youtube" } },
+  ])
+    expect(() =>
+      studioRegenerateSchema.parse({ expectedRevision: 3, mode: "discover", ...change }),
+    ).toThrow();
+});

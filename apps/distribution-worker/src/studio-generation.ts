@@ -39,6 +39,7 @@ import {
   type StudioSourceScreen,
   type StudioTranscript,
   applyStudioBoundaryReview,
+  assertStudioDiscoveryIsolation,
   enforceStudioPlanBranding,
   preserveStudioEditorialEdits,
   retimeStudioIllustrations,
@@ -50,6 +51,7 @@ import {
   studioCardStyle,
   studioClosingCardPlan,
   studioContentReviewIssues,
+  studioDiscoveryOverlaps,
   studioGenerationReadiness,
   studioOpeningCardPlan,
   studioOutputKey,
@@ -263,6 +265,7 @@ export async function generateStudioPackage(input: {
   illustrationTimings?: StudioIllustrationTiming[];
   applyAiCorrections?: boolean;
   retainedOutputs?: StudioPlan["outputs"];
+  discoveryExcludedOutputs?: StudioPlan["outputs"];
   claim: StudioGenerationClaim;
   store: PrivateAssetStore;
   env: Env;
@@ -289,6 +292,51 @@ export async function generateStudioPackage(input: {
       )
     ).appLinks;
   const scope = claim.package.generation;
+  if (scope?.mode === "discover") {
+    const previous = claim.package;
+    const result = await generateStudioPackage({
+      ...input,
+      discoveryExcludedOutputs: previous.outputs,
+      claim: {
+        ...claim,
+        transcript: claim.transcript ?? previous.provenance?.transcript ?? null,
+        package: { ...previous, generation: null, outputs: [] },
+      },
+    });
+    if (
+      previous.provenance &&
+      studioFingerprint(previous.provenance.transcript) !==
+        studioFingerprint(result.provenance.transcript)
+    )
+      throw Error("SOURCE_DEPENDENCY_CHANGED");
+    for (const [index, extra] of result.outputs.entries()) {
+      const prior = [
+        ...previous.outputs,
+        ...result.outputs.slice(0, index).filter((o) => o.messageId !== extra.messageId),
+      ];
+      if (studioDiscoveryOverlaps(extra, prior, result.provenance.transcript))
+        throw Error("DUPLICATE_STUDIO_PASSAGE");
+    }
+    const outputs = [...previous.outputs, ...result.outputs];
+    assertStudioDiscoveryIsolation(previous.outputs, outputs);
+    validateStudioMessagePassages(outputs);
+    if (!outputs.length) throw Error("STUDIO_NO_SUITABLE_CHANNELS");
+    return {
+      outputs,
+      provenance: {
+        ...(previous.provenance ?? result.provenance),
+        draftingProviders: [
+          ...new Map(
+            [
+              ...(previous.provenance?.draftingProviders ?? []),
+              ...(result.provenance.draftingProviders ?? []),
+            ].map((p) => [p.provider, p]),
+          ).values(),
+        ],
+        ...(result.provenance.discovery ? { discovery: result.provenance.discovery } : {}),
+      },
+    };
+  }
   if (scope) {
     const targets = claim.package.outputs.filter((o) => scope.outputIds.includes(o.id));
     if (!targets.length || targets.length !== scope.outputIds.length)
@@ -767,6 +815,9 @@ export async function generateStudioPackage(input: {
             transcript,
             provider,
             ...(input.retainedOutputs ? { retainedOutputs: input.retainedOutputs } : {}),
+            ...(input.discoveryExcludedOutputs
+              ? { discoveryExcludedOutputs: input.discoveryExcludedOutputs }
+              : {}),
             ...(apiKey ? { apiKey } : {}),
             ...(model ? { model } : {}),
             ...(originalAudio ? { originalAudio } : {}),
@@ -801,7 +852,12 @@ export async function generateStudioPackage(input: {
         : preserveStudioEditorialEdits(generatedPlan, claim.package),
       claim.package.request,
     );
-    validateStudioPlan(plan, claim.package, transcript);
+    validateStudioPlan(
+      plan,
+      claim.package,
+      transcript,
+      input.discoveryExcludedOutputs !== undefined,
+    );
     // Manual edits and render-only jobs must not bypass the check on the final content and source range.
     if (
       provider !== "local" &&
@@ -884,9 +940,11 @@ export async function generateStudioPackage(input: {
         : {}),
       transcript,
       skippedChannels: plan.skippedChannels,
+      ...(plan.discovery ? { discovery: plan.discovery } : {}),
       ...(plan.excludedMessages?.length ? { excludedMessages: plan.excludedMessages } : {}),
     };
     validateStudioProvenance(provenance);
+    if (input.discoveryExcludedOutputs && !plan.outputs.length) return { outputs: [], provenance };
     const outputs: StudioOutput[] = [];
     const rendered = new Map<
       string,

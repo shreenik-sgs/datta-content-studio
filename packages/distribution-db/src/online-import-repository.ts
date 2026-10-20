@@ -390,7 +390,7 @@ export function createOnlineImportRepository(
       );
       if (ids.length) {
         const packages = await pool.query(
-          `SELECT p.id, r.snapshot->>'status' AS status, r.snapshot->>'failure' AS failure, EXISTS(SELECT 1 FROM distribution.studio_generation_job j WHERE j.package_id=p.id AND j.is_test=p.is_test AND j.status='RUNNING') AS running FROM distribution.studio_package p JOIN distribution.studio_revision r ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision WHERE p.is_test=$1 AND p.id=ANY($2::uuid[])`,
+          `SELECT p.id, r.snapshot->>'status' AS status, r.snapshot->>'failure' AS failure, jsonb_array_length(COALESCE(r.snapshot->'outputs','[]'::jsonb)) AS output_count, EXISTS(SELECT 1 FROM distribution.studio_generation_job j WHERE j.package_id=p.id AND j.is_test=p.is_test AND j.status='RUNNING') AS running FROM distribution.studio_package p JOIN distribution.studio_revision r ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision WHERE p.is_test=$1 AND p.id=ANY($2::uuid[])`,
           [context.isTest, ids],
         );
         const statuses = new Map(
@@ -400,7 +400,9 @@ export function createOnlineImportRepository(
           for (const value of Object.values(item.curation?.items ?? {}))
             if (value.packageId) {
               value.status = statuses.get(value.packageId);
-              const failure = packages.rows.find((row) => row.id === value.packageId)?.failure;
+              const snapshot = packages.rows.find((row) => row.id === value.packageId);
+              value.outputCount = snapshot?.output_count ?? 0;
+              const failure = snapshot?.failure;
               if (
                 value.status === "FAILED" &&
                 typeof failure === "string" &&

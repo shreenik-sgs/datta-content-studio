@@ -169,7 +169,7 @@ export function StudioOutputPreview({
   const subscribe = closing?.destination === "youtube";
   const closingChannel = closing && subscribe ? studioClosingChannel(closing) : undefined;
   const closingLabel = subscribe
-    ? `${closingChannel?.name} — subscribe on YouTube`
+    ? `${closingChannel?.name} — watch full videos and subscribe on YouTube`
     : "SGS Datta Sannidhi — download the app";
   const downloadUrl = subscribe
     ? closingChannel?.url
@@ -989,6 +989,34 @@ export function StudioPanel({
           }
           onRefresh={() => void load().catch(() => setError(studioMessage("unavailable")))}
         />
+      )}
+      {value?.provenance?.discovery && (
+        <section className="notice" aria-label="Discovery coverage">
+          <strong>Section-by-section discovery completed</strong>
+          <p>
+            {value.provenance.discovery.sections.length} sections reviewed;{" "}
+            {value.provenance.discovery.sections.reduce((n, s) => n + s.accepted, 0)} new distinct
+            messages selected;{" "}
+            {value.provenance.discovery.sections.reduce((n, s) => n + s.duplicates, 0)} overlapping
+            or repeated messages excluded. This records the review coverage, not a guarantee that
+            every possible teaching was found.
+          </p>
+        </section>
+      )}
+      {canCreate && value?.status === "FAILED" && value.generation?.mode === "discover" && (
+        <p>
+          Existing Shorts are unchanged.{" "}
+          <button
+            className="button"
+            type="button"
+            disabled={busy || !readiness?.generation.available}
+            onClick={() =>
+              void perform("regenerate", { expectedRevision: value.revision, mode: "discover" })
+            }
+          >
+            Resume finding more Shorts
+          </button>
+        </p>
       )}
       {value?.generationProgress && (
         <div

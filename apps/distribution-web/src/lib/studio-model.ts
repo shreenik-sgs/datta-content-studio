@@ -192,6 +192,12 @@ const messages: Record<string, string> = {
     "The illustrated post did not pass its final image and text review. The existing file is retained; see the findings below.",
   STUDIO_ILLUSTRATION_INVALID:
     "A supporting image or its source-linked timing could not be verified. The affected file is held for correction.",
+  STUDIO_DISCOVERY_REVIEW_INVALID:
+    "The AI duplicate check returned an incomplete result. Existing files and completed sections are saved. Retry to resume safely.",
+  STUDIO_DISCOVERY_ISOLATION_REQUIRED:
+    "Discovery tried to change an existing file, so the update was stopped. Your existing files are unchanged.",
+  INVALID_STUDIO_DISCOVERY_COVERAGE:
+    "Section coverage could not be verified. Existing files are retained; discovery must complete before new files are accepted.",
   STUDIO_VIDEO_REVIEW_INVALID:
     "The content quality reviewer returned incomplete checks. No unchecked content has been rendered. Retry to resume from the saved drafting stage.",
   STUDIO_NO_SUITABLE_CHANNELS:

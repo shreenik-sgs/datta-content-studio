@@ -37,7 +37,7 @@ const items =
     title: `Teaching ${i + 1}`,
     source: { ...parent.source, kind: "video" as const },
   })) ?? [];
-async function mount(item = parent, children = items) {
+async function mount(item = parent, children = items, canCurate = true) {
   vi.stubGlobal("React", React);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("FormData", window.FormData);
@@ -49,12 +49,14 @@ async function mount(item = parent, children = items) {
   await act(async () =>
     root.render(
       <PlaylistCuration
+        canCurate={canCurate}
         onReload={vi.fn()}
         item={item}
         items={children}
         busy={false}
         send={send}
         open={open}
+        onReview={vi.fn()}
       />,
     ),
   );
@@ -272,4 +274,57 @@ it("uses the full bundle count while recording details are still loading", async
   expect(host.textContent).not.toContain("16 of 2");
   expect(host.querySelector("progress")?.max).toBe(16);
   await act(async () => root.unmount());
+});
+
+it("queues one section-discovery command for the whole bundle only for its curator", async () => {
+  const item: OnlineImport = {
+    ...parent,
+    curation: {
+      requestedBy: "curator",
+      confirmedAt: parent.createdAt,
+      rights: {
+        owner: "Owner",
+        authorizationBasis: "Permission",
+        privacyClass: "PUBLIC",
+        territories: ["WORLDWIDE"],
+        channels: ["youtube"],
+        releaseAt: null,
+        expiresAt: null,
+      },
+      request: {
+        channels: ["youtube"],
+        languages: ["en"],
+        captions: true,
+        allCompleteMessages: true,
+        instructions: "",
+      },
+      items: { "child-0": { packageId: "package", status: "DRAFT" } },
+    },
+  };
+  const { host, root, send } = await mount(item);
+  const button = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent === "Find more Shorts across this bundle",
+  );
+  expect(button).toBeTruthy();
+  await act(async () => button?.click());
+  expect(send).toHaveBeenCalledWith({ action: "discover-playlist", id: parent.id });
+  expect(host.textContent).toContain("existing files and edits stay intact");
+  await act(async () => root.unmount());
+  const approver = await mount(item, items, false);
+  expect(approver.host.textContent).not.toContain("Find more Shorts across this bundle");
+  await act(async () => approver.root.unmount());
+  if (!item.curation) throw Error("missing fixture");
+  item.curation.items["child-0"] = {
+    packageId: "package",
+    status: "GENERATING",
+    outputCount: 2,
+  };
+  const updating = await mount(item);
+  expect(updating.host.querySelector("progress")?.value).toBe(1);
+  expect(updating.host.textContent).toContain("Existing files remain available while updates");
+  const viewFiles = [...updating.host.querySelectorAll("button")].find(
+    (b) => b.textContent === "Review curated content",
+  );
+  expect(viewFiles?.disabled).toBe(false);
+  await act(async () => updating.root.unmount());
 });

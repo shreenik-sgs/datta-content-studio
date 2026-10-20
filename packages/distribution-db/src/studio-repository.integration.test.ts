@@ -158,6 +158,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       language?: "en" | "te";
       channels?: StudioChannel[];
       outputLanguages?: StudioLanguage[];
+      allCompleteMessages?: boolean;
     } = {},
   ) {
     const ctx = identity(input.isTest ?? true);
@@ -196,6 +197,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
         channels: input.channels ?? ["x", "website"],
         captions: false,
         instructions: "Synthetic tests only",
+        ...(input.allCompleteMessages ? { allCompleteMessages: true } : {}),
       },
     });
     return { ctx, reviewer, master, pkg };
@@ -315,6 +317,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       );
       return {
         id,
+        ...(pkg.request.allCompleteMessages ? { messageId: "fixture-message" } : {}),
         channel,
         format,
         aspect,
@@ -362,6 +365,54 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       confirmTeachingIntegrity: true,
     });
   }
+
+  it("queues additional discovery separately, preserves existing drafts and rejects mutation during completion", async () => {
+    const f = await fixture({ channels: ["youtube"], allCompleteMessages: true });
+    const original = await draft(f);
+    await expect(
+      studio.enqueueGeneration(f.reviewer, original.id, {
+        expectedRevision: original.revision,
+        mode: "discover",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      studio.enqueueGeneration(f.ctx, original.id, {
+        expectedRevision: original.revision,
+        mode: "discover",
+        outputIds: [original.outputs[0]?.id ?? ""],
+      }),
+    ).rejects.toThrow("STUDIO_SELECT_OUTPUTS");
+    const queued = await studio.enqueueGeneration(f.ctx, original.id, {
+      expectedRevision: original.revision,
+      mode: "discover",
+    });
+    expect(queued.outputs).toEqual(original.outputs);
+    expect(queued.generation).toEqual({ mode: "discover", outputIds: [] });
+    const lease = await claim(queued);
+    if (!original.provenance) throw Error("Expected original provenance");
+    await expect(
+      studio.completeGeneration(lease, {
+        outputs: original.outputs.map((o) => ({ ...o, title: "Tampered" })),
+        provenance: original.provenance,
+      }),
+    ).rejects.toThrow("STUDIO_DISCOVERY_ISOLATION_REQUIRED");
+    const finished = await studio.completeGeneration(lease, {
+      outputs: original.outputs,
+      provenance: original.provenance,
+    });
+    if (!finished.accepted) throw Error(finished.reason);
+    expect(finished.package.outputs).toEqual(original.outputs);
+    expect(finished.package.status).toBe("DRAFT");
+    expect(finished.package.approval).toBeNull();
+    const lockedFixture = await fixture();
+    const locked = await approved(lockedFixture);
+    await expect(
+      studio.enqueueGeneration(lockedFixture.ctx, locked.id, {
+        expectedRevision: locked.revision,
+        mode: "discover",
+      }),
+    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
+  });
 
   it("adds a missed teaching without touching existing files, and requires generation and review", async () => {
     const f = await fixture({ channels: ["youtube"] });

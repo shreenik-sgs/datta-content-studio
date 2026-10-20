@@ -9,7 +9,13 @@ export type PlaylistCuration = {
   confirmedAt: string;
   items: Record<
     string,
-    { packageId?: string; existing?: boolean; error?: string; status?: string }
+    {
+      packageId?: string;
+      existing?: boolean;
+      error?: string;
+      status?: string;
+      outputCount?: number;
+    }
   >;
 };
 

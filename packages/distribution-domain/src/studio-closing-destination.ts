@@ -7,7 +7,7 @@ import {
 } from "./studio-ending";
 import { studioCanEdit } from "./studio-workflow";
 
-/** Change only the authorized subscription metadata. The v4 card pixels do not contain a URL. */
+/** Change only the authorized subscription metadata. The v4/v5 card pixels contain no URL. */
 export function retargetStudioYoutubeClosing(
   pkg: StudioPackage,
   input: StudioYoutubeClosing,
@@ -32,7 +32,8 @@ export function retargetStudioYoutubeClosing(
     if (
       output.asset &&
       (!card ||
-        card.policy !== STUDIO_CLOSING_CARD_POLICY ||
+        (card.policy !== STUDIO_CLOSING_CARD_POLICY &&
+          card.policy !== "green-subscribe-closing-card-v4") ||
         card.destination !== "youtube" ||
         card.sourceBranding !== pkg.request.sourceBranding ||
         card.youtubeClosing?.url !== before.url ||
