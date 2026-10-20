@@ -1,14 +1,14 @@
 import { type StudioSourceBranding, studioSourceBranding } from "./studio-source-branding";
 import { STUDIO_SOURCE_SCENE_MARGIN_MS } from "./studio-timing";
 
-export const STUDIO_CLOSING_CARD_POLICY = "green-watch-subscribe-closing-card-v5" as const;
+export const STUDIO_CLOSING_CARD_POLICY = "green-channel-watch-subscribe-closing-card-v6" as const;
 export const STUDIO_MORE_TEACHINGS_URL = "https://sgsdattasannidhi.org/";
 export const STUDIO_YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@sgsswamiji";
 /** A package-specific subscription destination; never changes the source attribution. */
 export type StudioYoutubeClosing = { label: string; url: string };
 export const STUDIO_BALA_YOUTUBE_CLOSING: StudioYoutubeClosing = {
   label: "Sri Datta Vijayananda Teertha Swamiji",
-  url: "https://www.youtube.com/@SriDattaVijayanandaTeertha",
+  url: "https://www.youtube.com/@gurubhavanaadpt",
 };
 export function studioYoutubeClosing(value: StudioYoutubeClosing): StudioYoutubeClosing {
   if (
@@ -148,6 +148,7 @@ export function studioAppDestination(
 export type StudioClosingCard = {
   policy:
     | typeof STUDIO_CLOSING_CARD_POLICY
+    | "green-watch-subscribe-closing-card-v5"
     | "green-subscribe-closing-card-v4"
     | "green-subscribe-closing-card-v3"
     | "clean-hold-closing-card-v2"
@@ -173,6 +174,7 @@ export function studioClosingDisplayName(sourceBranding?: StudioSourceBranding):
 export function studioClosingChannel(value: StudioClosingCard): { name: string; url?: string } {
   if (
     value.policy !== STUDIO_CLOSING_CARD_POLICY &&
+    value.policy !== "green-watch-subscribe-closing-card-v5" &&
     value.policy !== "green-subscribe-closing-card-v4" &&
     value.policy !== "green-subscribe-closing-card-v3"
   )
@@ -273,7 +275,8 @@ export function validateStudioClosingCard(value: StudioClosingCard, durationMs: 
   });
   if (
     value.policy === "green-subscribe-closing-card-v3" ||
-    value.policy === "green-subscribe-closing-card-v4"
+    value.policy === "green-subscribe-closing-card-v4" ||
+    value.policy === "green-watch-subscribe-closing-card-v5"
   )
     expected.policy = value.policy;
   // Historical approved renders keep their exact evidence; only new renders use the green policy.

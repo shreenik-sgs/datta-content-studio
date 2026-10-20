@@ -83,16 +83,19 @@ try {
   if (apply) {
     const backup = process.env.STUDIO_RETARGET_BACKUP_PATH;
     if (!backup) throw Error("BACKUP_REQUIRED");
-    await writeFile(backup, JSON.stringify({ bundle: root, packages: rows }), {
-      mode: 0o600,
-      flag: "wx",
-    });
+    await writeFile(
+      backup,
+      JSON.stringify({ at: new Date().toISOString(), bundle: root, packages: rows }),
+      {
+        mode: 0o600,
+        flag: "wx",
+      },
+    );
     for (const { before, next } of changed) {
       const saved = {
         ...next,
         revision: before.revision + 1,
         updatedAt: new Date().toISOString(),
-        feedback: [],
         contributorIds: [...new Set([...next.contributorIds, actor.id])],
       };
       await c.query(

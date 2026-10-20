@@ -8,7 +8,10 @@ import {
 } from "./studio-ending";
 
 function fixture(): StudioPackage {
-  const prior = { label: "Gurubhavana ADPT", url: "https://www.youtube.com/@gurubhavanaadpt" };
+  const prior = {
+    label: "Sri Datta Vijayananda Teertha Swamiji",
+    url: "https://www.youtube.com/@SriDattaVijayanandaTeertha",
+  };
   return {
     status: "DRAFT",
     approval: null,
@@ -23,10 +26,13 @@ function fixture(): StudioPackage {
         captions: [{ language: "en" }],
         aiReview: { fileVersion: 5 },
         presentationReview: {
-          closingCard: studioClosingCardPlan(60000, {
-            sourceBranding: "bala-swamiji",
-            youtubeClosing: prior,
-          }),
+          closingCard: {
+            ...studioClosingCardPlan(60000, {
+              sourceBranding: "bala-swamiji",
+              youtubeClosing: prior,
+            }),
+            policy: "green-watch-subscribe-closing-card-v5",
+          },
         },
       },
     ],
@@ -38,7 +44,7 @@ it("changes only the subscription footer and URL metadata, preserving the review
   const next = retargetStudioYoutubeClosing(pkg, STUDIO_BALA_YOUTUBE_CLOSING);
   expect(pkg).toEqual(before);
   expect(next.outputs[0]?.body).toBe(
-    "A source-faithful teaching.\n\nSubscribe to Sri Datta Vijayananda Teertha Swamiji: https://www.youtube.com/@SriDattaVijayanandaTeertha\n\n@gurubhavanaadpt",
+    "A source-faithful teaching.\n\nSubscribe to Sri Datta Vijayananda Teertha Swamiji: https://www.youtube.com/@gurubhavanaadpt\n\n@gurubhavanaadpt",
   );
   const output = next.outputs[0];
   const original = pkg.outputs[0];
@@ -84,6 +90,15 @@ it("refuses ambiguous copy instead of replacing arbitrary source references", ()
   output.body = "A reference to https://www.youtube.com/@gurubhavanaadpt";
   expect(() => retargetStudioYoutubeClosing(pkg, STUDIO_BALA_YOUTUBE_CLOSING)).toThrow(
     "STUDIO_CLOSING_FOOTER_REVIEW_REQUIRED",
+  );
+});
+it("requires rendering when the old destination is embedded in v6 pixels", () => {
+  const pkg = fixture();
+  const card = pkg.outputs[0]?.presentationReview?.closingCard;
+  if (!card) throw Error("Missing closing card");
+  card.policy = "green-channel-watch-subscribe-closing-card-v6";
+  expect(() => retargetStudioYoutubeClosing(pkg, STUDIO_BALA_YOUTUBE_CLOSING)).toThrow(
+    "STUDIO_CLOSING_RETARGET_REQUIRES_RENDER",
   );
 });
 it("sets the destination on a failed no-excerpt package without generating or approving it", () => {

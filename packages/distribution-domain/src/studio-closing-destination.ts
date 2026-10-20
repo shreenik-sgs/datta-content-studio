@@ -1,6 +1,5 @@
 import type { StudioPackage } from "./intelligent-content";
 import {
-  STUDIO_CLOSING_CARD_POLICY,
   type StudioYoutubeClosing,
   studioClosingDisplayName,
   studioYoutubeClosing,
@@ -32,7 +31,7 @@ export function retargetStudioYoutubeClosing(
     if (
       output.asset &&
       (!card ||
-        (card.policy !== STUDIO_CLOSING_CARD_POLICY &&
+        (card.policy !== "green-watch-subscribe-closing-card-v5" &&
           card.policy !== "green-subscribe-closing-card-v4") ||
         card.destination !== "youtube" ||
         card.sourceBranding !== pkg.request.sourceBranding ||

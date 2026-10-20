@@ -229,7 +229,7 @@ it("keeps source ownership and uses the confirmed subscription channel for every
         sourceBranding: "bala-swamiji",
         youtubeClosing: {
           label: "Sri Datta Vijayananda Teertha Swamiji",
-          url: "https://www.youtube.com/@SriDattaVijayanandaTeertha",
+          url: "https://www.youtube.com/@gurubhavanaadpt",
         },
       }),
       rights: expect.objectContaining({

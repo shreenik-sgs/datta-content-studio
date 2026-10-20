@@ -97,48 +97,78 @@ export async function studioClosingCard(
     width: number,
     height: number,
     color: string,
+    spacing = 0,
   ) => {
     const bytes = await sharp({
       text: {
         text: `<span foreground="${color}">${escapeText(text)}</span>`,
         font: `sans-serif ${font}`,
         width,
-        height,
+        dpi: 72,
+        spacing,
         align: "centre",
         rgba: true,
       },
     })
       .png()
       .toBuffer();
-    const size = await sharp(bytes).metadata();
-    return { bytes, width: size.width ?? width };
+    // Height-based text autofit enlarged short lines and crowded the card.
+    // Keep the requested type size; shrink only an unusually long destination.
+    const fitted = await sharp(bytes)
+      .resize({ width, height, fit: "inside", withoutEnlargement: true })
+      .png()
+      .toBuffer();
+    const size = await sharp(fitted).metadata();
+    return { bytes: fitted, width: size.width ?? width };
   };
   // Keep the two related actions short enough to read during the five-second closing card.
   const label = await textBlock(
-    destination === "youtube" ? studioClosingDisplayName(sourceBranding) : "SGS Datta Sannidhi",
+    destination === "youtube"
+      ? sourceBranding === "bala-swamiji"
+        ? "Sri Datta Vijayananda\nTeertha Swamiji"
+        : studioClosingDisplayName(sourceBranding)
+      : "SGS Datta Sannidhi",
     54,
     790,
     168,
     "#fff8ec",
+    24,
   );
   const watch =
     destination === "youtube"
       ? await textBlock("Watch full videos on this channel", 40, 820, 52, "#fff8ec")
       : undefined;
+  // Render the package's actual destination, not a hard-coded source handle.
+  // Retargeting these v6 pixels requires a preserved-export closing-card refresh.
+  const channel =
+    destination === "youtube" && target
+      ? await textBlock(
+          new URL(target.url).pathname.startsWith("/@")
+            ? new URL(target.url).pathname.slice(1)
+            : target.label,
+          36,
+          880,
+          48,
+          accent,
+        )
+      : undefined;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920">
-    <defs><linearGradient id="green" x2="0" y2="1"><stop stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient><clipPath id="photo"><circle cx="500" cy="580" r="250"/></clipPath></defs>
+    <defs><linearGradient id="green" x2="0" y2="1"><stop stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient><clipPath id="photo"><circle cx="500" cy="500" r="250"/></clipPath></defs>
     <rect width="1080" height="1920" fill="url(#green)"/>
-    <circle cx="500" cy="580" r="262" fill="none" stroke="${accent}" stroke-width="2"/>
-    <image href="data:image/png;base64,${portrait.toString("base64")}" x="250" y="330" width="500" height="500" clip-path="url(#photo)"/>
-    ${sourceBranding === "bala-swamiji" ? "" : `<image href="data:image/png;base64,${logo.toString("base64")}" x="454" y="170" width="92" height="92"/>`}
-    <rect x="260" y="1200" width="480" height="94" rx="47" fill="${accent}"/>
-    <text x="500" y="1262" text-anchor="middle" font-family="sans-serif" font-size="44" font-weight="bold" fill="#173c36">${destination === "youtube" ? "Tap Subscribe" : "Discover the app"}</text>
+    <circle cx="500" cy="500" r="262" fill="none" stroke="${accent}" stroke-width="2"/>
+    <image href="data:image/png;base64,${portrait.toString("base64")}" x="250" y="250" width="500" height="500" clip-path="url(#photo)"/>
+    ${sourceBranding === "bala-swamiji" ? "" : `<image href="data:image/png;base64,${logo.toString("base64")}" x="454" y="120" width="92" height="92"/>`}
+    <rect x="260" y="1234" width="480" height="94" rx="47" fill="${accent}"/>
+    <text x="500" y="1296" text-anchor="middle" font-family="sans-serif" font-size="44" font-weight="bold" fill="#173c36">${destination === "youtube" ? "Tap Subscribe" : "Discover the app"}</text>
   </svg>`;
   // The authentic portrait doubles as the provisional channel mark for this speaker.
   // Keep the caption band empty while the last two seconds of source speech continue.
   return sharp(Buffer.from(svg))
     .composite([
-      { input: label.bytes, left: Math.round(500 - label.width / 2), top: 940 },
+      ...(channel
+        ? [{ input: channel.bytes, left: Math.round(500 - channel.width / 2), top: 810 }]
+        : []),
+      { input: label.bytes, left: Math.round(500 - label.width / 2), top: 930 },
       ...(watch
         ? [{ input: watch.bytes, left: Math.round(500 - watch.width / 2), top: 1128 }]
         : []),

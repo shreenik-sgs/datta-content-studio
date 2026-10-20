@@ -352,3 +352,37 @@ it("adds a readable full-video invitation without encroaching on the final spoke
   ).stats();
   expect(captions.channels.slice(0, 3).every((c) => c.stdev < 4)).toBe(true);
 });
+
+it("prints the selected destination handle while preserving the rest of the closing card", async () => {
+  const render = (handle: string) =>
+    studioClosingCard(
+      Buffer.alloc(0),
+      "forest",
+      "youtube",
+      {
+        label: "Sri Datta Vijayananda Teertha Swamiji",
+        url: `https://www.youtube.com/@${handle}`,
+      },
+      "bala-swamiji",
+    );
+  const first = await render("SriDattaVijayanandaTeertha");
+  const second = await render("gurubhavanaadpt");
+  const region = { left: 60, top: 805, width: 900, height: 64 };
+  const before = await sharp(first).extract(region).raw().toBuffer();
+  const after = await sharp(second).extract(region).raw().toBuffer();
+  expect(before.equals(after)).toBe(false);
+  const clearHandle = async (bytes: Buffer) =>
+    sharp(bytes)
+      .composite([
+        {
+          input: {
+            create: { width: 1080, height: 64, channels: 4, background: "#000" },
+          },
+          left: 0,
+          top: 805,
+        },
+      ])
+      .raw()
+      .toBuffer();
+  expect((await clearHandle(first)).equals(await clearHandle(second))).toBe(true);
+});
