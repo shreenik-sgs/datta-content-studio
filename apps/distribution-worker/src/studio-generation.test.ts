@@ -366,6 +366,9 @@ describe("automatic Studio generation with real media", () => {
       ]);
       expect(tailAudio.some((byte) => byte !== 0)).toBe(false);
       review.mockResolvedValue(checks);
+      const editorialCalls = vi.mocked(quality.reviewStudioContent).mock.calls.length;
+      const boundaryCalls = vi.mocked(boundaries.reviewStudioClipBoundaries).mock.calls.length;
+      const presentationCalls = review.mock.calls.length;
       const imageGeneration = vi
         .spyOn(contextualImages, "studioContextIllustrationShots")
         .mockRejectedValue(Error("A closing-only repair must not create new imagery"));
@@ -403,6 +406,23 @@ describe("automatic Studio generation with real media", () => {
         },
       });
       expect(imageGeneration).not.toHaveBeenCalled();
+      expect(quality.reviewStudioContent).toHaveBeenCalledTimes(editorialCalls);
+      expect(boundaries.reviewStudioClipBoundaries).toHaveBeenCalledTimes(boundaryCalls);
+      expect(review).toHaveBeenCalledTimes(presentationCalls);
+      const refreshed = replacement.outputs[0];
+      const original = result.outputs[0];
+      expect(refreshed?.captionCues).toEqual(original?.captionCues);
+      expect(refreshed?.captions).toEqual(original?.captions);
+      expect(refreshed?.mediaEdits).toEqual(original?.mediaEdits);
+      expect(refreshed?.aiReview?.reviewedAt).toEqual(original?.aiReview?.reviewedAt);
+      expect(refreshed?.presentationReview?.closingRefresh).toMatchObject({
+        policy: "preserved-export-closing-v1",
+        previousSha256: original?.asset?.sha256,
+        previousFileVersion: 1,
+      });
+      expect(
+        refreshed?.presentationReview?.closingRefresh?.minimumCaptionSsim,
+      ).toBeGreaterThanOrEqual(0.995);
       expect(replacement.outputs[0]?.presentationReview?.closingCard).toMatchObject({
         destination: "youtube",
         channelUrl: youtubeClosing?.url ?? "https://www.youtube.com/@sgsswamiji",

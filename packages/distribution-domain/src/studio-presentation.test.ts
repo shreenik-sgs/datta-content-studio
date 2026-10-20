@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { studioClosingCardPlan } from "./studio-ending";
 import {
   type StudioPresentationReview,
   type StudioSourceScreen,
@@ -182,6 +183,33 @@ it("binds passing quality evidence to the exact source, rendered bytes, and file
     durationMs: 30000,
   };
   expect(() => validateStudioPresentationReview(evidence, binding)).not.toThrow();
+  const closingRefresh = {
+    policy: "preserved-export-closing-v1" as const,
+    previousSha256: "c".repeat(64),
+    previousFileVersion: 1,
+    cardSha256: "d".repeat(64),
+    audioSha256: "e".repeat(64),
+    verifiedAt: new Date().toISOString(),
+    unchangedUntilMs: 28000,
+    minimumFrameSsim: 0.998,
+    minimumCaptionSsim: 0.999,
+  };
+  const refreshed = { ...evidence, closingCard: studioClosingCardPlan(30000), closingRefresh };
+  expect(() => validateStudioPresentationReview(refreshed, binding)).not.toThrow();
+  for (const change of [
+    { previousFileVersion: 2 },
+    { unchangedUntilMs: 27900 },
+    { minimumFrameSsim: 0.98 },
+    { minimumCaptionSsim: Number.NaN },
+    { previousSha256: "invalid" },
+    { verifiedAt: "not-a-date" },
+  ])
+    expect(() =>
+      validateStudioPresentationReview(
+        { ...refreshed, closingRefresh: { ...closingRefresh, ...change } },
+        binding,
+      ),
+    ).toThrow("STUDIO_CLOSING_PRESERVATION_FAILED");
   for (const change of [
     { fileVersion: 3 },
     { renderedSha256: "c".repeat(64) },

@@ -100,3 +100,24 @@ The curator's **Find more Shorts across this bundle** action queues `mode: "disc
 The green `green-watch-subscribe-closing-card-v5` template adds “Watch full videos on this channel” above “Tap Subscribe”. Sri Datta Vijayananda Teertha Swamiji's full name and authentic portrait remain. The template is shared in code; already exported MP4s contain pixels and need an explicit selected-file `mode: "closing"` update. Changing the template alone does not change those files. This update preserves source passages, manual edits, English CC and illustration choices, renders a new file version and runs the normal quality checks. It never grants approval. Bundle counts and the file-review link retain existing output availability while updates are queued or running.
 
 Operational acceptance: protect a before snapshot; verify all retained output identities, passages, edits, captions and copy; check every replacement asset hash, portrait dimensions, duration and review evidence; inspect representative actual closing frames. Keep results as drafts. A passing code test suite is not a claim that an asynchronous series render or media transfer has finished.
+# Closing-card-only recovery
+
+The ordinary `closing` action now updates the reviewed MP4 instead of rebuilding its
+source passage. It retains the exact source span, manual edit controls, artwork,
+caption cues, caption files, title and description. Audio packets are copied without
+re-encoding. Every pre-card frame and every subtitle-band frame is compared with the
+previous export (minimum per-frame SSIM 0.995). The final card replaces only the
+region above the subtitle band, so the final spoken captions remain visible.
+
+`presentationReview.closingRefresh` records the prior asset hash/version, shared
+card hash, audio hash, comparison minima and verification time. Existing AI review
+findings and their dates are retained as inherited content evidence, not represented
+as a newly performed AI review. Human approval remains separate and unchanged.
+Explicit opening-card or illustration-timing changes still use the full rendering
+and review path. A different legacy closing duration fails closed rather than
+trimming or extending the saved speech automatically.
+
+On `STUDIO_CLOSING_PRESERVATION_FAILED`, retain the existing draft and inspect the
+comparison; do not bypass the check. On `STUDIO_CLOSING_TIMELINE_CHANGED`, use an
+explicit editor render after reviewing the timeline. Provider failures cannot stop
+a card-only update because that path does not call a speech, translation or AI service.

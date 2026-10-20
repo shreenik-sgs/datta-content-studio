@@ -14,7 +14,7 @@ import {
   type StudioProvenance,
   studioSourceMatches,
 } from "./intelligent-content";
-import { parseStudioAssetKey } from "./studio-assets";
+import { MAX_STUDIO_VIDEO_BYTES, parseStudioAssetKey } from "./studio-assets";
 import { validateStudioAiReviewEvidence } from "./studio-content-review";
 import { validateStudioDiscoveryCoverage } from "./studio-discovery";
 import { studioRenderedDurationMs, studioYoutubeClosing } from "./studio-ending";
@@ -106,7 +106,7 @@ export function validateStudioAsset(
   const parts = asset?.storageKey?.split("/");
   const parsed = asset && parseStudioAssetKey(asset.storageKey);
   const types = {
-    "video/mp4": ["mp4", 100 * 1024 * 1024],
+    "video/mp4": ["mp4", MAX_STUDIO_VIDEO_BYTES],
     "image/png": ["png", 10 * 1024 * 1024],
     "text/markdown": ["md", 2 * 1024 * 1024],
     "text/plain": ["txt", 2 * 1024 * 1024],

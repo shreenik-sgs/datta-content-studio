@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import {
   MASTER_MIME_TYPES,
   MAX_ONLINE_MASTER_BYTES,
+  MAX_STUDIO_VIDEO_BYTES,
   parseDerivedAssetKey,
   parseStudioAssetKey,
 } from "@satsang/distribution-domain";
@@ -25,7 +26,7 @@ export function validateDerived(asset: DerivedPrivateAsset): number {
   const parsed = parseDerivedAssetKey(asset.storageKey);
   const studio = parseStudioAssetKey(asset.storageKey);
   const studioSpecs = {
-    mp4: { mime: "video/mp4", maximum: 100 * 1024 * 1024 },
+    mp4: { mime: "video/mp4", maximum: MAX_STUDIO_VIDEO_BYTES },
     png: { mime: "image/png", maximum: 10 * 1024 * 1024 },
     md: { mime: "text/markdown", maximum: 2 * 1024 * 1024 },
     vtt: { mime: "text/vtt", maximum: 1024 * 1024 },

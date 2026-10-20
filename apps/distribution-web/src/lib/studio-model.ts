@@ -232,6 +232,10 @@ const messages: Record<string, string> = {
     "The rendered audio did not meet the speech-volume or clipping checks. This file has been held for correction; your existing files are retained.",
   STUDIO_PROVIDER_UNAVAILABLE:
     "The AI service is temporarily unavailable. Your source, review history and completed generation work are saved. Retry resumes unfinished work.",
+  STUDIO_CLOSING_PRESERVATION_FAILED:
+    "The closing-card update did not preserve the existing audio, picture or subtitles closely enough. Your saved Short is unchanged. Ask an administrator to inspect the preservation check before retrying.",
+  STUDIO_CLOSING_TIMELINE_CHANGED:
+    "This saved Short uses a different ending duration. A card-only update cannot change its timeline. Open the editor to review a full render; your existing file and edits are retained.",
   STUDIO_GENERATION_FAILED:
     "Generation could not finish. Check service readiness and regenerate the package.",
   GENERATION_FAILED:

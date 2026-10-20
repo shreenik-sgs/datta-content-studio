@@ -77,6 +77,7 @@ import {
   generateCheckpointedStudioPlan,
   studioFingerprint,
 } from "./studio-checkpoints.js";
+import { refreshStudioClosingCards } from "./studio-closing-refresh.js";
 import {
   STUDIO_EDITORIAL_REVIEW_POLICY,
   StudioContentQualityError,
@@ -292,6 +293,9 @@ export async function generateStudioPackage(input: {
       )
     ).appLinks;
   const scope = claim.package.generation;
+  if (input.closingOnly && !input.steadyOpening && !input.illustrationTimings?.length) {
+    return refreshStudioClosingCards({ ...input, ...(appLinks ? { appLinks } : {}) });
+  }
   if (scope?.mode === "discover") {
     const previous = claim.package;
     const result = await generateStudioPackage({

@@ -7,6 +7,9 @@ import {
   type StudioOutput,
 } from "./intelligent-content";
 
+/** High-fidelity 1080p, three-minute exports can exceed the old 100 MiB preview ceiling. */
+export const MAX_STUDIO_VIDEO_BYTES = 512 * 1024 * 1024;
+
 export type StudioAssetIdentity = {
   fileVersion?: number;
   renderId?: string;

@@ -4,6 +4,7 @@ import type { createIntelligentContentRepository } from "@satsang/distribution-d
 import type { StudioGenerationProgress } from "@satsang/distribution-domain";
 import { studioCapacity } from "./studio-capacity.js";
 import { StudioNoSuitableContentError } from "./studio-checkpoints.js";
+import { StudioClosingPreservationError } from "./studio-closing-refresh.js";
 import { StudioContentQualityError } from "./studio-content-review.js";
 import { generateStudioPackage } from "./studio-generation.js";
 import { StudioProviderError } from "./studio-provider-error.js";
@@ -140,6 +141,13 @@ export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise
         ...(error instanceof StudioContentQualityError ? { reviewIssues: error.checks } : {}),
         ...(error instanceof StudioNoSuitableContentError
           ? { excludedChannels: error.excludedChannels }
+          : {}),
+        ...(error instanceof StudioClosingPreservationError
+          ? {
+              presentationIssues: [
+                `Closing-card preservation failed for ${error.check}${error.minimum === undefined ? "" : ` (minimum frame similarity ${error.minimum})`}. The existing draft was retained.`,
+              ],
+            }
           : {}),
       });
     }

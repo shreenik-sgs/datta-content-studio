@@ -55,6 +55,18 @@ export type StudioSourceScreen = {
   scenes: StudioPortraitScene[];
 };
 export type StudioPresentationReview = {
+  /** Content review is inherited only after comparing the existing export with a card-only revision. */
+  closingRefresh?: {
+    policy: "preserved-export-closing-v1";
+    previousSha256: string;
+    previousFileVersion: number;
+    cardSha256: string;
+    verifiedAt: string;
+    unchangedUntilMs: number;
+    audioSha256: string;
+    minimumFrameSsim: number;
+    minimumCaptionSsim: number;
+  };
   closingCard?: StudioClosingCard;
   openingCard?: StudioOpeningCard;
   illustrationMode?: "context-generated";
@@ -313,6 +325,23 @@ export function validateStudioPresentationReview(
     throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
   validateStudioSourceScreen(value.source, input.durationMs);
   if (value.closingCard) validateStudioClosingCard(value.closingCard, input.durationMs);
+  const refresh = value.closingRefresh;
+  if (
+    refresh &&
+    (refresh.policy !== "preserved-export-closing-v1" ||
+      ![refresh.previousSha256, refresh.cardSha256, refresh.audioSha256].every((v) =>
+        /^[a-f0-9]{64}$/.test(v),
+      ) ||
+      !Number.isSafeInteger(refresh.previousFileVersion) ||
+      refresh.previousFileVersion < 1 ||
+      refresh.previousFileVersion >= input.fileVersion ||
+      !Number.isFinite(Date.parse(refresh.verifiedAt)) ||
+      refresh.unchangedUntilMs !== value.closingCard?.startMs ||
+      ![refresh.minimumFrameSsim, refresh.minimumCaptionSsim].every(
+        (v) => Number.isFinite(v) && v >= 0.995 && v <= 1,
+      ))
+  )
+    throw Error("STUDIO_CLOSING_PRESERVATION_FAILED");
   const opening = value.openingCard;
   if (opening) {
     validateStudioOpeningCard(opening, input.durationMs, value.source.scenes);
