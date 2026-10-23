@@ -14,6 +14,7 @@ import {
   studioAppLinks,
   studioDefaultAccount,
   studioVisualPreference,
+  studioYoutubeClosing,
 } from "@satsang/distribution-domain";
 import { z } from "zod";
 import { json, readBoundedBody } from "../../../lib/http";
@@ -83,6 +84,14 @@ const accountSchema = z
   })
   .strict();
 const commandSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("youtube-target"),
+      expectedRevision: z.string().length(64),
+      label: z.string().trim().min(1).max(80),
+      url: z.string().max(2048),
+    })
+    .strict(),
   z
     .object({
       action: z.literal("app-links"),
@@ -180,6 +189,8 @@ function projection(config: StudioProviderConfig, isTest: boolean) {
         eligibilityVerified: account.eligibilityVerified,
         defaults: defaults.success ? defaults.data : {},
         hasToken: !!account.accessToken,
+        connectionPending: account.connectionPending === true,
+        channelUrl: account.channelUrl,
         hasWebhookAppSecret: !!account.webhookAppSecret,
         hasWebhookVerifyToken: !!account.webhookVerifyToken,
         blocker: studioProviderAccountBlock(account),
@@ -219,7 +230,28 @@ export async function POST(request: Request) {
     );
     const path = studioSettingsPath(process.env, auth.context.isTest);
     const config = await loadStudioProviderConfig(path);
-    if (command.action === "app-links") {
+    if (command.action === "youtube-target") {
+      const target = studioYoutubeClosing({ label: command.label, url: command.url });
+      if (config.accounts.some((a) => a.platform === "youtube" && a.channelUrl === target.url))
+        return json(
+          { error: "This YouTube destination is already saved. Select it from Saved account." },
+          400,
+        );
+      config.accounts.push({
+        id: randomUUID(),
+        label: target.label,
+        channelUrl: target.url,
+        platform: "youtube",
+        transport: "buffer",
+        world: "PRODUCTION",
+        providerAccountId: "",
+        accessToken: "",
+        enabled: false,
+        eligibilityVerified: false,
+        connectionPending: true,
+        isDefault: !studioDefaultAccount(config.accounts, "youtube"),
+      });
+    } else if (command.action === "app-links") {
       config.appLinks = studioAppLinks(command.appLinks);
     } else if (command.action === "uploads") config.maxMasterUploadMb = command.maxMasterUploadMb;
     else if (command.action === "visuals")
@@ -255,7 +287,7 @@ export async function POST(request: Request) {
               a.providerAccountId === incoming.providerAccountId,
           );
       if (incoming.id && !old) return json({ error: "ACCOUNT_NOT_FOUND" }, 400);
-      if (old && old.providerAccountId !== incoming.providerAccountId)
+      if (old && !old.connectionPending && old.providerAccountId !== incoming.providerAccountId)
         return json({ error: "ACCOUNT_DESTINATION_IMMUTABLE" }, 400);
       if (
         config.accounts.some(
@@ -289,6 +321,8 @@ export async function POST(request: Request) {
                   ? ("telegram" as const)
                   : ("buffer" as const),
           accessToken,
+          connectionPending: false,
+          ...(old?.channelUrl ? { channelUrl: old.channelUrl } : {}),
           ...(incoming.webhookAppSecret?.trim() || old?.webhookAppSecret
             ? { webhookAppSecret: incoming.webhookAppSecret?.trim() || old?.webhookAppSecret }
             : {}),

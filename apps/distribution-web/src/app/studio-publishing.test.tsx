@@ -301,3 +301,45 @@ it("preselects the default, submits the chosen alternative and locks a queued de
     expect(post(host)?.disabled).toBe(true);
   });
 });
+
+it("lets an approver select GuruBhavanamADPT among accounts but blocks it until connected", async () => {
+  const data = detail(true);
+  const connection = data.readiness.channels[0];
+  if (!connection) throw Error("MISSING_CONNECTION");
+  connection.accounts = [
+    { id: "connected", label: "Connected channel", isDefault: true, ready: true, reason: null },
+    {
+      id: "guru",
+      label: "GuruBhavanamADPT",
+      isDefault: false,
+      ready: false,
+      reason: "CHANNEL_NOT_CONNECTED",
+      connectionPending: true,
+      channelUrl: "https://www.youtube.com/@gurubhavana",
+    },
+  ];
+  await render(data, async (host, publish) => {
+    const selector = host.querySelector("select");
+    expect(selector?.value).toBe("connected");
+    await act(async () => {
+      if (selector) {
+        selector.value = "guru";
+        selector.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    expect(selector?.value).toBe("guru");
+    expect(host.textContent).toContain("Connection required");
+    expect(host.querySelector('a[href="https://www.youtube.com/@gurubhavana"]')).not.toBeNull();
+    expect(post(host)?.disabled).toBe(true);
+    await act(async () => post(host)?.click());
+    expect(publish).not.toHaveBeenCalled();
+    await act(async () => {
+      if (selector) {
+        selector.value = "connected";
+        selector.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await act(async () => post(host)?.click());
+    expect(publish).toHaveBeenCalledWith({ youtube: "connected" });
+  });
+});

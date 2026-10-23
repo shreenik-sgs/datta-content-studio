@@ -241,6 +241,8 @@ export type StudioReadiness = {
       ready: boolean;
       reason: string | null;
       privacy?: string;
+      connectionPending?: boolean;
+      channelUrl?: string;
     }[];
   }[];
   isTest: boolean;
@@ -290,7 +292,12 @@ export function studioDefaultAccount<T extends { platform: StudioChannel; isDefa
 
 /** Resolve an explicit destination per platform before queuing; never accept an arbitrary ID. */
 export function studioPublishingAccounts(
-  configured: readonly { id: string; platform: StudioChannel; isDefault?: boolean }[],
+  configured: readonly {
+    id: string;
+    platform: StudioChannel;
+    isDefault?: boolean;
+    connectionPending?: boolean;
+  }[],
   channels: readonly StudioChannel[],
   selected: Partial<Record<StudioChannel, string>>,
   isTest: boolean,
@@ -309,6 +316,7 @@ export function studioPublishingAccounts(
       ? configured.find((a) => a.id === id && a.platform === channel)
       : studioDefaultAccount(configured, channel);
     if (id && !account) throw Error("STUDIO_PUBLISH_ACCOUNT_INVALID");
+    if (account?.connectionPending) throw Error("STUDIO_PUBLISH_ACCOUNT_REQUIRED");
     if (!account && (!isTest || configured.some((a) => a.platform === channel)))
       throw Error("STUDIO_PUBLISH_ACCOUNT_REQUIRED");
     if (account) result[channel] = account.id;

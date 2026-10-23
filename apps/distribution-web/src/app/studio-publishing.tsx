@@ -50,7 +50,7 @@ export function StudioPublishing({
   });
   const selectionValid = channels.every((channel) => {
     const { connection, account, id } = destination(channel);
-    return id ? Boolean(account) : !connection?.accounts?.length;
+    return id ? Boolean(account) && !account?.connectionPending : !connection?.accounts?.length;
   });
   const disabled =
     busy ||
@@ -109,7 +109,7 @@ export function StudioPublishing({
               </strong>
               {channel !== "website" && Boolean(connection?.accounts?.length || id) && (
                 <label>
-                  {studioChannelLabel(channel)} account
+                  {studioChannelLabel(channel)} target account
                   <select
                     value={id ?? ""}
                     disabled={busy || !canPublish || Boolean(pinned)}
@@ -126,11 +126,29 @@ export function StudioPublishing({
                       <option key={a.id} value={a.id}>
                         {a.label}
                         {a.isDefault ? " · Default" : ""}
-                        {!value.isTest && !a.ready ? " · Setup required" : ""}
+                        {a.connectionPending
+                          ? " · Connection required"
+                          : !value.isTest && !a.ready
+                            ? " · Setup required"
+                            : ""}
                       </option>
                     ))}
                   </select>
                 </label>
+              )}
+              {account?.channelUrl && (
+                <p>
+                  Destination:{" "}
+                  <a href={account.channelUrl} target="_blank" rel="noreferrer">
+                    {account.channelUrl}
+                  </a>
+                </p>
+              )}
+              {account?.connectionPending && (
+                <p>
+                  {account.label} is saved as a target. An Admin must connect this account in
+                  Curation &amp; Publishing before it can be used for posting.
+                </p>
               )}
               {account?.privacy && (
                 <p>
@@ -138,7 +156,7 @@ export function StudioPublishing({
                 </p>
               )}
               {pinned && <p>This destination is locked to the saved publishing request.</p>}
-              {!selectionValid && id && !account && (
+              {id && !account && (
                 <p>
                   Refresh the saved connections. This destination cannot be replaced automatically.
                 </p>

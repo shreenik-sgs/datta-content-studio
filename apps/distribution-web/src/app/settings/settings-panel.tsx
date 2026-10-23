@@ -21,6 +21,8 @@ type Account = {
   hasWebhookAppSecret: boolean;
   hasWebhookVerifyToken: boolean;
   blocker: string | null;
+  connectionPending?: boolean;
+  channelUrl?: string;
   defaults?: {
     youtube?: { privacy: string; madeForKids: boolean; isAiGenerated: boolean; categoryId: string };
     tiktok?: { automaticPostingVerified: boolean; isAiGenerated: boolean };
@@ -88,14 +90,22 @@ export function CurationSettings() {
       const data = await r.json();
       if (!r.ok) throw Error(data.error);
       setValue(data);
-      setSelected(null);
+      if (command.action === "youtube-target") {
+        setSelected("youtube");
+        setSelectedAccountId(
+          data.accounts.find((a: Account) => !value.accounts.some((old) => old.id === a.id))?.id ??
+            null,
+        );
+      } else setSelected(null);
       setDisconnect(false);
       setMessage(
-        command.action === "visuals"
-          ? "Visual preference saved. Future generation and regeneration will use it automatically."
-          : command.action === "uploads"
-            ? "Upload limit saved. It applies to new uploads; existing masters are unchanged."
-            : "Settings saved. Stored credentials are never displayed. Connection validity has not been tested with the provider.",
+        command.action === "youtube-target"
+          ? "Target account saved. It is available in the publishing selector; connect it below before posting."
+          : command.action === "visuals"
+            ? "Visual preference saved. Future generation and regeneration will use it automatically."
+            : command.action === "uploads"
+              ? "Upload limit saved. It applies to new uploads; existing masters are unchanged."
+              : "Settings saved. Stored credentials are never displayed. Connection validity has not been tested with the provider.",
       );
     } catch (e) {
       setMessage(e instanceof Error ? studioMessage(e.message) : "Save failed.");
@@ -356,6 +366,50 @@ export function CurationSettings() {
       <section className="panel">
         <h2>Publishing connections</h2>
         <p>
+          Save multiple target accounts here. In step 6, choose one account for each channel before
+          posting.
+        </p>
+        <details>
+          <summary>Add a YouTube target account</summary>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              void save({
+                action: "youtube-target",
+                label: String(data.get("targetLabel") ?? ""),
+                url: String(data.get("targetUrl") ?? ""),
+              });
+            }}
+          >
+            <fieldset disabled={busy || !value.writable}>
+              <label>
+                Target account name
+                <input
+                  name="targetLabel"
+                  required
+                  maxLength={80}
+                  placeholder="e.g. GuruBhavanamADPT"
+                />
+              </label>
+              <label>
+                YouTube channel URL
+                <input
+                  name="targetUrl"
+                  required
+                  type="url"
+                  maxLength={2048}
+                  placeholder="https://www.youtube.com/@gurubhavana"
+                />
+              </label>
+              <button type="submit" className="button">
+                Save target account
+              </button>
+            </fieldset>
+            <p>You can save the destination first and connect its Buffer account later.</p>
+          </form>
+        </details>
+        <p>
           Server publishing: {value.runtime.publishingEnabled ? "Enabled" : "Disabled"}. Saving a
           token does not enable server publishing or prove the token works.
         </p>
@@ -385,11 +439,19 @@ export function CurationSettings() {
                   </h3>
                   <p>
                     {a
-                      ? a.blocker
-                        ? "Saved · setup required"
-                        : "Configured · not live-tested"
+                      ? a.connectionPending
+                        ? "Connection required"
+                        : a.blocker
+                          ? "Saved · setup required"
+                          : "Configured · not live-tested"
                       : "Not configured"}
                   </p>
+                  {accounts.map((account) => (
+                    <p key={account.id}>
+                      {account.label}
+                      {account.connectionPending ? " · Connection required" : ""}
+                    </p>
+                  ))}
                   <p>
                     {accounts.length} saved account{accounts.length === 1 ? "" : "s"}
                     {a ? ` · Default: ${a.label}` : ""}
@@ -427,8 +489,8 @@ export function CurationSettings() {
           ))}
         </div>
         <p className="muted">
-          YouTube Shorts use the connection above.{" "}
-          <a href="/admin/youtube">Manage the separate native YouTube connection →</a>
+          YouTube Shorts use the connection above. These accounts are separate from YouTube
+          livestream connections.
         </p>
       </section>
       {selected && (
@@ -454,6 +516,7 @@ export function CurationSettings() {
                     <option key={a.id} value={a.id}>
                       {a.label}
                       {a.isDefault ? " · Default" : ""}
+                      {a.connectionPending ? " · Connection required" : ""}
                     </option>
                   ))}
               </select>
@@ -471,6 +534,20 @@ export function CurationSettings() {
               </button>
             )}
           </div>
+          {account?.channelUrl && (
+            <p>
+              Target:{" "}
+              <a href={account.channelUrl} target="_blank" rel="noreferrer">
+                {account.label} · {account.channelUrl}
+              </a>
+            </p>
+          )}
+          {account?.connectionPending && (
+            <p>
+              This target is saved. Connect its YouTube channel in Buffer, then choose that channel
+              below to finish setup.
+            </p>
+          )}
           {selected === "youtube" && (
             <div className="panel">
               <h3>Connect a YouTube channel</h3>
@@ -548,7 +625,7 @@ export function CurationSettings() {
                       : "Buffer channel ID"}
                 <input
                   name="providerAccountId"
-                  readOnly={Boolean(account)}
+                  readOnly={Boolean(account && !account.connectionPending)}
                   required
                   maxLength={160}
                   defaultValue={account?.providerAccountId ?? ""}
@@ -573,8 +650,13 @@ export function CurationSettings() {
                   }
                 />
               </label>
-              {selected === "youtube" && !account && <BufferChannelPicker platform="youtube" />}
-              {account && (
+              {selected === "youtube" && (!account || account.connectionPending) && (
+                <BufferChannelPicker
+                  platform="youtube"
+                  preserveLabel={account?.connectionPending === true}
+                />
+              )}
+              {account && !account.connectionPending && (
                 <p>
                   To use a different channel ID, add another account. Existing publishing requests
                   keep this destination.

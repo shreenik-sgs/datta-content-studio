@@ -118,3 +118,41 @@ it("supports several accounts per platform with one explicit default and safe la
       "STUDIO_PROVIDER_CONFIG_INVALID",
     );
 });
+
+it("allows unconnected YouTube targets only when disabled and without provider credentials", async () => {
+  const pending = {
+    id: "guru",
+    label: "GuruBhavanamADPT",
+    channelUrl: "https://www.youtube.com/@gurubhavana",
+    platform: "youtube",
+    transport: "buffer",
+    world: "PRODUCTION",
+    providerAccountId: "",
+    accessToken: "",
+    enabled: false,
+    eligibilityVerified: false,
+    connectionPending: true,
+  };
+  const loaded = await loadStudioProviderConfig(await file({ ...config, accounts: [pending] }));
+  expect(
+    studioProviderReadiness(loaded, false).find((c) => c.channel === "youtube")?.accounts?.[0],
+  ).toMatchObject({
+    id: "guru",
+    connectionPending: true,
+    ready: false,
+    reason: "CHANNEL_NOT_CONNECTED",
+  });
+  for (const patch of [
+    { enabled: true },
+    { eligibilityVerified: true },
+    { accessToken: "secret" },
+    { providerAccountId: "fake" },
+    { platform: "telegram" },
+    { channelUrl: "javascript:alert(1)" },
+    { connectionPending: false },
+  ]) {
+    await expect(
+      loadStudioProviderConfig(await file({ ...config, accounts: [{ ...pending, ...patch }] })),
+    ).rejects.toThrow("STUDIO_PROVIDER_CONFIG_INVALID");
+  }
+});

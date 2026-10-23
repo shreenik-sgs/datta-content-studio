@@ -13,6 +13,7 @@ import {
   studioChannelLabel,
   studioDefaultAccount,
   studioVisualPreference,
+  studioYoutubeClosing,
 } from "@satsang/distribution-domain";
 
 export type StudioPlatform = Exclude<StudioChannel, "website">;
@@ -26,6 +27,9 @@ export type StudioProviderAccount = {
   world: "PRODUCTION";
   enabled: boolean;
   eligibilityVerified: boolean;
+  /** A named destination can be saved before its provider connection exists. */
+  connectionPending?: boolean;
+  channelUrl?: string;
   defaults?: {
     youtube?: {
       privacy: "public" | "unlisted" | "private";
@@ -62,6 +66,7 @@ const id = (x: unknown): x is string =>
 const record = (x: unknown): x is Record<string, unknown> =>
   !!x && typeof x === "object" && !Array.isArray(x);
 export function studioProviderAccountBlock(account: StudioProviderAccount): string | null {
+  if (account.connectionPending) return "CHANNEL_NOT_CONNECTED";
   if (
     !id(account.id) ||
     !id(account.providerAccountId) ||
@@ -144,6 +149,8 @@ export function studioProviderReadiness(
             id: candidate.id,
             label: candidate.label ?? `${studioChannelLabel(channel)} (${candidate.id})`,
             isDefault: candidate.id === account?.id,
+            connectionPending: candidate.connectionPending === true,
+            ...(candidate.channelUrl ? { channelUrl: candidate.channelUrl } : {}),
             ready: reason === null,
             reason,
             ...(candidate.platform === "youtube" && candidate.defaults?.youtube
@@ -242,10 +249,28 @@ export function parseStudioProviderConfig(value: unknown, key?: string): StudioP
     const destinations = new Set<string>();
     const ids = new Set<string>();
     for (const account of raw.accounts) {
+      if (record(account) && account.channelUrl !== undefined) {
+        if (account.platform !== "youtube" || typeof account.channelUrl !== "string")
+          throw new Error();
+        studioYoutubeClosing({
+          label: "YouTube",
+          url: account.channelUrl,
+        });
+      }
       if (
         !record(account) ||
         !id(account.id) ||
-        !id(account.providerAccountId) ||
+        (account.connectionPending === true
+          ? account.platform !== "youtube" ||
+            account.transport !== "buffer" ||
+            !account.channelUrl ||
+            account.providerAccountId !== "" ||
+            account.accessToken !== "" ||
+            account.enabled !== false ||
+            account.eligibilityVerified !== false
+          : !id(account.providerAccountId)) ||
+        (account.connectionPending !== undefined &&
+          typeof account.connectionPending !== "boolean") ||
         typeof account.platform !== "string" ||
         !STUDIO_CHANNELS.includes(account.platform as StudioChannel) ||
         account.platform === "website" ||
@@ -254,7 +279,7 @@ export function parseStudioProviderConfig(value: unknown, key?: string): StudioP
         typeof account.enabled !== "boolean" ||
         typeof account.eligibilityVerified !== "boolean" ||
         typeof account.accessToken !== "string" ||
-        !account.accessToken.trim() ||
+        (!account.connectionPending && !account.accessToken.trim()) ||
         account.accessToken.length > 8192 ||
         /[\r\n]/.test(account.accessToken) ||
         (account.label !== undefined &&
@@ -264,13 +289,17 @@ export function parseStudioProviderConfig(value: unknown, key?: string): StudioP
             [...account.label].some((c) => c.charCodeAt(0) < 32))) ||
         (account.isDefault !== undefined && typeof account.isDefault !== "boolean") ||
         (account.isDefault === true && defaults.has(account.platform)) ||
-        destinations.has(`${account.platform}:${account.providerAccountId}`) ||
+        destinations.has(
+          `${account.platform}:${account.connectionPending ? account.channelUrl : account.providerAccountId}`,
+        ) ||
         ids.has(account.id)
       )
         throw new Error();
       if (account.defaults !== undefined && !record(account.defaults)) throw new Error();
       if (account.isDefault === true) defaults.add(account.platform);
-      destinations.add(`${account.platform}:${account.providerAccountId}`);
+      destinations.add(
+        `${account.platform}:${account.connectionPending ? account.channelUrl : account.providerAccountId}`,
+      );
       ids.add(account.id);
     }
     for (const platform of STUDIO_CHANNELS) {

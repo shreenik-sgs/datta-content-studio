@@ -1,6 +1,9 @@
 "use client";
 import { useState } from "react";
-export function BufferChannelPicker({ platform }: { platform: "youtube" }) {
+export function BufferChannelPicker({
+  platform,
+  preserveLabel = false,
+}: { platform: "youtube"; preserveLabel?: boolean }) {
   const [channels, setChannels] = useState<{ id: string; label: string; available: boolean }[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,7 +64,8 @@ export function BufferChannelPicker({ platform }: { platform: "youtube" }) {
               const id = form.elements.namedItem("providerAccountId");
               const label = form.elements.namedItem("label");
               if (id instanceof HTMLInputElement) id.value = selected.id;
-              if (label instanceof HTMLInputElement) label.value = selected.label.slice(0, 120);
+              if (label instanceof HTMLInputElement && !preserveLabel)
+                label.value = selected.label.slice(0, 120);
             }}
           >
             <option value="">Choose a channel</option>

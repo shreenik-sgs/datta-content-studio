@@ -38,3 +38,18 @@ it("rejects forged, cross-platform and excluded-channel choices even in TEST", (
     ),
   ).toThrow("STUDIO_PUBLISH_ACCOUNT_REQUIRED");
 });
+
+it("never queues an unconnected named target, including in TEST", () => {
+  const configured = [
+    ...accounts,
+    { id: "guru", platform: "youtube" as const, connectionPending: true },
+  ];
+  for (const isTest of [true, false]) {
+    expect(() =>
+      studioPublishingAccounts(configured, ["youtube"], { youtube: "guru" }, isTest),
+    ).toThrow("STUDIO_PUBLISH_ACCOUNT_REQUIRED");
+    expect(studioPublishingAccounts(configured, ["youtube"], { youtube: "two" }, isTest)).toEqual({
+      youtube: "two",
+    });
+  }
+});

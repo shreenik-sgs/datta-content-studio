@@ -303,3 +303,89 @@ it("keeps multiple YouTube accounts and their secrets separate with one default"
   expect(state.accounts).toHaveLength(1);
   expect(state.accounts[0].id).toBe(secondId);
 });
+
+it("saves named YouTube targets without fabricated credentials and connects the same target later", async () => {
+  let state = await (await get()).json();
+  for (const [label, url] of [
+    ["GuruBhavanamADPT", "https://www.youtube.com/@gurubhavana"],
+    ["Another channel", "https://www.youtube.com/@another"],
+  ]) {
+    const response = await post({
+      action: "youtube-target",
+      expectedRevision: state.revision,
+      label,
+      url,
+    });
+    expect(response.status).toBe(200);
+    state = await response.json();
+  }
+  expect(state.accounts).toHaveLength(2);
+  const guru = state.accounts[0];
+  expect(guru).toMatchObject({
+    label: "GuruBhavanamADPT",
+    channelUrl: "https://www.youtube.com/@gurubhavana",
+    connectionPending: true,
+    hasToken: false,
+    providerAccountId: "",
+    enabled: false,
+    isDefault: true,
+    blocker: "CHANNEL_NOT_CONNECTED",
+  });
+  expect(state.accounts[1].isDefault).toBe(false);
+  expect(
+    (
+      await post({
+        action: "youtube-target",
+        expectedRevision: state.revision,
+        label: "Duplicate",
+        url: guru.channelUrl,
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await post({
+        action: "youtube-target",
+        expectedRevision: state.revision,
+        label: "Invalid",
+        url: "javascript:alert(1)",
+      })
+    ).status,
+  ).toBe(400);
+  const account = {
+    id: guru.id,
+    platform: "youtube",
+    label: guru.label,
+    providerAccountId: "buffer-guru",
+    enabled: false,
+    eligibilityVerified: false,
+    accessToken: "",
+  };
+  expect(
+    (await post({ action: "account", expectedRevision: state.revision, account })).status,
+  ).toBe(400);
+  let response = await post({
+    action: "account",
+    expectedRevision: state.revision,
+    account: { ...account, accessToken: "synthetic-guru-token" },
+  });
+  expect(response.status).toBe(200);
+  state = await response.json();
+  expect(state.accounts.find((a: { id: string }) => a.id === guru.id)).toMatchObject({
+    id: guru.id,
+    label: guru.label,
+    channelUrl: guru.channelUrl,
+    connectionPending: false,
+    hasToken: true,
+    isDefault: true,
+    providerAccountId: "buffer-guru",
+  });
+  expect(JSON.stringify(state)).not.toContain("synthetic-guru-token");
+  response = await post({
+    action: "account",
+    expectedRevision: state.revision,
+    account: { ...account, providerAccountId: "wrong-channel", accessToken: "" },
+  });
+  expect(response.status).toBe(400);
+  expect((await response.json()).error).toBe("ACCOUNT_DESTINATION_IMMUTABLE");
+});
