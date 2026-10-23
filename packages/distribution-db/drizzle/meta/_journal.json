@@ -176,6 +176,13 @@
       "when": 1792762219154,
       "tag": "0024_living_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792779293895,
+      "tag": "0025_typical_bromley",
+      "breakpoints": true
     }
   ]
 }

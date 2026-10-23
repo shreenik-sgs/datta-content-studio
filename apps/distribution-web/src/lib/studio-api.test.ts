@@ -2,6 +2,7 @@ import type { StudioPackage, StudioReadiness } from "@satsang/distribution-domai
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({
   access: vi.fn(),
+  query: vi.fn(),
   repo: vi.fn(),
   assets: vi.fn(),
   read: vi.fn(),
@@ -21,7 +22,11 @@ const m = vi.hoisted(() => ({
   getOutputAsset: vi.fn(),
   readiness: vi.fn(),
 }));
-vi.mock("./runtime", () => ({ access: m.access, privateAssets: m.assets }));
+vi.mock("./runtime", () => ({
+  access: m.access,
+  privateAssets: m.assets,
+  distributionPool: () => ({ query: m.query }),
+}));
 vi.mock("./studio-runtime", async (original) => ({
   ...(await original<typeof import("./studio-runtime")>()),
   studioRepository: m.repo,
@@ -152,6 +157,7 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
       capabilities: ["content.create", "content.review", "content.publish"],
       repo: { get: m.master },
     });
+    m.query.mockResolvedValue({ rows: [{ language: "en" }] });
     m.repo.mockReturnValue(m);
     m.list.mockResolvedValue([pkg]);
     m.create.mockResolvedValue(pkg);
@@ -176,6 +182,16 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
       rights: null,
       approval: null,
     });
+  });
+  it("exposes the missing source language before approval without affecting content blockers", async () => {
+    m.get.mockResolvedValue({ ...pkg, source: { ...pkg.source, language: "te" } });
+    const response = await detail(request(), { params: Promise.resolve({ id }) });
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.reviewAssignment.blocker).toContain("Telugu");
+    expect(data.reviewAssignment.blocker).toContain("Settings → Reviewer languages");
+    expect(data.blockers).not.toContain("NATIVE_REVIEWER_REQUIRED");
+    expect(m.review).not.toHaveBeenCalled();
   });
   it("requires publishing authority for retraction and rejects empty selections", async () => {
     const result = await action(

@@ -22,3 +22,18 @@ export const studioLoginAttempt = distributionSchema.table("login_attempt", {
   attempts: integer("attempts").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
+
+/** Append-only record of explicit administrator language assignments. */
+export const studioReviewerLanguageAudit = distributionSchema.table("reviewer_language_audit", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operatorId: uuid("operator_id")
+    .notNull()
+    .references(() => studioOperator.id),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => studioOperator.id),
+  isTest: boolean("is_test").notNull(),
+  beforeLanguages: jsonb("before_languages").$type<string[]>().notNull(),
+  afterLanguages: jsonb("after_languages").$type<string[]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

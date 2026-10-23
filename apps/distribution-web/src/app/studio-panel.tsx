@@ -1842,11 +1842,8 @@ export function StudioPanel({
                       checked source boundaries, context, attribution, captions and translations,
                       and Ashrama branding for every included output.
                     </label>
-                    {["te", "kn", "ta"].includes(value.source.language) && (
-                      <p className="muted">
-                        Approval requires a Content Approver qualified to review this source
-                        language.
-                      </p>
+                    {detail.reviewAssignment?.blocker && (
+                      <output>{detail.reviewAssignment.blocker}</output>
                     )}
                     <div className="actions wrap">
                       <button
@@ -1854,7 +1851,9 @@ export function StudioPanel({
                         name="decision"
                         value="APPROVED"
                         className="button primary"
-                        disabled={detail.blockers.length > 0}
+                        disabled={
+                          detail.blockers.length > 0 || Boolean(detail.reviewAssignment?.blocker)
+                        }
                       >
                         Approve package
                       </button>

@@ -1,7 +1,8 @@
+import { studioReviewAssignment } from "@satsang/distribution-db";
 import { studioPackageBlockers } from "@satsang/distribution-domain";
 import { z } from "zod";
 import { json } from "../../../../lib/http";
-import { access } from "../../../../lib/runtime";
+import { access, distributionPool } from "../../../../lib/runtime";
 import {
   publicStudioPackage,
   publicStudioPublication,
@@ -29,6 +30,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       package: publicStudioPackage(value),
       publications: publications.map(publicStudioPublication),
       readiness,
+      reviewAssignment: auth.capabilities.includes("content.review")
+        ? await studioReviewAssignment(
+            distributionPool(),
+            auth.context.userId,
+            auth.context.isTest,
+            value.source.language,
+          )
+        : undefined,
       blockers: studioPackageBlockers(value, master, new Date().toISOString()),
     });
   } catch (error) {

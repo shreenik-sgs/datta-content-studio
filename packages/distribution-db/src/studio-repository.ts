@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { sourceRequiresLanguageAssignment } from "@satsang/distribution-domain";
 import { isOnlineBundle } from "@satsang/distribution-domain";
 import {
   type ContentMaster,
@@ -408,7 +409,7 @@ export function createIntelligentContentRepository(
     return master;
   }
   async function qualifiedReviewer(client: PoolClient, pkg: StudioPackage, reviewerId: string) {
-    if (["te", "kn", "ta"].includes(pkg.source.language)) {
+    if (sourceRequiresLanguageAssignment(pkg.source.language)) {
       const grants = await client.query(
         "SELECT 1 FROM distribution.native_reviewer WHERE user_id=$1 AND is_test=$2 AND language=$3",
         [reviewerId, pkg.isTest, pkg.source.language],

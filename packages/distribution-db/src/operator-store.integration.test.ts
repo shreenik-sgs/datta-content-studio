@@ -12,6 +12,11 @@ import {
   operatorTokenHash,
   readStudioSession,
 } from "./operator-store";
+import {
+  listStudioReviewers,
+  saveStudioReviewerLanguages,
+  studioReviewAssignment,
+} from "./reviewer-languages";
 const url = process.env.STUDIO_IDENTITY_TEST_DATABASE_URL;
 describe.skipIf(!url)("Content Studio identity in a disposable database without Sannidhi", () => {
   let pool: Pool;
@@ -56,6 +61,82 @@ describe.skipIf(!url)("Content Studio identity in a disposable database without 
   afterAll(async () => {
     await runtime?.end();
     await pool?.end();
+  });
+
+  it("only a current Admin session can assign languages, with world isolation, stale-write protection and audit", async () => {
+    const adminId = randomUUID();
+    const adminEmail = `admin-${adminId}@example.test`;
+    await pool.query(
+      "INSERT INTO distribution.operator(id,email,display_name,password_hash,roles,is_test) VALUES($1,$2,'Admin',$3,'[\"SUPER_ADMIN\"]',true)",
+      [adminId, adminEmail, await hashOperatorPassword(password)],
+    );
+    const adminToken = await loginStudioOperator(adminEmail, password, true, runtime);
+    const reviewerToken = await loginStudioOperator(
+      `approver-${approver}@example.test`,
+      password,
+      true,
+      runtime,
+    );
+    if (!adminToken || !reviewerToken) throw Error("LOGIN_FAILED");
+    const input = {
+      sessionToken: adminToken,
+      operatorId: approver,
+      isTest: true,
+      expectedLanguages: [],
+      languages: ["en", "hi", "te", "kn", "ta"],
+    };
+    await expect(
+      saveStudioReviewerLanguages(runtime, { ...input, sessionToken: reviewerToken }),
+    ).rejects.toThrow("FORBIDDEN");
+    await expect(saveStudioReviewerLanguages(runtime, { ...input, isTest: false })).rejects.toThrow(
+      "FORBIDDEN",
+    );
+    await expect(
+      saveStudioReviewerLanguages(runtime, { ...input, operatorId: curator }),
+    ).rejects.toThrow("REVIEWER_NOT_FOUND");
+    await expect(
+      saveStudioReviewerLanguages(runtime, { ...input, languages: ["invalid"] }),
+    ).rejects.toThrow("INVALID_REVIEWER_LANGUAGES");
+    await expect(
+      runtime.query(
+        "INSERT INTO distribution.native_reviewer(user_id,is_test,language,granted_by) VALUES($1,true,'te',$1)",
+        [approver],
+      ),
+    ).rejects.toThrow(/permission denied/);
+    expect((await studioReviewAssignment(runtime, approver, true, "te")).blocker).toContain(
+      "Telugu",
+    );
+    await saveStudioReviewerLanguages(runtime, input);
+    expect(
+      (await listStudioReviewers(runtime, true)).find((r) => r.id === approver)?.languages,
+    ).toEqual(["en", "hi", "kn", "ta", "te"]);
+    expect((await studioReviewAssignment(runtime, approver, true, "te")).blocker).toBeNull();
+    expect((await studioReviewAssignment(runtime, approver, false, "te")).blocker).toContain(
+      "Telugu",
+    );
+    await expect(
+      saveStudioReviewerLanguages(runtime, { ...input, languages: ["te"] }),
+    ).rejects.toThrow("REVIEWER_LANGUAGES_CHANGED");
+    await saveStudioReviewerLanguages(runtime, {
+      ...input,
+      expectedLanguages: input.languages,
+      languages: [],
+    });
+    expect((await studioReviewAssignment(runtime, approver, true, "te")).blocker).toContain(
+      "Telugu",
+    );
+    const audit = await runtime.query(
+      "SELECT actor_id,before_languages,after_languages FROM distribution.reviewer_language_audit WHERE operator_id=$1 ORDER BY created_at",
+      [approver],
+    );
+    expect(audit.rows).toHaveLength(2);
+    expect(audit.rows[0]).toMatchObject({
+      actor_id: adminId,
+      before_languages: [],
+      after_languages: ["en", "hi", "kn", "ta", "te"],
+    });
+    await pool.query("UPDATE distribution.operator SET active=false WHERE id=$1", [adminId]);
+    await expect(saveStudioReviewerLanguages(runtime, input)).rejects.toThrow("FORBIDDEN");
   });
   it("migrates without any Sannidhi user/session tables", async () => {
     expect(

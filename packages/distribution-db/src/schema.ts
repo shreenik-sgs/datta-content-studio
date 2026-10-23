@@ -665,7 +665,10 @@ export const distributionNativeReviewer = distributionSchema.table(
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.isTest, t.language] }),
-    check("native_reviewer_language", sql`${t.language} IN ('te','kn','ta')`),
+    check(
+      "native_reviewer_language",
+      sql`${t.language} IN ('en','hi','te','kn','ta','ml','gu','sa')`,
+    ),
   ],
 );
 

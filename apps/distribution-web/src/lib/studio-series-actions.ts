@@ -101,7 +101,9 @@ export async function prepareSeriesRows(
         );
         if (action === "submit" && outputs.some((o) => o.correction?.state === "pending"))
           blockers.push("STUDIO_CORRECTIONS_PENDING");
-        const blocker = blockers.length ? blockers.map(studioMessage).join(" ") : undefined;
+        const blocker =
+          (action === "approve" ? detail.reviewAssignment?.blocker : null) ??
+          (blockers.length ? blockers.map(studioMessage).join(" ") : undefined);
         if (action === "post")
           return outputs.map((o) => {
             const previous = detail.publications.find(

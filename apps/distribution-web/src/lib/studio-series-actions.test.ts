@@ -128,3 +128,22 @@ it("reports remote removal as pending, rather than claiming it deleted a YouTube
     message: expect.stringContaining("Still published"),
   });
 });
+it("shows language assignment blockers before bulk approval and performs no mutation", async () => {
+  const pkg = { ...value, status: "IN_REVIEW" as const };
+  const blocker =
+    "Your Approver account is not assigned to review Telugu. Ask an Admin to open Settings → Reviewer languages.";
+  const fetcher = vi.fn(async (url: string) =>
+    response(
+      url.includes("/api/content/")
+        ? { content: { state: "APPROVED" } }
+        : { ...detail, package: pkg, reviewAssignment: { sourceLanguage: "te", blocker } },
+    ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const rows = await prepareSeriesRows([pkg], "approve");
+  expect(rows[0]?.blocker).toBe(blocker);
+  await expect(runSeriesAction("approve", rows, {}, vi.fn())).rejects.toThrow(
+    "INVALID_STUDIO_OUTPUT_SELECTION",
+  );
+  expect(fetcher.mock.calls).toHaveLength(2);
+});

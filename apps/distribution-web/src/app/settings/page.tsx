@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { trustedDistributionOrigin } from "../../lib/auth";
 import { access } from "../../lib/runtime";
+import { ReviewerLanguages } from "./reviewer-languages";
 import { CurationSettings } from "./settings-panel";
 export const dynamic = "force-dynamic";
 export default async function Settings() {
@@ -23,6 +24,7 @@ export default async function Settings() {
         <h1>Curation &amp; Publishing</h1>
         <p>Manage generation defaults, connected accounts and media delivery.</p>
       </header>
+      <ReviewerLanguages />
       <CurationSettings />
     </main>
   );

@@ -30,6 +30,10 @@ BEGIN
   IF to_regclass('distribution.native_reviewer') IS NOT NULL THEN
     EXECUTE format('GRANT SELECT ON distribution.native_reviewer TO %I', runtime_role);
   END IF;
+  IF to_regclass('distribution.reviewer_language_audit') IS NOT NULL THEN
+    EXECUTE format('GRANT SELECT ON distribution.reviewer_language_audit TO %I', runtime_role);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION distribution.set_reviewer_languages(text,uuid,boolean,text[],text[]) TO %I', runtime_role);
+  END IF;
   IF to_regclass('distribution.operator') IS NOT NULL THEN
     EXECUTE format('GRANT SELECT ON distribution.operator TO %I', runtime_role);
     EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON distribution.operator_session,distribution.login_attempt TO %I', runtime_role);

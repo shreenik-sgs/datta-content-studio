@@ -26,6 +26,7 @@ export type StudioDetail = {
   publications: PublicStudioPublication[];
   readiness: StudioReadiness;
   blockers: string[];
+  reviewAssignment?: { sourceLanguage: string; blocker: string | null };
 };
 export type StudioListing = {
   packages: PublicStudioPackage[];
@@ -136,8 +137,11 @@ const messages: Record<string, string> = {
     "Check source boundaries, context, attribution, captions, translations and Ashrama branding, then confirm the review checkbox.",
   MACHINE_TRANSCRIPT_CONFIRMATION_REQUIRED:
     "Check the machine transcript against the recording, then confirm the transcript checkbox.",
+  REVIEWER_LANGUAGES_CHANGED:
+    "Another Admin changed these assignments. Refresh before saving again.",
+  REVIEWER_NOT_FOUND: "This account is no longer an active Content Approver. Refresh the list.",
   NATIVE_REVIEWER_REQUIRED:
-    "A Content Approver qualified for this source language must review this package.",
+    "Your Approver account needs a source-language assignment. Ask an Admin to open Settings → Reviewer languages, confirm your proficiency and save the required language.",
   STUDIO_NOT_APPROVED:
     "A Content Approver must approve the current package before publication or download.",
   STUDIO_DISCARDED:
