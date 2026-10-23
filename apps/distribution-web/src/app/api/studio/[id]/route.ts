@@ -39,6 +39,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           )
         : undefined,
       blockers: studioPackageBlockers(value, master, new Date().toISOString()),
+      outputBlockers: Object.fromEntries(
+        value.outputs.map((output) => [
+          output.id,
+          studioPackageBlockers({ ...value, outputs: [output] }, master, new Date().toISOString()),
+        ]),
+      ),
     });
   } catch (error) {
     return studioProblem(error);

@@ -369,3 +369,56 @@ it.each([
     }
   },
 );
+
+it.each(["submit", "approve", "post"] as const)(
+  "keeps individual file selection within one day for %s",
+  async (action) => {
+    const { host, root } = setup();
+    const output = value.outputs[0];
+    if (!output) throw Error("MISSING_FIXTURE");
+    const pkg = {
+      ...first,
+      status: (action === "submit" ? "DRAFT" : action === "approve" ? "IN_REVIEW" : "APPROVED") as
+        | "DRAFT"
+        | "IN_REVIEW"
+        | "APPROVED",
+      outputs: [
+        { ...output, id: "a", title: "First Short" },
+        { ...output, id: "b", title: "Second Short" },
+      ],
+    };
+    try {
+      await act(async () =>
+        root.render(
+          <PlaylistFiles
+            packages={[pkg]}
+            canCurate={action === "submit"}
+            canReview={action === "approve"}
+            canPublish={action === "post"}
+            onOpen={vi.fn()}
+            onPreview={vi.fn()}
+            onRefresh={async () => {}}
+          />,
+        ),
+      );
+      const a = host.querySelector<HTMLInputElement>('input[aria-label="Select First Short"]');
+      const b = host.querySelector<HTMLInputElement>('input[aria-label="Select Second Short"]');
+      const all = host.querySelector<HTMLInputElement>(
+        'input[aria-label="Select all visible files"]',
+      );
+      if (!a || !b || !all) throw Error("MISSING_CHECKBOXES");
+      await act(async () => a.click());
+      expect(a.checked).toBe(true);
+      expect(b.checked).toBe(false);
+      expect(all.indeterminate).toBe(true);
+      expect(host.textContent).toContain("1 file selected");
+      await act(async () => all.click());
+      expect(a.checked && b.checked).toBe(true);
+      await act(async () => b.click());
+      expect(a.checked).toBe(true);
+      expect(b.checked).toBe(false);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);

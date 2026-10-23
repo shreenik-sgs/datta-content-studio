@@ -110,7 +110,11 @@ export const studioReviseSchema = z
   })
   .strict();
 export const studioSubmitSchema = z
-  .object({ expectedRevision: revision, comment: z.string().trim().max(4000).default("") })
+  .object({
+    expectedRevision: revision,
+    comment: z.string().trim().max(4000).default(""),
+    outputIds: z.array(z.string().uuid()).min(1).max(200).refine(unique).optional(),
+  })
   .strict();
 export const studioReviewSchema = z
   .object({

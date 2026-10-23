@@ -20,7 +20,13 @@ const detail: StudioDetail = {
 };
 const output = value.outputs[0];
 if (!output) throw Error("MISSING_OUTPUT");
-const row: SeriesRow = { id: value.id, detail, title: value.source.title, count: 1 };
+const row: SeriesRow = {
+  id: output.id,
+  outputId: output.id,
+  detail,
+  title: value.source.title,
+  count: 1,
+};
 const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -146,4 +152,48 @@ it("shows language assignment blockers before bulk approval and performs no muta
     "INVALID_STUDIO_OUTPUT_SELECTION",
   );
   expect(fetcher.mock.calls).toHaveLength(2);
+});
+
+it.each(["submit", "approve"] as const)(
+  "%s sends only the selected Short within a recording",
+  async (action) => {
+    const fetcher = vi.fn(async () => response({ package: value }));
+    vi.stubGlobal("fetch", fetcher);
+    await runSeriesAction(action, [row], {}, vi.fn());
+    expect(
+      JSON.parse(String((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body)),
+    ).toMatchObject({ outputIds: [output.id] });
+  },
+);
+it("preflights mixed file states and per-file blockers without blocking a ready sibling", async () => {
+  const first = {
+    ...output,
+    id: "draft-one",
+    workflow: { status: "DRAFT" as const, actorId: "curator", updatedAt: value.updatedAt },
+  };
+  const second = { ...first, id: "draft-two" };
+  const pkg = {
+    ...value,
+    status: "IN_REVIEW" as const,
+    outputs: [
+      first,
+      second,
+      { ...first, id: "submitted", workflow: { ...first.workflow, status: "IN_REVIEW" as const } },
+    ],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      response({
+        ...detail,
+        package: pkg,
+        blockers: ["ASSETS_REQUIRE_REGENERATION"],
+        outputBlockers: { [first.id]: [], [second.id]: ["ASSETS_REQUIRE_REGENERATION"] },
+      }),
+    ),
+  );
+  const rows = await prepareSeriesRows([pkg], "submit");
+  expect(rows.map((r) => r.outputId)).toEqual([first.id, second.id]);
+  expect(rows[0]?.blocker).toBeUndefined();
+  expect(rows[1]?.blocker).toBeTruthy();
 });

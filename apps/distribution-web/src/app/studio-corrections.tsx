@@ -5,6 +5,7 @@ import {
   STUDIO_TITLE_LIMITS,
   type StudioMediaEdits,
   type StudioSegment,
+  studioCanEditFile,
   studioCaptionsEnabled,
   studioChannelLabel,
   studioClosingCardPlan,
@@ -41,11 +42,12 @@ export function StudioCorrections({
   available: boolean;
   onAction: Action;
 }) {
-  const requested = value.outputs.filter((o) => o.included && o.correction?.state === "pending");
+  const editable = value.outputs.filter((o) => studioCanEditFile(value, o, ["content.create"]));
+  const requested = editable.filter((o) => o.correction?.state === "pending");
   const [selected, setSelected] = useState<string[]>(requested.map((o) => o.id));
   const [mode, setMode] = useState<"ai" | "manual">(initialOutputId ? "manual" : "ai");
   const [editingId, setEditingId] = useState(
-    initialOutputId ?? requested[0]?.id ?? value.outputs.find((o) => o.included)?.id ?? "",
+    editable.find((o) => o.id === initialOutputId)?.id ?? requested[0]?.id ?? editable[0]?.id ?? "",
   );
   const formatTime = useHubTimestamp();
   const [dirty, setDirty] = useState(false);
@@ -106,27 +108,23 @@ export function StudioCorrections({
         >
           <fieldset disabled={busy || !available}>
             <legend>Files for AI correction</legend>
-            {value.outputs
-              .filter((o) => o.included)
-              .map((o) => (
-                <label key={o.id} className="correction-file-choice">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(o.id)}
-                    onChange={(e) =>
-                      setSelected(
-                        e.target.checked
-                          ? [...selected, o.id]
-                          : selected.filter((id) => id !== o.id),
-                      )
-                    }
-                  />
-                  <span>
-                    {studioChannelLabel(o.channel)} · {o.language} · {o.title}
-                    {o.asset && <small>{o.asset.filename}</small>}
-                  </span>
-                </label>
-              ))}
+            {editable.map((o) => (
+              <label key={o.id} className="correction-file-choice">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(o.id)}
+                  onChange={(e) =>
+                    setSelected(
+                      e.target.checked ? [...selected, o.id] : selected.filter((id) => id !== o.id),
+                    )
+                  }
+                />
+                <span>
+                  {studioChannelLabel(o.channel)} · {o.language} · {o.title}
+                  {o.asset && <small>{o.asset.filename}</small>}
+                </span>
+              </label>
+            ))}
             <p>
               Each selected file receives its own Approver comments automatically. Add any further
               instructions below.
@@ -162,13 +160,11 @@ export function StudioCorrections({
                 }
               }}
             >
-              {value.outputs
-                .filter((o) => o.included)
-                .map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {studioChannelLabel(o.channel)} · {o.language} · {o.title}
-                  </option>
-                ))}
+              {editable.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {studioChannelLabel(o.channel)} · {o.language} · {o.title}
+                </option>
+              ))}
             </select>
           </label>
           <ManualFile

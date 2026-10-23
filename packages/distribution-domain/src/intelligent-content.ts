@@ -50,6 +50,8 @@ export type StudioTranscript = {
   recognition?: { provider: "sarvam" | "openai"; model: string };
 };
 export type StudioOutput = {
+  /** Human workflow for this exact file; absent on legacy package-wide reviews. */
+  workflow?: import("./studio-file-workflow").StudioFileWorkflow;
   /** Curator-selected, exact source times. Transcript evidence remains unchanged. */
   sourceTrim?: { startMs: number; endMs: number } | null;
   /** Retained across invalidated render reviews; configured package branding takes precedence. */

@@ -160,15 +160,17 @@ it.each<{ role: string; capabilities: DistributionCapability[] }>([
         first.id,
       );
       expect(host.querySelectorAll(".package-selection option")).toHaveLength(2);
-      expect(Boolean(button("Continue to approval review"))).toBe(
-        capabilities.includes("content.create") && capabilities.includes("content.review"),
+      expect(Boolean(button("Submit selected files for review"))).toBe(
+        capabilities.includes("content.create"),
       );
       await click(button("Back to masters"));
       expect(workflow()).toBeNull();
       await click(card(second.title));
       expect(workflow()?.textContent).toContain("Step 4 of 6");
       expect(host.textContent).not.toContain(first.title);
-      expect(Boolean(button("Approve package"))).toBe(capabilities.includes("content.review"));
+      expect(Boolean(button("Approve selected files"))).toBe(
+        capabilities.includes("content.review"),
+      );
       // Clicking the current tab must return to the picker, not keep an invisible selection.
       await click(button("Continue Existing Curation"));
       expect(workflow()).toBeNull();
@@ -185,7 +187,7 @@ it.each<{ role: string; capabilities: DistributionCapability[] }>([
       await click(card(approved.title));
       expect(host.textContent).toContain("Approved and locked");
       expect(host.querySelector('textarea[name="instructions"]')).toBeNull();
-      expect(button("Approve package")).toBeUndefined();
+      expect(button("Approve selected files")).toBeUndefined();
       await click(button("Start New Curation"));
       expect(workflow()?.textContent).toContain("Step 1 of 6");
       expect(host.querySelectorAll("button.content-card")).toHaveLength(0);

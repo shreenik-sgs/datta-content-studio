@@ -10,6 +10,7 @@ import {
 import { loadStudioProviderConfig, studioSettingsPath } from "@satsang/distribution-db";
 import {
   type DistributionCapability,
+  studioFileStatus,
   studioPublishingAccounts,
   studioSelectedOutputs,
 } from "@satsang/distribution-domain";
@@ -60,7 +61,13 @@ export async function POST(
       );
       const accounts = studioPublishingAccounts(
         config.accounts,
-        studioSelectedOutputs(pkg.outputs, command.outputIds).map((output) => output.channel),
+        studioSelectedOutputs(
+          pkg.outputs,
+          command.outputIds ??
+            (pkg.outputs.some((o) => o.workflow)
+              ? pkg.outputs.filter((o) => studioFileStatus(pkg, o) === "APPROVED").map((o) => o.id)
+              : undefined),
+        ).map((output) => output.channel),
         command.accounts ?? {},
         auth.context.isTest,
       );

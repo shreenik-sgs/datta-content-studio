@@ -92,8 +92,14 @@ export function StudioSeriesActions({
         (connection?.accounts?.length && (!account || account.connectionPending)) ||
         (!isTest && !(account?.ready ?? connection?.ready)),
     );
-  const sourceApprovalNeeded =
-    action === "approve" && chosen.some((row) => row.source?.state === "RIGHTS_CLEARED");
+  const sourcesToApprove = [
+    ...new Map(
+      chosen
+        .filter((row) => row.source?.state === "RIGHTS_CLEARED")
+        .map((row) => [row.source?.id, row]),
+    ).values(),
+  ];
+  const sourceApprovalNeeded = action === "approve" && sourcesToApprove.length > 0;
   async function prepare(kind: SeriesAction) {
     if (locked.current || !permitted(kind)) return;
     locked.current = true;
@@ -209,7 +215,9 @@ export function StudioSeriesActions({
         >
           {seriesActionName[toolbarAction]} Selected
         </button>
-        <span aria-live="polite">{selectedOutputIds.size} files selected</span>
+        <span aria-live="polite">
+          {selectedOutputIds.size} {selectedOutputIds.size === 1 ? "file" : "files"} selected
+        </span>
       </div>
       {isTest && (
         <p className="muted">
@@ -217,9 +225,7 @@ export function StudioSeriesActions({
         </p>
       )}
       {toolbarAction === "approve" && !eligible.length && (
-        <p>
-          Select submitted recordings to approve. Drafts must first be submitted by the Curator.
-        </p>
+        <p>Select submitted files to approve. Drafts must first be submitted by the Curator.</p>
       )}
       {toolbarAction === "post" && !eligible.length && <p>Select approved files to post.</p>}
       {action && (
@@ -234,12 +240,16 @@ export function StudioSeriesActions({
               <strong>
                 {count} {count === 1 ? "file" : "files"}
               </strong>{" "}
-              in {new Set(chosen.map((r) => r.detail.package.id)).size} recordings ready
+              in {new Set(chosen.map((r) => r.detail.package.id)).size}{" "}
+              {new Set(chosen.map((r) => r.detail.package.id)).size === 1
+                ? "recording"
+                : "recordings"}{" "}
+              ready
             </p>
           )}
           {(action === "submit" || action === "approve") && (
             <p className="muted">
-              Applies to every included file in the selected recordings.
+              Applies only to the selected files. Other files stay unchanged.
               {action === "approve" ? " Approval does not post anything." : ""}
             </p>
           )}
@@ -255,7 +265,7 @@ export function StudioSeriesActions({
             <p>
               {action === "retract"
                 ? "No posting requests exist in Studio for this series. Check the channel for videos uploaded outside Studio."
-                : "No recordings are ready for this action."}
+                : "No selected files are ready for this action."}
             </p>
           )}
           {!busy && !error && unavailableCount > 0 && (
@@ -292,32 +302,28 @@ export function StudioSeriesActions({
                 {sourceApprovalNeeded && (
                   <details className="action-review-details">
                     <summary>
-                      Review master permissions for{" "}
-                      {chosen.filter((row) => row.source?.state === "RIGHTS_CLEARED").length}{" "}
-                      recordings
+                      Review master permissions for {sourcesToApprove.length} recordings
                     </summary>
                     <ul>
-                      {chosen
-                        .filter((row) => row.source?.state === "RIGHTS_CLEARED")
-                        .map((row) => (
-                          <li key={row.id}>
-                            <strong>{row.title}</strong>
-                            <p>
-                              Rights holder: {row.source?.rights?.owner ?? "Missing"}
-                              <br />
-                              Authorization: {row.source?.rights?.authorizationBasis ?? "Missing"}
-                              <br />
-                              Channels: {row.source?.rights?.channels.join(", ")}
-                              <br />
-                              Territories: {row.source?.rights?.territories.join(", ")}
-                              <br />
-                              Visibility: {row.source?.rights?.privacyClass}
-                              <br />
-                              Release: {row.source?.rights?.releaseAt ?? "Immediate"} · Expiry:{" "}
-                              {row.source?.rights?.expiresAt ?? "None"}
-                            </p>
-                          </li>
-                        ))}
+                      {sourcesToApprove.map((row) => (
+                        <li key={row.id}>
+                          <strong>{row.title}</strong>
+                          <p>
+                            Rights holder: {row.source?.rights?.owner ?? "Missing"}
+                            <br />
+                            Authorization: {row.source?.rights?.authorizationBasis ?? "Missing"}
+                            <br />
+                            Channels: {row.source?.rights?.channels.join(", ")}
+                            <br />
+                            Territories: {row.source?.rights?.territories.join(", ")}
+                            <br />
+                            Visibility: {row.source?.rights?.privacyClass}
+                            <br />
+                            Release: {row.source?.rights?.releaseAt ?? "Immediate"} · Expiry:{" "}
+                            {row.source?.rights?.expiresAt ?? "None"}
+                          </p>
+                        </li>
+                      ))}
                     </ul>
                   </details>
                 )}
@@ -384,9 +390,9 @@ export function StudioSeriesActions({
                     onChange={(e) => setConfirmed(e.target.checked)}
                   />{" "}
                   {action === "submit"
-                    ? "I checked the included files and want to send this selection for review."
+                    ? "I checked the selected files and want to send this selection for review."
                     : action === "approve"
-                      ? "I reviewed the native transcript, translations, subtitles and complete teachings for every selected recording and approve these files."
+                      ? "I reviewed the native transcript, translations, subtitles and complete teachings for every selected file and approve these files."
                       : action === "post"
                         ? "I confirm this file selection and destination. Each file must pass the duplicate check before sending."
                         : "I want to retract this selection. I understand already published videos may need removal on the channel."}
@@ -402,7 +408,8 @@ export function StudioSeriesActions({
                   }
                   onClick={() => void execute()}
                 >
-                  Confirm {seriesActionName[action].toLowerCase()} · {count} files
+                  Confirm {seriesActionName[action].toLowerCase()} · {count}{" "}
+                  {count === 1 ? "file" : "files"}
                   {isTest && (action === "post" || action === "retract") ? " (test)" : ""}
                 </button>
               </fieldset>

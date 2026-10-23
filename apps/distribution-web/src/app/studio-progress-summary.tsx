@@ -1,5 +1,9 @@
 "use client";
-import { studioNeedsSuitabilityReview, studioWorkflow } from "@satsang/distribution-domain";
+import {
+  studioFileWorkflowStep,
+  studioNeedsSuitabilityReview,
+  studioWorkflow,
+} from "@satsang/distribution-domain";
 import type { PublicStudioPackage, PublicStudioPublication } from "../lib/studio-model";
 import "./studio-workflow.css";
 
@@ -32,13 +36,27 @@ export function StudioProgressSummary({
           (p.status === "DRAFT" && p.provenance?.skippedChannels.length))
       ),
   );
-  const flows = active.map((p) => ({
-    pkg: p,
-    flow: studioWorkflow({
-      package: p,
-      publications: publications.filter((j) => j.packageId === p.id),
-    }),
-  }));
+  const flows = active.flatMap((p) =>
+    (p.outputs.length
+      ? p.outputs
+          .filter((o) => o.included)
+          .map((o) => ({
+            ...p,
+            status: o.workflow?.status ?? p.status,
+            approval: o.workflow?.approval ?? p.approval,
+            outputs: [o],
+          }))
+      : [p]
+    ).map((pkg) => ({
+      pkg,
+      flow: studioWorkflow({
+        package: pkg,
+        publications: publications.filter((j) => j.packageId === p.id),
+      }),
+      current: pkg.outputs[0]?.workflow ? studioFileWorkflowStep(pkg, pkg.outputs[0]) : undefined,
+    })),
+  );
+
   const steps = studioWorkflow({ starting: true }).steps;
   const pending = Math.max(0, (totalRecordings ?? packages.length) - packages.length);
   const shortTitles = [
@@ -70,7 +88,8 @@ export function StudioProgressSummary({
       <ol>
         {steps.map((step) => {
           const atStep = flows.filter(
-            ({ flow }) => (flow.current ?? (flow.complete ? 6 : null)) === step.number,
+            ({ flow, current }) =>
+              (current ?? flow.current ?? (flow.complete ? 6 : null)) === step.number,
           );
           const count = atStep.reduce(
             (n, { pkg }) => n + pkg.outputs.filter((o) => o.included).length,
@@ -138,8 +157,8 @@ export function StudioProgressSummary({
       </ol>
       {!preview && (
         <p className="workflow-explanation">
-          Select a stage to filter files. Each recording progresses independently; approval does not
-          mean it has been posted.
+          Select a stage to filter files. Each file progresses independently; approval does not mean
+          it has been posted.
         </p>
       )}
     </section>

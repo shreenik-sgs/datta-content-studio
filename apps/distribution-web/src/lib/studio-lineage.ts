@@ -1,4 +1,9 @@
-import { studioRenderedDurationMs } from "@satsang/distribution-domain";
+import {
+  studioFileApproval,
+  studioFileStatus,
+  studioPublicationMatchesFile,
+  studioRenderedDurationMs,
+} from "@satsang/distribution-domain";
 import type { StudioFeedback } from "@satsang/distribution-domain";
 import {
   type PublicStudioOutput,
@@ -56,6 +61,7 @@ export function studioOutputState(
   output: PublicStudioOutput,
   publications: readonly PublicStudioPublication[],
 ): LineageState {
+  const status = studioFileStatus(value, output);
   if (value.status === "DISCARDED")
     return { label: "Discarded", detail: "Package discarded", tone: "excluded" };
   if (!output.included)
@@ -64,7 +70,7 @@ export function studioOutputState(
       detail: "Kept for traceability; not selected for publication",
       tone: "excluded",
     };
-  if (value.status !== "APPROVED" && output.correction)
+  if (status !== "APPROVED" && output.correction)
     return {
       label:
         output.correction.state === "pending"
@@ -75,24 +81,27 @@ export function studioOutputState(
       detail: output.correction.comment,
       tone: output.correction.state === "pending" ? "attention" : "pending",
     };
-  if (value.status === "CHANGES_REQUESTED" && value.outputs.some((o) => o.correction))
+  if (!output.workflow && status === "CHANGES_REQUESTED" && value.outputs.some((o) => o.correction))
     return {
       label: "Unchanged · awaiting package review",
       detail: "Another file was returned for correction",
       tone: "pending",
     };
-  if (value.status !== "APPROVED")
+  if (status !== "APPROVED")
     return {
-      label: STUDIO_STATUS_LABELS[value.status],
+      label: STUDIO_STATUS_LABELS[status],
       detail: `Package revision ${value.revision}`,
       tone:
-        value.status === "CHANGES_REQUESTED" || value.status === "FAILED"
+        status === "CHANGES_REQUESTED" || status === "FAILED"
           ? "attention"
-          : value.status === "IN_REVIEW"
+          : status === "IN_REVIEW"
             ? "pending"
             : "neutral",
     };
-  if (value.approval?.revision !== value.revision)
+  if (
+    !studioFileApproval(value, output) ||
+    (!output.workflow && value.approval?.revision !== value.revision)
+  )
     return {
       label: "Review required",
       detail: "Approval does not match this package revision",
@@ -102,7 +111,7 @@ export function studioOutputState(
     .filter(
       (item) =>
         item.packageId === value.id &&
-        item.packageRevision === value.revision &&
+        studioPublicationMatchesFile(value, output, item) &&
         item.outputId === output.id &&
         item.channel === output.channel &&
         item.isTest === value.isTest,

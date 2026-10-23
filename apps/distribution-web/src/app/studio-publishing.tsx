@@ -2,6 +2,8 @@
 import {
   type StudioChannel,
   studioChannelLabel,
+  studioFileStatus,
+  studioPublicationMatchesFile,
   studioWorkflow,
   unconfiguredStudioClosingChannels,
 } from "@satsang/distribution-domain";
@@ -22,16 +24,23 @@ export function StudioPublishing({
   canPublish: boolean;
   canManage: boolean;
   busy: boolean;
-  onPublish: (accounts: Partial<Record<StudioChannel, string>>) => void;
+  onPublish: (accounts: Partial<Record<StudioChannel, string>>, outputIds: string[]) => void;
   onRefresh: () => void;
 }) {
-  const { package: value, readiness, publications, blockers } = detail;
+  const { package: value, readiness, publications } = detail;
   const [chosen, setChosen] = useState<Partial<Record<StudioChannel, string>>>({});
-  const approved = value.status === "APPROVED";
-  const included = value.outputs.filter((output) => output.included);
-  const unconfiguredClosingChannels = unconfiguredStudioClosingChannels(value.outputs);
+  const approvedFiles = value.outputs.filter((o) => studioFileStatus(value, o) === "APPROVED");
+  const approved = approvedFiles.length > 0;
+  const [selected, setSelected] = useState<string[]>([]);
+  const included = approvedFiles.filter((o) => selected.includes(o.id));
+  const blockers = [
+    ...new Set(included.flatMap((o) => detail.outputBlockers?.[o.id] ?? detail.blockers)),
+  ];
+  const unconfiguredClosingChannels = unconfiguredStudioClosingChannels(included);
   const channels = [...new Set(included.map((output) => output.channel))];
-  const current = publications.filter((p) => p.packageRevision === value.revision);
+  const current = publications.filter((p) =>
+    included.some((o) => o.id === p.outputId && studioPublicationMatchesFile(value, o, p)),
+  );
   const complete = studioWorkflow({ package: value, publications }).complete;
   const pending = current.some((p) => ["QUEUED", "RUNNING", "PROCESSING"].includes(p.status));
   const uncertain = current.some((p) => p.status === "UNCERTAIN");
@@ -63,6 +72,7 @@ export function StudioPublishing({
     complete ||
     pending ||
     uncertain ||
+    current.some((p) => ["PUBLISHED", "SIMULATED", "CANCELLED"].includes(p.status)) ||
     (!value.isTest && !configured);
   return (
     <section
@@ -75,7 +85,7 @@ export function StudioPublishing({
       <h3>{approved ? "Step 6 · Publish approved content" : "Publishing after approval"}</h3>
       <p>
         {approved
-          ? `Approval saved. ${included.length} approved file${included.length === 1 ? " is" : "s are"} locked for publishing.`
+          ? `Approval saved. ${approvedFiles.length} approved file${approvedFiles.length === 1 ? " is" : "s are"} locked for publishing. Select the files to post.`
           : "The generated files still need package approval. Approving the master permissions alone does not approve these files."}
       </p>
       {value.isTest ? (
@@ -97,6 +107,35 @@ export function StudioPublishing({
           {unconfiguredClosingChannels.join(", ")} and update its subscription description. The
           closing card must match the intended channel.
         </p>
+      )}
+      {approved && (
+        <fieldset disabled={busy}>
+          <legend>Files to post</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={
+                approvedFiles.length > 0 && approvedFiles.every((o) => selected.includes(o.id))
+              }
+              onChange={(e) => setSelected(e.target.checked ? approvedFiles.map((o) => o.id) : [])}
+            />{" "}
+            Select all approved files
+          </label>
+          {approvedFiles.map((o) => (
+            <label key={o.id} style={{ display: "block" }}>
+              <input
+                type="checkbox"
+                checked={selected.includes(o.id)}
+                onChange={(e) =>
+                  setSelected(
+                    e.target.checked ? [...selected, o.id] : selected.filter((id) => id !== o.id),
+                  )
+                }
+              />{" "}
+              {o.title}
+            </label>
+          ))}
+        </fieldset>
       )}
       <ul>
         {channels.map((channel) => {
@@ -262,10 +301,13 @@ export function StudioPublishing({
                 const { id } = destination(channel);
                 if (id && channel !== "website") accounts[channel] = id;
               }
-              onPublish(accounts);
+              onPublish(
+                accounts,
+                included.map((o) => o.id),
+              );
             }}
           >
-            {value.isTest ? "Run test publication" : "Publish approved channels"}
+            {value.isTest ? "Run test publication" : "Post selected files"}
           </button>
         )}
         <button type="button" className="button" disabled={busy} onClick={onRefresh}>

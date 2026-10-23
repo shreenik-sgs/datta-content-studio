@@ -11,6 +11,7 @@ import {
   type StudioProvenance,
   studioAssetName,
   studioClosingCardPlan,
+  studioFileStatus,
 } from "@satsang/distribution-domain";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -365,6 +366,209 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       confirmTeachingIntegrity: true,
     });
   }
+
+  it("submits, approves and publishes one file without locking or posting its draft sibling", async () => {
+    const f = await fixture();
+    let pkg = await draft(f);
+    const [first, second] = pkg.outputs;
+    if (!first || !second) throw Error("MISSING_FIXTURE");
+    pkg = await studio.submit(f.ctx, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [first.id],
+    });
+    expect(pkg.outputs.map((o) => studioFileStatus(pkg, o))).toEqual(["IN_REVIEW", "DRAFT"]);
+    await expect(
+      studio.review(f.reviewer, pkg.id, {
+        expectedRevision: pkg.revision,
+        outputIds: [second.id],
+        decision: "APPROVED",
+        confirmTranscript: true,
+        confirmTeachingIntegrity: true,
+      }),
+    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
+    pkg = await studio.review(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [first.id],
+      decision: "APPROVED",
+      confirmTranscript: true,
+      confirmTeachingIntegrity: true,
+    });
+    const locked = pkg.outputs[0];
+    expect(pkg.outputs.map((o) => studioFileStatus(pkg, o))).toEqual(["APPROVED", "DRAFT"]);
+    expect(pkg.status).toBe("DRAFT");
+    await expect(
+      studio.revise(f.ctx, pkg.id, {
+        expectedRevision: pkg.revision,
+        outputs: [{ id: first.id, title: "Sneaked edit", body: first.body, included: true }],
+        comment: "Not allowed",
+      }),
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
+    await expect(
+      studio.enqueueGeneration(f.ctx, pkg.id, {
+        expectedRevision: pkg.revision,
+        outputIds: [first.id],
+      }),
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
+    await expect(
+      studio.discard(f.ctx, pkg.id, { expectedRevision: pkg.revision, outputId: first.id }),
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
+    await expect(studio.discard(f.ctx, pkg.id, { expectedRevision: pkg.revision })).rejects.toThrow(
+      "STUDIO_FILE_LOCKED",
+    );
+    await expect(
+      studio.publish(f.reviewer, pkg.id, {
+        expectedRevision: pkg.revision,
+        outputIds: [second.id],
+      }),
+    ).rejects.toThrow("STUDIO_NOT_APPROVED");
+    const jobs = await studio.publish(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [first.id],
+    });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.outputId).toBe(first.id);
+    pkg = await studio.revise(f.ctx, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputs: [{ id: second.id, title: "Corrected sibling", body: second.body, included: true }],
+      comment: "Fix the draft only",
+    });
+    expect(pkg.outputs[0]).toEqual(locked);
+    expect(
+      (
+        await studio.publish(f.reviewer, pkg.id, {
+          expectedRevision: pkg.revision,
+          outputIds: [first.id],
+        })
+      ).map((j) => j.id),
+    ).toEqual(jobs.map((j) => j.id));
+    const send = await studio.claimPublication({
+      isTest: true,
+      workerId: "scoped-test",
+      publicationId: jobs[0]?.id,
+    });
+    expect(send?.output.id).toBe(first.id);
+    if (!send) throw Error("MISSING_PUBLICATION_CLAIM");
+    expect((await studio.revalidatePublication(send)).accepted).toBe(true);
+    pkg = await studio.enqueueGeneration(f.ctx, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [second.id],
+    });
+    const generation = await claim(pkg);
+    const result = await studio.completeGeneration(generation, {
+      outputs: pkg.outputs.map((o) => (o.id === second.id ? { ...o, asset: second.asset } : o)),
+      provenance: pkg.provenance as StudioProvenance,
+    });
+    if (!result.accepted) throw Error(result.reason);
+    pkg = result.package;
+    expect(pkg.outputs[0]).toEqual(locked);
+    expect(pkg.outputs.map((o) => studioFileStatus(pkg, o))).toEqual(["APPROVED", "DRAFT"]);
+    pkg = await studio.submit(f.ctx, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [second.id],
+    });
+    expect(pkg.outputs.map((o) => studioFileStatus(pkg, o))).toEqual(["APPROVED", "IN_REVIEW"]);
+    await expect(
+      studio.revise(f.ctx, pkg.id, {
+        expectedRevision: pkg.revision,
+        outputs: [
+          { id: second.id, title: "While under review", body: second.body, included: true },
+        ],
+        comment: "Not allowed",
+      }),
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
+    pkg = await studio.review(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [second.id],
+      decision: "APPROVED",
+      confirmTranscript: true,
+      confirmTeachingIntegrity: true,
+    });
+    expect(pkg.status).toBe("APPROVED");
+    expect(pkg.outputs[0]).toEqual(locked);
+    expect((await studio.revalidatePublication(send)).accepted).toBe(true);
+    await studio.completePublication(send, { status: "SIMULATED" });
+    const again = await studio.publish(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [first.id],
+    });
+    expect(again[0]?.id).toBe(jobs[0]?.id);
+    expect(again[0]?.status).toBe("SIMULATED");
+  });
+
+  it("does not block reviewing an unchanged file when a sibling correction fails", async () => {
+    const f = await fixture();
+    let pkg = await draft(f);
+    const [first, second] = pkg.outputs;
+    if (!first || !second) throw Error("MISSING_FIXTURE");
+    pkg = await studio.submit(f.ctx, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [first.id],
+    });
+    pkg = await studio.enqueueGeneration(f.ctx, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [second.id],
+    });
+    const generation = await claim(pkg);
+    await studio.failGeneration(generation, "STUDIO_PROVIDER_UNAVAILABLE");
+    pkg = await studio.get(f.ctx, pkg.id);
+    expect(pkg.status).toBe("FAILED");
+    expect(pkg.outputs.map((o) => studioFileStatus(pkg, o))).toEqual(["IN_REVIEW", "DRAFT"]);
+    pkg = await studio.review(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [first.id],
+      decision: "APPROVED",
+      confirmTranscript: true,
+      confirmTeachingIntegrity: true,
+    });
+    expect(pkg.outputs.map((o) => studioFileStatus(pkg, o))).toEqual(["APPROVED", "DRAFT"]);
+    expect(
+      await studio.publish(f.reviewer, pkg.id, {
+        expectedRevision: pkg.revision,
+        outputIds: [first.id],
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("keeps other submitted files under review when a selected file is approved or returned", async () => {
+    const f = await fixture();
+    let pkg = await draft(f);
+    const ids = pkg.outputs.map((o) => o.id);
+    pkg = await studio.submit(f.ctx, pkg.id, { expectedRevision: pkg.revision, outputIds: ids });
+    pkg = await studio.review(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [ids[0] as string],
+      decision: "APPROVED",
+      confirmTranscript: true,
+      confirmTeachingIntegrity: true,
+    });
+    const locked = pkg.outputs[0];
+    expect(pkg.outputs.map((o) => studioFileStatus(pkg, o))).toEqual(["APPROVED", "IN_REVIEW"]);
+    await expect(
+      studio.review(f.reviewer, pkg.id, {
+        expectedRevision: pkg.revision,
+        outputIds: [ids[1] as string],
+        decision: "REJECTED",
+      }),
+    ).rejects.toThrow();
+    pkg = await studio.review(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [ids[1] as string],
+      decision: "REJECTED",
+      comment: "Fix only this ending",
+    });
+    expect(pkg.outputs[0]).toEqual(locked);
+    expect(pkg.outputs.map((o) => studioFileStatus(pkg, o))).toEqual([
+      "APPROVED",
+      "CHANGES_REQUESTED",
+    ]);
+    expect(pkg.outputs[1]?.correction?.comment).toBe("Fix only this ending");
+    expect(
+      await studio.publish(f.reviewer, pkg.id, {
+        expectedRevision: pkg.revision,
+        outputIds: [ids[0] as string],
+      }),
+    ).toHaveLength(1);
+  });
 
   it("queues additional discovery separately, preserves existing drafts and rejects mutation during completion", async () => {
     const f = await fixture({ channels: ["youtube"], allCompleteMessages: true });
@@ -916,7 +1120,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       outputIds: [target.id],
       comment: "Shorten this file only",
     });
-    expect(pkg.outputs[1]).toEqual(other);
+    expect(pkg.outputs[1]).toMatchObject(other);
     expect(pkg.outputs[0]?.correction?.comment).toBe("Shorten this file only");
     await expect(studio.submit(f.ctx, pkg.id, { expectedRevision: pkg.revision })).rejects.toThrow(
       "STUDIO_CORRECTIONS_PENDING",
@@ -968,7 +1172,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     });
     if (!result.accepted) throw new Error(result.reason);
     pkg = await studio.submit(f.ctx, pkg.id, { expectedRevision: result.package.revision });
-    expect(pkg.outputs[1]).toEqual(other);
+    expect(pkg.outputs[1]).toMatchObject(other);
     expect(pkg.outputs[0]?.correction?.state).toBe("submitted");
     pkg = await studio.review(f.reviewer, pkg.id, {
       expectedRevision: pkg.revision,
@@ -994,20 +1198,20 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
         ],
         comment: "Attempt after approval",
       }),
-    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
     await expect(
       studio.enqueueGeneration(f.ctx, pkg.id, {
         expectedRevision: pkg.revision,
         outputIds: [approvedOutput.id],
         mode: "ai",
       }),
-    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
     await expect(
       studio.discard(f.ctx, pkg.id, {
         expectedRevision: pkg.revision,
         outputId: approvedOutput.id,
       }),
-    ).rejects.toThrow("FORBIDDEN");
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
     expect(await studio.get(f.ctx, pkg.id)).toEqual(approvedSnapshot);
     const currentMaster = await content.get(f.ctx, pkg.source.masterId);
     const additional = await studio.create(f.ctx, {
@@ -1085,7 +1289,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     });
     if (!corrected.accepted) throw Error(corrected.reason);
     pkg = await studio.submit(dual, pkg.id, { expectedRevision: corrected.package.revision });
-    expect(pkg.outputs[1]).toEqual(other);
+    expect(pkg.outputs[1]).toMatchObject(other);
     await expect(
       studio.review(dual, pkg.id, { expectedRevision: pkg.revision, decision: "APPROVED" }),
     ).rejects.toThrow("TEACHING_INTEGRITY_CONFIRMATION_REQUIRED");
@@ -1102,7 +1306,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
         expectedRevision: pkg.revision,
         outputIds: [target.id],
       }),
-    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
     await expect(
       studio.revise(dual, pkg.id, {
         comment: "Must remain locked",
@@ -1114,7 +1318,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
           included: o.included,
         })),
       }),
-    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
+    ).rejects.toThrow("STUDIO_FILE_LOCKED");
     const queued = await studio.publish(dual, pkg.id, { expectedRevision: pkg.revision });
     const delivery = await studio.claimPublication({
       isTest: true,

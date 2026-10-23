@@ -173,6 +173,7 @@ export function studioProblem(error: unknown): Response {
     return json({ error: code }, code === "INVALID_STUDIO_TRANSITION" ? 409 : 400);
   if (
     [
+      "STUDIO_FILE_LOCKED",
       "GENERATION_REQUIRED",
       "NO_INCLUDED_OUTPUTS",
       "ASSETS_REQUIRE_REGENERATION",

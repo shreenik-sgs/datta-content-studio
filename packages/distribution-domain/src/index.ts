@@ -142,3 +142,5 @@ export * from "./studio-posting-check";
 export * from "./studio-bulk-actions";
 
 export * from "./reviewer-languages.js";
+
+export * from "./studio-file-workflow";

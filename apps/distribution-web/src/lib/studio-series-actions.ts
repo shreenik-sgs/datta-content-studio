@@ -1,3 +1,4 @@
+import { studioFileStatus, studioPublicationMatchesFile } from "@satsang/distribution-domain";
 import type {
   ContentMaster,
   StudioChannel,
@@ -59,15 +60,20 @@ export const seriesActionName = {
   post: "Post",
   retract: "Retract",
 };
+export function seriesFileEligible(
+  pkg: PublicStudioPackage,
+  output: PublicStudioPackage["outputs"][number],
+  action: SeriesAction,
+) {
+  if (action === "retract") return true;
+  if (!output.included || ["QUEUED", "GENERATING", "DISCARDED"].includes(pkg.status)) return false;
+  const status = studioFileStatus(pkg, output);
+  return action === "submit"
+    ? ["DRAFT", "CHANGES_REQUESTED"].includes(status)
+    : status === (action === "approve" ? "IN_REVIEW" : "APPROVED");
+}
 export function seriesCandidates(packages: readonly PublicStudioPackage[], action: SeriesAction) {
-  return packages.filter(
-    (p) =>
-      action === "retract" ||
-      (p.outputs.some((o) => o.included) &&
-        (action === "submit"
-          ? ["DRAFT", "CHANGES_REQUESTED"].includes(p.status)
-          : p.status === (action === "approve" ? "IN_REVIEW" : "APPROVED"))),
-  );
+  return packages.filter((p) => p.outputs.some((o) => seriesFileEligible(p, o, action)));
 }
 
 export async function prepareSeriesRows(
@@ -83,7 +89,7 @@ export async function prepareSeriesRows(
         const detail = await seriesRequest<StudioDetail>(`/distribution/api/studio/${pkg.id}`);
         const current = detail.package;
         if (!seriesCandidates([current], action).length) return [];
-        const outputs = current.outputs.filter((o) => o.included);
+        const outputs = current.outputs.filter((o) => seriesFileEligible(current, o, action));
         if (action === "retract")
           return detail.publications
             .filter((p) => p.status !== "CANCELLED")
@@ -96,32 +102,6 @@ export async function prepareSeriesRows(
               count: 1,
               publication: p,
             }));
-        const blockers = detail.blockers.filter(
-          (code) => action === "post" || code !== "NOT_APPROVED",
-        );
-        if (action === "submit" && outputs.some((o) => o.correction?.state === "pending"))
-          blockers.push("STUDIO_CORRECTIONS_PENDING");
-        const blocker =
-          (action === "approve" ? detail.reviewAssignment?.blocker : null) ??
-          (blockers.length ? blockers.map(studioMessage).join(" ") : undefined);
-        if (action === "post")
-          return outputs.map((o) => {
-            const previous = detail.publications.find(
-              (p) => p.outputId === o.id && p.packageRevision === current.revision,
-            );
-            return {
-              id: o.id,
-              detail,
-              title: o.asset?.filename ?? o.title,
-              count: 1,
-              outputId: o.id,
-              blocker:
-                blocker ??
-                (previous && previous.status !== "BLOCKED"
-                  ? "A posting request already exists. Check its result before sending again."
-                  : undefined),
-            };
-          });
         const source =
           action === "approve"
             ? (
@@ -130,20 +110,34 @@ export async function prepareSeriesRows(
                 )
               ).content
             : undefined;
-        return [
-          {
-            id: current.id,
+        return outputs.map((o) => {
+          const blockers = (detail.outputBlockers?.[o.id] ?? detail.blockers).filter(
+            (code) => action === "post" || code !== "NOT_APPROVED",
+          );
+          if (action === "submit" && o.correction?.state === "pending")
+            blockers.push("STUDIO_CORRECTIONS_PENDING");
+          const previous = detail.publications.find(
+            (p) => p.outputId === o.id && studioPublicationMatchesFile(current, o, p),
+          );
+          const blocker =
+            (action === "approve" ? detail.reviewAssignment?.blocker : null) ??
+            (blockers.length ? blockers.map(studioMessage).join(" ") : undefined) ??
+            (source && !["APPROVED", "PUBLISHED", "RIGHTS_CLEARED"].includes(source.state)
+              ? "Master permissions must be completed by the Curator first."
+              : undefined) ??
+            (action === "post" && previous && previous.status !== "BLOCKED"
+              ? "A posting request already exists. Check its result before sending again."
+              : undefined);
+          return {
+            id: o.id,
             detail,
-            title: current.source.title,
-            count: outputs.length,
+            title: o.asset?.filename ?? o.title,
+            count: 1,
+            outputId: o.id,
             source,
-            blocker:
-              blocker ??
-              (source && !["APPROVED", "PUBLISHED", "RIGHTS_CLEARED"].includes(source.state)
-                ? "Master permissions must be completed by the Curator first."
-                : undefined),
-          },
-        ];
+            blocker,
+          };
+        });
       }),
     );
     rows.push(...chunk.flat());
@@ -206,6 +200,7 @@ export async function runSeriesAction(
           `${base}/${action === "approve" ? "review" : action === "post" ? "publish" : "submit"}`,
           {
             expectedRevision: pkg.revision,
+            outputIds: group.map((r) => r.outputId),
             ...(action === "approve"
               ? { decision: "APPROVED", confirmTranscript: true, confirmTeachingIntegrity: true }
               : {}),
@@ -225,19 +220,12 @@ export async function runSeriesAction(
         );
         if (
           action === "post" &&
-          group.some(
-            (item) =>
-              !response.publications?.some(
-                (p) => p.outputId === item.outputId && p.packageRevision === pkg.revision,
-              ),
-          )
+          group.some((item) => !response.publications?.some((p) => p.outputId === item.outputId))
         )
           throw Error("STUDIO_ACTION_UNCONFIRMED");
         for (const item of group) {
           if (action === "post") {
-            const job = response.publications?.find(
-              (p) => p.outputId === item.outputId && p.packageRevision === pkg.revision,
-            );
+            const job = response.publications?.find((p) => p.outputId === item.outputId);
             if (!job) throw Error("STUDIO_ACTION_UNCONFIRMED");
             onResult({
               id: item.id,

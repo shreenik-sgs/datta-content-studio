@@ -11,10 +11,12 @@ import {
   studioAppLinks,
   studioCanDiscard,
   studioCanEdit,
+  studioCanEditFile,
   studioCaptionsEnabled,
   studioChannelLabel,
   studioClosingChannel,
   studioExternalProcessingDecision,
+  studioFileStatus,
   studioNeedsSuitabilityReview,
   studioWorkflow,
 } from "@satsang/distribution-domain";
@@ -490,6 +492,13 @@ export function StudioPanel({
     editingRef.current = editing;
   }, [editing]);
   const [regenerating, setRegenerating] = useState(false);
+  const [reviewSelection, setReviewSelection] = useState<string[]>([]);
+  useEffect(() => {
+    if (detail?.package.id && detail.package.revision) setReviewSelection([]);
+  }, [detail?.package.id, detail?.package.revision]);
+  const reviewBlockers = reviewSelection.flatMap(
+    (id) => detail?.outputBlockers?.[id] ?? detail?.blockers ?? [],
+  );
   const [previewOutput, setPreviewOutput] = useState<string | null>(null);
   const [manualEdit, setManualEdit] = useState<{ id: string; sequence: number } | null>(null);
   const manualEditAvailable = Boolean(
@@ -700,7 +709,9 @@ export function StudioPanel({
             : scope === "ongoing"
               ? item.status !== "APPROVED"
               : true) &&
-          (filter === "active" || item.status === filter) &&
+          (filter === "active" ||
+            item.status === filter ||
+            item.outputs.some((o) => o.workflow && studioFileStatus(item, o) === filter)) &&
           matchesSearch(item.source.title),
       )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) ?? [];
@@ -728,7 +739,10 @@ export function StudioPanel({
           (!bundle?.packageIds || bundle.packageIds.includes(item.id)),
       ) ?? [])
     : [];
-  const pending = listing?.packages.filter((item) => item.status === "IN_REVIEW").length ?? 0;
+  const pending =
+    listing?.packages.filter((item) =>
+      item.outputs.some((o) => studioFileStatus(item, o) === "IN_REVIEW"),
+    ).length ?? 0;
   const bundlePackages = bundle
     ? bundle.masterIds.flatMap((id) =>
         (listing?.packages ?? []).filter(
@@ -802,7 +816,7 @@ export function StudioPanel({
           <StudioPreviewDialog onClose={() => setBundlePreview(null)}>
             <div className="preview-file-heading">
               <h3>{preview.title}</h3>
-              {preview.included && studioCanEdit(previewPackage.status, capabilities) ? (
+              {preview.included && studioCanEditFile(previewPackage, preview, capabilities) ? (
                 <button
                   className="button primary"
                   type="button"
@@ -822,7 +836,7 @@ export function StudioPanel({
             <StudioOutputPreview
               value={previewPackage}
               output={preview}
-              canDownload={canPublish && previewPackage.status === "APPROVED"}
+              canDownload={canPublish && studioFileStatus(previewPackage, preview) === "APPROVED"}
             />
           </StudioPreviewDialog>
         )}
@@ -1041,7 +1055,8 @@ export function StudioPanel({
         <aside className="workflow-context-note" aria-label="Curator handoff">
           <p>
             The Curator must open this recording under Continue Existing Curation, check its files,
-            then choose <strong>Submit package for review</strong> in step 3. You can then use
+            then choose <strong>Submit selected files for review</strong> in step 3. You can then
+            use
             <strong> Review &amp; approve</strong> in step 4.
           </p>
           <p>
@@ -1060,8 +1075,8 @@ export function StudioPanel({
           canPublish={canPublish}
           canManage={capabilities.includes("operations.manage")}
           busy={busy}
-          onPublish={(accounts) =>
-            void perform("publish", { expectedRevision: value.revision, accounts })
+          onPublish={(accounts, outputIds) =>
+            void perform("publish", { expectedRevision: value.revision, accounts, outputIds })
           }
           onRefresh={() => void load().catch(() => setError(studioMessage("unavailable")))}
         />
@@ -1614,7 +1629,7 @@ export function StudioPanel({
                       {!output.included && <span className="badge">Discarded output</span>}
                     </div>
                     <h3 style={{ overflowWrap: "anywhere" }}>{output.title}</h3>
-                    {output.included && studioCanEdit(value.status, capabilities) && (
+                    {output.included && studioCanEditFile(value, output, capabilities) && (
                       <button
                         type="button"
                         className="button"
@@ -1643,28 +1658,33 @@ export function StudioPanel({
                     <StudioOutputPreview
                       value={value}
                       output={output}
-                      canDownload={canPublish && value.status === "APPROVED" && output.included}
+                      canDownload={
+                        canPublish &&
+                        studioFileStatus(value, output) === "APPROVED" &&
+                        output.included
+                      }
                     />
-                    {output.included && studioCanDiscard(value.status, capabilities, "output") && (
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={busy}
-                        onClick={() => {
-                          setPreviewOutput(null);
-                          setDiscarding(output.id);
-                          window.setTimeout(
-                            () =>
-                              document
-                                .getElementById(`package-actions-${value.id}`)
-                                ?.scrollIntoView({ block: "start" }),
-                            0,
-                          );
-                        }}
-                      >
-                        Discard output
-                      </button>
-                    )}
+                    {output.included &&
+                      studioCanDiscard(studioFileStatus(value, output), capabilities, "output") && (
+                        <button
+                          type="button"
+                          className="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setPreviewOutput(null);
+                            setDiscarding(output.id);
+                            window.setTimeout(
+                              () =>
+                                document
+                                  .getElementById(`package-actions-${value.id}`)
+                                  ?.scrollIntoView({ block: "start" }),
+                              0,
+                            );
+                          }}
+                        >
+                          Discard output
+                        </button>
+                      )}
                     {detail.publications
                       .filter(
                         (publication) =>
@@ -1701,7 +1721,7 @@ export function StudioPanel({
             aria-label="Package actions"
           >
             <StudioCorrectionComparison value={value} />
-            {studioCanEdit(value.status, capabilities) && value.outputs.length > 0 && (
+            {value.outputs.some((o) => studioCanEditFile(value, o, capabilities)) && (
               <StudioCorrections
                 key={`${value.id}-${value.revision}-${manualEdit?.sequence ?? 0}`}
                 initialOutputId={
@@ -1740,19 +1760,40 @@ export function StudioPanel({
                 </button>
               )}
             {canCreate &&
-              ["DRAFT", "CHANGES_REQUESTED"].includes(value.status) &&
+              value.outputs.some((o) => studioCanEditFile(value, o, capabilities)) &&
               !editing &&
               !regenerating && (
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
+                    const form = new FormData(event.currentTarget);
+                    const outputIds = form.getAll("submitOutput");
+                    if (!outputIds.length) {
+                      setError("Select the files to submit for review.");
+                      return;
+                    }
                     void perform("submit", {
                       expectedRevision: value.revision,
-                      comment: String(new FormData(event.currentTarget).get("comment") ?? ""),
+                      outputIds,
+                      comment: String(form.get("comment") ?? ""),
                     });
                   }}
                 >
                   <fieldset disabled={busy}>
+                    <legend>Files to submit</legend>
+                    {value.outputs
+                      .filter((o) => studioCanEditFile(value, o, capabilities))
+                      .map((o) => (
+                        <label key={o.id} style={checkStyle}>
+                          <input
+                            type="checkbox"
+                            name="submitOutput"
+                            value={o.id}
+                            style={boxStyle}
+                          />
+                          {o.title}
+                        </label>
+                      ))}
                     <label>
                       {combinedRoles ? "Curation notes (optional)" : "Note for Content Approver"}
                       <textarea name="comment" rows={3} maxLength={4000} />
@@ -1762,12 +1803,12 @@ export function StudioPanel({
                       className="button primary"
                       disabled={!value.outputs.some((output) => output.included)}
                     >
-                      {combinedRoles ? "Continue to approval review" : "Submit package for review"}
+                      Submit selected files for review
                     </button>
                   </fieldset>
                 </form>
               )}
-            {canReview && value.status === "IN_REVIEW" && (
+            {canReview && value.outputs.some((o) => studioFileStatus(value, o) === "IN_REVIEW") && (
               <>
                 <StudioSourceReview
                   key={value.source.masterId}
@@ -1783,8 +1824,8 @@ export function StudioPanel({
                       .submitter as HTMLButtonElement | null;
                     const decision = submitter?.value === "REJECTED" ? "REJECTED" : "APPROVED";
                     const comment = String(form.get("comment") ?? "").trim();
-                    if (decision === "REJECTED" && !form.getAll("returnOutput").length) {
-                      setError("Select the file or files that need correction.");
+                    if (!form.getAll("reviewOutput").length) {
+                      setError("Select the files to review.");
                       return;
                     }
                     if (decision === "REJECTED" && !comment) {
@@ -1798,9 +1839,7 @@ export function StudioPanel({
                       expectedRevision: value.revision,
                       decision,
                       comment,
-                      ...(decision === "REJECTED"
-                        ? { outputIds: form.getAll("returnOutput") }
-                        : {}),
+                      outputIds: form.getAll("reviewOutput"),
                       confirmTranscript: form.get("confirmTranscript") === "on",
                       confirmTeachingIntegrity: form.get("confirmTeachingIntegrity") === "on",
                     });
@@ -1809,16 +1848,27 @@ export function StudioPanel({
                   <fieldset disabled={busy}>
                     <h3>{combinedRoles ? "Approval review" : "Content Approver review"}</h3>
                     <fieldset>
-                      <legend>Files to return for correction</legend>
-                      <p>Select only the files needing changes. Other files are not regenerated.</p>
+                      <legend>Files to review</legend>
+                      <p>
+                        Select only the files to approve or return for changes. Other files stay
+                        unchanged.
+                      </p>
                       {value.outputs
-                        .filter((o) => o.included)
+                        .filter((o) => studioFileStatus(value, o) === "IN_REVIEW")
                         .map((o) => (
                           <label key={o.id} style={checkStyle}>
                             <input
                               type="checkbox"
-                              name="returnOutput"
+                              name="reviewOutput"
                               value={o.id}
+                              checked={reviewSelection.includes(o.id)}
+                              onChange={(e) =>
+                                setReviewSelection(
+                                  e.target.checked
+                                    ? [...reviewSelection, o.id]
+                                    : reviewSelection.filter((id) => id !== o.id),
+                                )
+                              }
                               style={boxStyle}
                             />
                             {studioChannelLabel(o.channel)} · {o.language} ·{" "}
@@ -1834,13 +1884,13 @@ export function StudioPanel({
                       <label style={checkStyle}>
                         <input type="checkbox" name="confirmTranscript" style={boxStyle} />I checked
                         the machine transcript against the source and confirm the accuracy of the
-                        included outputs and captions.
+                        selected outputs and captions.
                       </label>
                     )}
                     <label style={checkStyle}>
                       <input type="checkbox" name="confirmTeachingIntegrity" style={boxStyle} />I
                       checked source boundaries, context, attribution, captions and translations,
-                      and Ashrama branding for every included output.
+                      and Ashrama branding for every selected output.
                     </label>
                     {detail.reviewAssignment?.blocker && (
                       <output>{detail.reviewAssignment.blocker}</output>
@@ -1852,10 +1902,12 @@ export function StudioPanel({
                         value="APPROVED"
                         className="button primary"
                         disabled={
-                          detail.blockers.length > 0 || Boolean(detail.reviewAssignment?.blocker)
+                          !reviewSelection.length ||
+                          reviewBlockers.length > 0 ||
+                          Boolean(detail.reviewAssignment?.blocker)
                         }
                       >
-                        Approve package
+                        Approve selected files
                       </button>
                       <button type="submit" name="decision" value="REJECTED" className="button">
                         Request changes
@@ -1865,17 +1917,20 @@ export function StudioPanel({
                 </form>
               </>
             )}
-            {studioCanDiscard(value.status, capabilities, "package") && (
-              <button
-                type="button"
-                className="button quiet"
-                style={{ marginTop: 24 }}
-                disabled={busy}
-                onClick={() => setDiscarding("package")}
-              >
-                Discard package
-              </button>
-            )}
+            {studioCanDiscard(value.status, capabilities, "package") &&
+              value.outputs.every((o) =>
+                studioCanDiscard(studioFileStatus(value, o), capabilities, "package"),
+              ) && (
+                <button
+                  type="button"
+                  className="button quiet"
+                  style={{ marginTop: 24 }}
+                  disabled={busy}
+                  onClick={() => setDiscarding("package")}
+                >
+                  Discard package
+                </button>
+              )}
             {discarding && (
               <form
                 className="confirm"

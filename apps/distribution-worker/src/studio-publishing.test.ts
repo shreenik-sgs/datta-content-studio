@@ -201,6 +201,41 @@ describe("durable Studio publication worker", () => {
     });
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it("sends an approved file from a mixed package after sibling revisions without sending its draft sibling", async () => {
+    const { ports, repository, fetcher } = fixture(true);
+    const claim = await repository.claimPublication();
+    if (!claim || !claim.package.approval) throw Error("MISSING_FIXTURE");
+    claim.output.workflow = {
+      status: "APPROVED",
+      actorId: claim.package.approval.reviewerId,
+      updatedAt: claim.package.updatedAt,
+      approval: { ...claim.package.approval, fingerprint: "test-only" },
+    };
+    claim.package = {
+      ...claim.package,
+      status: "DRAFT",
+      approval: null,
+      revision: claim.package.revision + 2,
+      outputs: [
+        claim.output,
+        {
+          ...claim.output,
+          id: "draft-sibling",
+          workflow: { status: "DRAFT", actorId: "curator", updatedAt: claim.package.updatedAt },
+        },
+      ],
+    };
+    repository.revalidatePublication.mockResolvedValue({
+      accepted: true,
+      package: { ...claim.package, revision: claim.package.revision + 1 },
+    });
+    expect(await runStudioPublicationOnce(ports)).toBe(true);
+    expect(repository.completePublication).toHaveBeenCalledWith(claim, {
+      status: "SIMULATED",
+      error: "TEST_PUBLICATION_NO_EXTERNAL_SEND",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it.each([true, false])(
     "blocks altered asset bytes before publishing or simulating (TEST %s)",
     async (isTest) => {

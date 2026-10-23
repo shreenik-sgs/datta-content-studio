@@ -4,6 +4,7 @@ import {
   studioNeedsSuitabilityReview,
 } from "./intelligent-content";
 import type { OnlineImport } from "./online-video";
+import { type StudioFileWorkflow, studioPublicationMatchesFile } from "./studio-file-workflow";
 
 export type StudioWorkflowState = "done" | "current" | "pending" | "optional" | "stopped";
 export type StudioWorkflowStep = {
@@ -82,7 +83,7 @@ export function studioBundleWorkflow(item: OnlineImport) {
 export function studioWorkflow(input: {
   package?: Pick<StudioPackage, "status" | "revision" | "isTest" | "feedback"> & {
     failure?: string | null;
-    outputs: readonly { id: string; included: boolean }[];
+    outputs: readonly { id: string; included: boolean; workflow?: StudioFileWorkflow }[];
   };
   hasMaster?: boolean;
   starting?: boolean;
@@ -95,7 +96,8 @@ export function studioWorkflow(input: {
   const returned = pkg?.feedback.some((entry) => entry.action === "REJECTED") ?? false;
   const included = pkg?.outputs.filter((output) => output.included) ?? [];
   const publications = (input.publications ?? []).filter(
-    (p) => p.packageRevision === pkg?.revision,
+    (p) =>
+      pkg && included.some((o) => o.id === p.outputId && studioPublicationMatchesFile(pkg, o, p)),
   );
   const complete =
     status === "APPROVED" &&

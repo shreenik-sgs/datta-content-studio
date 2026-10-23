@@ -24,10 +24,14 @@ import {
   postingCheckBlock,
   requireContentRevision,
   requireIndependentContentReview,
+  studioAggregateFileStatus,
   studioCanDiscard,
   studioCanEdit,
+  studioCanEditFile,
   studioCorrectionTargets,
   studioExternalProcessingDecision,
+  studioFileApproval,
+  studioFileStatus,
   studioKnownPostingMatch,
   studioNeedsSuitabilityReview,
   studioPackageBlockers,
@@ -54,6 +58,7 @@ import {
 } from "./repository.js";
 import { requireIndependentSourceReview } from "./review-integrity.js";
 import type { StudioRoleAuthority } from "./studio-authority.js";
+import { materializeFileWorkflows, studioFileFingerprint } from "./studio-file-review.js";
 import { currentStudioTranscript, loadStudioSource } from "./studio-source.js";
 
 export type StudioRevisionHistoryEntry = {
@@ -355,6 +360,21 @@ export function createIntelligentContentRepository(
       feedback: [],
       updatedAt: new Date().toISOString(),
     };
+    if (pkg.outputs.some((o) => o.workflow)) {
+      const reviewAction =
+        action.startsWith("APPROVED_") || ["SUBMITTED", "REJECTED", "DISCARDED"].includes(action);
+      if (!reviewAction) {
+        for (const old of pkg.outputs.filter((o) =>
+          ["IN_REVIEW", "APPROVED"].includes(studioFileStatus(pkg, o)),
+        )) {
+          const output = next.outputs.find((o) => o.id === old.id);
+          if (!output || studioFileFingerprint(pkg, old) !== studioFileFingerprint(next, output))
+            throw Error("STUDIO_FILE_LOCKED");
+        }
+      }
+      if (!["QUEUED", "GENERATING", "FAILED", "DISCARDED"].includes(next.status))
+        next.status = studioAggregateFileStatus(next.outputs);
+    }
     await client.query(
       "INSERT INTO distribution.studio_revision(package_id,is_test,revision,snapshot,actor_id,action) VALUES($1,$2,$3,$4,$5,$6)",
       [pkg.id, pkg.isTest, next.revision, next, actorId, action],
@@ -417,7 +437,195 @@ export function createIntelligentContentRepository(
       if (!grants.rowCount) throw new Error("NATIVE_REVIEWER_REQUIRED");
     }
   }
-  async function publicationEligible(client: PoolClient, pkg: StudioPackage, publishing = true) {
+  async function submitFiles(
+    client: PoolClient,
+    ctx: DistributionContext,
+    pkg: StudioPackage,
+    input: { outputIds?: string[] | undefined; comment?: string | undefined },
+  ) {
+    active(pkg);
+    if (["QUEUED", "GENERATING"].includes(pkg.status)) throw Error("INVALID_STUDIO_TRANSITION");
+    const selected = studioSelectedOutputs(
+      pkg.outputs,
+      input.outputIds ??
+        pkg.outputs
+          .filter((o) => ["DRAFT", "CHANGES_REQUESTED"].includes(studioFileStatus(pkg, o)))
+          .map((o) => o.id),
+    );
+    if (selected.some((o) => !studioCanEditFile(pkg, o, ["content.create"])))
+      throw Error("STUDIO_FILE_LOCKED");
+    if (selected.some((o) => o.correction?.state === "pending"))
+      throw Error("STUDIO_CORRECTIONS_PENDING");
+    const blockers = studioPackageBlockers(
+      { ...pkg, outputs: selected },
+      await sourceCurrent(client, pkg),
+    );
+    if (blockers.length) throw Error(blockers[0]);
+    const ids = new Set(selected.map((o) => o.id));
+    const outputs = materializeFileWorkflows(pkg).map((o) =>
+      ids.has(o.id)
+        ? {
+            ...o,
+            workflow: {
+              status: "IN_REVIEW" as const,
+              actorId: ctx.userId,
+              updatedAt: new Date().toISOString(),
+            },
+            ...(o.correction?.state === "revised"
+              ? { correction: { ...o.correction, state: "submitted" as const } }
+              : {}),
+          }
+        : o,
+    );
+    return save(
+      client,
+      pkg,
+      ctx.userId,
+      "SUBMITTED",
+      { outputs, status: studioAggregateFileStatus(outputs), approval: null },
+      { action: "SUBMITTED", comment: comment(input.comment) },
+    );
+  }
+  async function reviewFiles(
+    client: PoolClient,
+    ctx: DistributionContext,
+    pkg: StudioPackage,
+    input: {
+      outputIds?: string[] | undefined;
+      decision: "APPROVED" | "REJECTED" | "DISCARDED";
+      comment?: string | undefined;
+      confirmTranscript?: boolean | undefined;
+      confirmTeachingIntegrity?: boolean | undefined;
+    },
+  ) {
+    active(pkg);
+    if (["QUEUED", "GENERATING"].includes(pkg.status)) throw Error("INVALID_STUDIO_TRANSITION");
+    const selected = studioSelectedOutputs(
+      pkg.outputs,
+      input.outputIds ??
+        pkg.outputs.filter((o) => studioFileStatus(pkg, o) === "IN_REVIEW").map((o) => o.id),
+    );
+    if (selected.some((o) => studioFileStatus(pkg, o) !== "IN_REVIEW"))
+      throw Error("INVALID_STUDIO_TRANSITION");
+    requireIndependentContentReview(
+      ctx.userId,
+      pkg.contributorIds,
+      await reviewerRoles(ctx.userId, ctx.isTest),
+    );
+    const note = comment(input.comment, input.decision === "REJECTED");
+    let approval: StudioPackage["approval"] = null;
+    if (input.decision === "APPROVED") {
+      const scope = { ...pkg, outputs: selected };
+      const blockers = studioPackageBlockers(scope);
+      if (blockers.length) throw Error(blockers[0]);
+      if (!input.confirmTeachingIntegrity) throw Error("TEACHING_INTEGRITY_CONFIRMATION_REQUIRED");
+      if (
+        pkg.provenance?.transcript.provenance === "MACHINE_TRANSCRIPT" &&
+        !input.confirmTranscript
+      )
+        throw Error("MACHINE_TRANSCRIPT_CONFIRMATION_REQUIRED");
+      const master = await sourceRights(client, scope);
+      await requireIndependentSourceReview(client, {
+        isTest: ctx.isTest,
+        masterId: master.id,
+        versionId: master.currentVersion.id,
+        reviewerId: ctx.userId,
+        reviewerRoles: await reviewerRoles(ctx.userId, ctx.isTest),
+      });
+      await qualifiedReviewer(client, pkg, ctx.userId);
+      approval = {
+        reviewerId: ctx.userId,
+        revision: pkg.revision + 1,
+        sourceRevision: master.revision,
+        approvedAt: new Date().toISOString(),
+      };
+    }
+    const ids = new Set(selected.map((o) => o.id));
+    const outputs = materializeFileWorkflows(pkg).map((o) => {
+      if (!ids.has(o.id)) return o;
+      const workflow = {
+        status: input.decision === "REJECTED" ? ("CHANGES_REQUESTED" as const) : input.decision,
+        actorId: ctx.userId,
+        updatedAt: new Date().toISOString(),
+        ...(approval
+          ? { approval: { ...approval, fingerprint: studioFileFingerprint(pkg, o) } }
+          : {}),
+      };
+      if (input.decision === "REJECTED")
+        return {
+          ...o,
+          workflow,
+          correction: {
+            comment: note,
+            reviewerId: ctx.userId,
+            requestedAt: new Date().toISOString(),
+            state: "pending" as const,
+            before: {
+              title: o.title,
+              body: o.body,
+              sourceSegmentIds: o.sourceSegmentIds,
+              ...(o.mediaEdits ? { mediaEdits: o.mediaEdits } : {}),
+              ...(o.sourceTrim ? { sourceTrim: o.sourceTrim } : {}),
+              ...(o.captionCues ? { captionCues: o.captionCues } : {}),
+              ...(o.aiReview ? { aiReview: o.aiReview } : {}),
+            },
+          },
+        };
+      return {
+        ...o,
+        workflow,
+        ...(input.decision === "DISCARDED" ? { included: false } : {}),
+        ...(o.correction && input.decision === "APPROVED"
+          ? { correction: { ...o.correction, state: "resolved" as const } }
+          : {}),
+      };
+    });
+    const status = studioAggregateFileStatus(outputs);
+    return save(
+      client,
+      pkg,
+      ctx.userId,
+      input.decision === "APPROVED" ? "APPROVED_SELECTED_FILES" : input.decision,
+      { outputs, status, approval: status === "APPROVED" ? approval : null },
+      { action: input.decision, comment: note },
+    );
+  }
+  async function publicationEligible(
+    client: PoolClient,
+    pkg: StudioPackage,
+    publishing = true,
+    outputIds?: string[],
+  ) {
+    if (pkg.outputs.some((o) => o.workflow)) {
+      active(pkg);
+      const selected = studioSelectedOutputs(pkg.outputs, outputIds);
+      for (const output of selected) {
+        const approval = studioFileApproval(pkg, output);
+        if (
+          !approval ||
+          output.workflow?.approval?.fingerprint !== studioFileFingerprint(pkg, output)
+        )
+          throw Error("STUDIO_NOT_APPROVED");
+        requireIndependentContentReview(
+          approval.reviewerId,
+          pkg.contributorIds,
+          await reviewerRoles(approval.reviewerId, pkg.isTest),
+        );
+        const scope = { ...pkg, outputs: [output], approval };
+        const blockers = studioPackageBlockers(scope);
+        if (blockers.length) throw Error(blockers[0]);
+        if (publishing && unconfiguredStudioClosingChannels([output]).length)
+          throw Error("STUDIO_CLOSING_CHANNEL_REQUIRED");
+        await sourceRights(client, scope, true);
+        await qualifiedReviewer(client, pkg, approval.reviewerId);
+        if (!(await fresh(approval.reviewerId, pkg.isTest, "content.review")))
+          throw Error("REVIEWER_ROLE_REVOKED");
+      }
+      for (const contributor of pkg.contributorIds)
+        if (!(await fresh(contributor, pkg.isTest, "content.create")))
+          throw Error("REQUESTER_ROLE_REVOKED");
+      return;
+    }
     if (pkg.status !== "APPROVED" || pkg.approval?.revision !== pkg.revision)
       throw new Error("STUDIO_NOT_APPROVED");
     requireIndependentContentReview(
@@ -436,6 +644,24 @@ export function createIntelligentContentRepository(
     for (const contributor of pkg.contributorIds)
       if (!(await fresh(contributor, pkg.isTest, "content.create")))
         throw new Error("REQUESTER_ROLE_REVOKED");
+  }
+  async function publicationUnchanged(client: PoolClient, pkg: StudioPackage, row: QueryResultRow) {
+    if (pkg.revision === row.package_revision) return true;
+    const output = pkg.outputs.find((o) => o.id === row.output_id);
+    if (!output?.workflow?.approval || studioFileStatus(pkg, output) !== "APPROVED") return false;
+    const previous = await client.query(
+      "SELECT snapshot FROM distribution.studio_revision WHERE package_id=$1 AND is_test=$2 AND revision=$3",
+      [pkg.id, pkg.isTest, row.package_revision],
+    );
+    const snapshot = previous.rows[0]?.snapshot as StudioPackage | undefined;
+    const original = snapshot?.outputs.find((o) => o.id === row.output_id);
+    return Boolean(
+      snapshot &&
+        original &&
+        studioFileApproval(snapshot, original) &&
+        studioFileFingerprint(snapshot, original) === studioFileFingerprint(pkg, output) &&
+        studioFileApproval(snapshot, original)?.approvedAt === output.workflow.approval.approvedAt,
+    );
   }
   async function enqueue(client: PoolClient, pkg: StudioPackage, userId: string) {
     await client.query(
@@ -636,8 +862,11 @@ export function createIntelligentContentRepository(
     const pkg = await load(client, ctx.isTest, id, true);
     requireContentRevision(pkg.revision, input.expectedRevision);
     active(pkg);
-    if (!studioCanEdit(pkg.status, ["content.create"]))
-      throw new Error("INVALID_STUDIO_TRANSITION");
+    if (pkg.outputs.some((o) => o.workflow)) {
+      if (["QUEUED", "GENERATING", "DISCARDED"].includes(pkg.status))
+        throw Error("INVALID_STUDIO_TRANSITION");
+    } else if (!studioCanEdit(pkg.status, ["content.create"]))
+      throw Error("INVALID_STUDIO_TRANSITION");
     await sourceCurrent(client, pkg);
     const request = input.request ?? pkg.request;
     if (
@@ -652,6 +881,15 @@ export function createIntelligentContentRepository(
       throw Error("STUDIO_SELECT_OUTPUTS");
     const outputIds =
       input.mode === "discover" ? [] : studioCorrectionTargets(pkg, input.outputIds);
+    if (
+      pkg.outputs.some((o) => o.workflow) &&
+      pkg.outputs.some(
+        (o) =>
+          (outputIds.includes(o.id) || input.mode === "discover") &&
+          !studioCanEditFile(pkg, o, ["content.create"]),
+      )
+    )
+      throw Error("STUDIO_FILE_LOCKED");
     if (
       request.youtubeClosing &&
       Object.values(input.closingDestinations ?? {}).some(
@@ -1122,8 +1360,16 @@ export function createIntelligentContentRepository(
         const pkg = await load(client, ctx.isTest, id, true);
         requireContentRevision(pkg.revision, input.expectedRevision);
         active(pkg);
-        if (!studioCanEdit(pkg.status, ["content.create"]))
-          throw new Error("INVALID_STUDIO_TRANSITION");
+        if (pkg.outputs.some((o) => o.workflow)) {
+          if (
+            input.outputs.some((edit) => {
+              const output = pkg.outputs.find((o) => o.id === edit.id);
+              return output && !studioCanEditFile(pkg, output, ["content.create"]);
+            })
+          )
+            throw Error("STUDIO_FILE_LOCKED");
+        } else if (!studioCanEdit(pkg.status, ["content.create"]))
+          throw Error("INVALID_STUDIO_TRANSITION");
         const note = comment(input.comment);
         if (
           !input.outputs.length ||
@@ -1166,6 +1412,15 @@ export function createIntelligentContentRepository(
             !same(mediaEdits, output.mediaEdits);
           const revised = {
             ...output,
+            ...(output.workflow
+              ? {
+                  workflow: {
+                    status: "DRAFT" as const,
+                    actorId: ctx.userId,
+                    updatedAt: new Date().toISOString(),
+                  },
+                }
+              : {}),
             title: edit.title,
             body: edit.body,
             included: edit.included,
@@ -1225,12 +1480,18 @@ export function createIntelligentContentRepository(
     submit: (
       ctx: DistributionContext,
       id: string,
-      input: { expectedRevision: number; comment?: string | undefined },
+      input: {
+        expectedRevision: number;
+        comment?: string | undefined;
+        outputIds?: string[] | undefined;
+      },
     ) =>
       transaction(async (client) => {
         await access(client, ctx, "content.create");
         const pkg = await load(client, ctx.isTest, id, true);
         requireContentRevision(pkg.revision, input.expectedRevision);
+        if (input.outputIds || pkg.outputs.some((o) => o.workflow))
+          return submitFiles(client, ctx, pkg, input);
         if (!["DRAFT", "CHANGES_REQUESTED"].includes(pkg.status))
           throw new Error("INVALID_STUDIO_TRANSITION");
         if (pkg.outputs.some((o) => o.included && o.correction?.state === "pending"))
@@ -1270,6 +1531,8 @@ export function createIntelligentContentRepository(
         await access(client, ctx, "content.review");
         const pkg = await load(client, ctx.isTest, id, true);
         requireContentRevision(pkg.revision, input.expectedRevision);
+        if (input.outputIds || pkg.outputs.some((o) => o.workflow))
+          return reviewFiles(client, ctx, pkg, input);
         if (pkg.status !== "IN_REVIEW") throw new Error("INVALID_STUDIO_TRANSITION");
         if (!["APPROVED", "REJECTED", "DISCARDED"].includes(input.decision))
           throw new Error("INVALID_REVIEW");
@@ -1370,6 +1633,49 @@ export function createIntelligentContentRepository(
         requireContentRevision(pkg.revision, input.expectedRevision);
         active(pkg);
         const capabilities = await distributionCapabilities(client, ctx);
+        if (pkg.outputs.some((o) => o.workflow)) {
+          const selected = input.outputId
+            ? pkg.outputs.filter((o) => o.id === input.outputId)
+            : pkg.outputs;
+          if (!selected.length) throw Error("NOT_FOUND");
+          if (
+            selected.some(
+              (o) =>
+                !studioCanDiscard(
+                  studioFileStatus(pkg, o),
+                  capabilities,
+                  input.outputId ? "output" : "package",
+                ),
+            )
+          )
+            throw Error("STUDIO_FILE_LOCKED");
+          const ids = new Set(selected.map((o) => o.id));
+          const outputs = materializeFileWorkflows(pkg).map((o) =>
+            ids.has(o.id)
+              ? {
+                  ...o,
+                  included: false,
+                  workflow: {
+                    status: "DISCARDED" as const,
+                    actorId: ctx.userId,
+                    updatedAt: new Date().toISOString(),
+                  },
+                }
+              : o,
+          );
+          return save(
+            client,
+            pkg,
+            ctx.userId,
+            "DISCARDED",
+            {
+              outputs,
+              status: studioAggregateFileStatus(outputs),
+              approval: null,
+            },
+            { action: "DISCARDED", comment: comment(input.comment) },
+          );
+        }
         if (!studioCanDiscard(pkg.status, capabilities, input.outputId ? "output" : "package"))
           throw new Error("FORBIDDEN");
         if (input.outputId) {
@@ -1419,7 +1725,7 @@ export function createIntelligentContentRepository(
         const pkg = await load(client, ctx.isTest, id);
         active(pkg);
         await sourceCurrent(client, pkg);
-        if (input.forExport) await publicationEligible(client, pkg, false);
+        if (input.forExport) await publicationEligible(client, pkg, false, [outputId]);
         const output = pkg.outputs.find((value) => value.id === outputId);
         if (input.forExport && !output?.included) throw new Error("OUTPUT_EXCLUDED");
         const asset =
@@ -1687,7 +1993,21 @@ export function createIntelligentContentRepository(
         await transcriptCurrent(client, { ...pkg, provenance: result.provenance });
         const next = await save(client, pkg, row.requested_by, "GENERATED", {
           status: "DRAFT",
-          outputs: result.outputs,
+          outputs: pkg.outputs.some((o) => o.workflow)
+            ? result.outputs.map((o) =>
+                !pkg.outputs.some((old) => old.id === o.id) ||
+                pkg.generation?.outputIds.includes(o.id)
+                  ? {
+                      ...o,
+                      workflow: {
+                        status: "DRAFT" as const,
+                        actorId: row.requested_by,
+                        updatedAt: new Date().toISOString(),
+                      },
+                    }
+                  : o,
+              )
+            : result.outputs,
           generation: null,
           provenance: result.provenance,
           approval: null,
@@ -1731,61 +2051,74 @@ export function createIntelligentContentRepository(
         await access(client, ctx, "content.publish");
         const pkg = await load(client, ctx.isTest, id, true);
         requireContentRevision(pkg.revision, input.expectedRevision);
-        await publicationEligible(client, pkg);
-        const outputs = studioSelectedOutputs(pkg.outputs, input.outputIds);
-        const selectedIds = outputs.map((output) => output.id);
+        const outputs = studioSelectedOutputs(
+          pkg.outputs,
+          input.outputIds ??
+            (pkg.outputs.some((o) => o.workflow)
+              ? pkg.outputs.filter((o) => studioFileStatus(pkg, o) === "APPROVED").map((o) => o.id)
+              : undefined),
+        );
+        await publicationEligible(
+          client,
+          pkg,
+          true,
+          outputs.map((o) => o.id),
+        );
         const previous = await client.query(
-          "SELECT * FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND package_revision=$3 FOR UPDATE",
-          [pkg.id, pkg.isTest, pkg.revision],
+          "SELECT * FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 ORDER BY created_at DESC,id FOR UPDATE",
+          [pkg.id, pkg.isTest],
         );
-        for (const row of previous.rows.filter((row) => selectedIds.includes(row.output_id))) {
-          const selected = input.accounts?.[row.channel as StudioChannel];
-          if (!selected || row.account_id === selected) continue;
-          if (
-            row.account_id ||
-            !["QUEUED", "BLOCKED"].includes(row.status) ||
-            row.remote_id ||
-            row.checkpoint
-          )
-            throw Error("STUDIO_PUBLISH_ACCOUNT_CHANGED");
-          await client.query(
-            "UPDATE distribution.studio_publication_job SET account_id=$3 WHERE id=$1 AND is_test=$2",
-            [row.id, pkg.isTest, selected],
-          );
+        const result: StudioPublication[] = [];
+        for (const output of outputs) {
+          let row: QueryResultRow | undefined;
+          for (const candidate of previous.rows.filter((r) => r.output_id === output.id)) {
+            if (await publicationUnchanged(client, pkg, candidate)) {
+              row = candidate;
+              break;
+            }
+          }
+          const account = input.accounts?.[output.channel] ?? null;
+          if (row && account && row.account_id !== account) {
+            if (
+              row.account_id ||
+              !["QUEUED", "BLOCKED"].includes(row.status) ||
+              row.remote_id ||
+              row.checkpoint
+            )
+              throw Error("STUDIO_PUBLISH_ACCOUNT_CHANGED");
+            row = (
+              await client.query(
+                "UPDATE distribution.studio_publication_job SET account_id=$3 WHERE id=$1 AND is_test=$2 RETURNING *",
+                [row.id, pkg.isTest, account],
+              )
+            ).rows[0];
+          }
+          if (!row)
+            row = (
+              await client.query(
+                "INSERT INTO distribution.studio_publication_job(package_id,is_test,package_revision,output_id,channel,requested_by,account_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(package_id,is_test,package_revision,output_id) DO NOTHING RETURNING *",
+                [pkg.id, pkg.isTest, pkg.revision, output.id, output.channel, ctx.userId, account],
+              )
+            ).rows[0];
+          if (!row) throw Error("STUDIO_ACTION_UNCONFIRMED");
+          if (row.status === "BLOCKED" && !row.remote_id && !row.checkpoint) {
+            await attempt(client, row, "QUEUED", {
+              action: "EXPLICIT_RETRY",
+              requestedBy: ctx.userId,
+              previousError: row.last_error,
+            });
+            row = (
+              await client.query(
+                "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *",
+                [row.id, pkg.isTest],
+              )
+            ).rows[0] as QueryResultRow;
+          }
+          result.push(publication(row));
         }
-        for (const output of outputs)
-          await client.query(
-            "INSERT INTO distribution.studio_publication_job(package_id,is_test,package_revision,output_id,channel,requested_by,account_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(package_id,is_test,package_revision,output_id) DO NOTHING",
-            [
-              pkg.id,
-              pkg.isTest,
-              pkg.revision,
-              output.id,
-              output.channel,
-              ctx.userId,
-              input.accounts?.[output.channel] ?? null,
-            ],
-          );
-        const blocked = await client.query(
-          "SELECT * FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND package_revision=$3 AND status='BLOCKED' AND remote_id IS NULL AND checkpoint IS NULL FOR UPDATE",
-          [pkg.id, pkg.isTest, pkg.revision],
+        return result.sort(
+          (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
         );
-        for (const row of blocked.rows.filter((row) => selectedIds.includes(row.output_id))) {
-          await client.query(
-            "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2",
-            [row.id, pkg.isTest],
-          );
-          await attempt(client, row, "QUEUED", {
-            action: "EXPLICIT_RETRY",
-            requestedBy: ctx.userId,
-            previousError: row.last_error,
-          });
-        }
-        const rows = await client.query(
-          "SELECT * FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND package_revision=$3 ORDER BY created_at,id",
-          [pkg.id, pkg.isTest, pkg.revision],
-        );
-        return rows.rows.map(publication);
       }),
     retract: (
       ctx: DistributionContext,
@@ -1881,12 +2214,12 @@ export function createIntelligentContentRepository(
             await publicationState(client, row, "UNCERTAIN", "PUBLICATION_LEASE_EXPIRED");
             continue;
           }
-          if (pkg.revision !== row.package_revision) {
+          if (!(await publicationUnchanged(client, pkg, row))) {
             await publicationState(client, row, "CANCELLED", "PACKAGE_CHANGED");
             continue;
           }
           try {
-            await publicationEligible(client, pkg);
+            await publicationEligible(client, pkg, true, [row.output_id]);
             if (!(await fresh(row.requested_by, input.isTest, "content.publish")))
               throw new Error("PUBLISHER_ROLE_REVOKED");
           } catch (error) {
@@ -1995,8 +2328,8 @@ export function createIntelligentContentRepository(
       transaction(async (client): Promise<Eligibility> => {
         const { pkg, row } = await checkedPublication(client, claim);
         try {
-          if (pkg.revision !== row.package_revision) throw new Error("PACKAGE_CHANGED");
-          await publicationEligible(client, pkg);
+          if (!(await publicationUnchanged(client, pkg, row))) throw new Error("PACKAGE_CHANGED");
+          await publicationEligible(client, pkg, true, [row.output_id]);
           if (!(await fresh(row.requested_by, pkg.isTest, "content.publish")))
             throw new Error("PUBLISHER_ROLE_REVOKED");
           return { accepted: true, package: pkg };
@@ -2070,8 +2403,8 @@ export function createIntelligentContentRepository(
         if (!["RUNNING", "PROCESSING", "PUBLISHED"].includes(row.status))
           throw new Error("NOT_FOUND");
         const pkg = await load(client, false, row.package_id);
-        if (pkg.revision !== row.package_revision) throw new Error("PACKAGE_CHANGED");
-        await publicationEligible(client, pkg);
+        if (!(await publicationUnchanged(client, pkg, row))) throw new Error("PACKAGE_CHANGED");
+        await publicationEligible(client, pkg, true, [row.output_id]);
         const output = pkg.outputs.find((value) => value.id === row.output_id && value.included);
         if (!output?.asset) throw new Error("NOT_FOUND");
         return { publication: publication(row), package: pkg, output };
@@ -2081,8 +2414,8 @@ export function createIntelligentContentRepository(
         const row = await publicationRow(client, false, id);
         if (row.status !== "PUBLISHED" || row.channel !== "website") throw new Error("NOT_FOUND");
         const pkg = await load(client, false, row.package_id);
-        if (pkg.revision !== row.package_revision) throw new Error("PACKAGE_CHANGED");
-        await publicationEligible(client, pkg);
+        if (!(await publicationUnchanged(client, pkg, row))) throw new Error("PACKAGE_CHANGED");
+        await publicationEligible(client, pkg, true, [row.output_id]);
         const output = pkg.outputs.find(
           (value) => value.id === row.output_id && value.included && value.format === "blog",
         );

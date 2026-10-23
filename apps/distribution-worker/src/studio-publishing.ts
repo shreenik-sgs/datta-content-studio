@@ -10,8 +10,11 @@ import {
 } from "@satsang/distribution-db";
 import {
   type PostingCheck,
+  type StudioOutput,
   type StudioPackage,
   studioChannelPostingMatches,
+  studioFileApproval,
+  studioPublicationMatchesFile,
 } from "@satsang/distribution-domain";
 import {
   type StudioProviderCheckpoint,
@@ -36,16 +39,28 @@ export type StudioPublishingPorts = {
   fetcher?: typeof fetch;
 };
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-function approvalId(pkg: StudioPackage): string {
-  return hash({ packageId: pkg.id, revision: pkg.revision, approval: pkg.approval });
+function approvalRecord(pkg: StudioPackage, output: StudioOutput) {
+  if (!output.workflow) return pkg.approval;
+  if (!output.workflow.approval) return null;
+  // Keep the persisted approval field order for existing provider checkpoints.
+  const { fingerprint: _fingerprint, ...approval } = output.workflow.approval;
+  return approval;
+}
+function approvalId(pkg: StudioPackage, output: StudioOutput): string {
+  const approval = approvalRecord(pkg, output);
+  return hash({ packageId: pkg.id, revision: approval?.revision ?? pkg.revision, approval });
+}
+function fileContent(output: StudioOutput) {
+  const { workflow: _workflow, ...content } = output;
+  return content;
 }
 function payloadSha256(claim: StudioPublicationClaim): string {
   return hash({
     packageId: claim.package.id,
-    revision: claim.package.revision,
+    revision: claim.publication.packageRevision,
     source: claim.package.source,
-    output: claim.output,
-    approval: claim.package.approval,
+    output: fileContent(claim.output),
+    approval: approvalRecord(claim.package, claim.output),
   });
 }
 function publicOrigin(value: string | undefined): string {
@@ -111,8 +126,8 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
     if (
       !output ||
       result.package.isTest !== ports.isTest ||
-      approvalId(result.package) !== approvalId(claim.package) ||
-      hash(output) !== hash(claim.output) ||
+      approvalId(result.package, output) !== approvalId(claim.package, claim.output) ||
+      hash(fileContent(output)) !== hash(fileContent(claim.output)) ||
       hash(result.package.source) !== hash(claim.package.source)
     )
       throw new Error("APPROVED_PUBLICATION_CHANGED");
@@ -123,11 +138,10 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
       claim.publication.isTest !== ports.isTest ||
       claim.package.isTest !== ports.isTest ||
       claim.publication.packageId !== claim.package.id ||
-      claim.publication.packageRevision !== claim.package.revision ||
+      !studioPublicationMatchesFile(claim.package, claim.output, claim.publication) ||
       claim.publication.outputId !== claim.output.id ||
       claim.publication.channel !== claim.output.channel ||
-      !claim.package.approval ||
-      claim.package.status !== "APPROVED" ||
+      !studioFileApproval(claim.package, claim.output) ||
       !claim.output.included
     )
       throw new Error("APPROVED_PUBLICATION_CHANGED");
@@ -222,7 +236,7 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
         secret: ports.env.STUDIO_MEDIA_SIGNING_SECRET ?? "",
         publicationId: claim.publication.id,
         packageId: claim.package.id,
-        revision: claim.package.revision,
+        revision: claim.publication.packageRevision,
         outputId: claim.output.id,
         sha256: claim.output.asset.sha256,
         expiresAt,
@@ -231,7 +245,7 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
     }
     const input: StudioPublicationInput = {
       publicationId: claim.publication.id,
-      approvalId: approvalId(claim.package),
+      approvalId: approvalId(claim.package, claim.output),
       payloadSha256: payloadSha256(claim),
       kind,
       title: claim.output.title,

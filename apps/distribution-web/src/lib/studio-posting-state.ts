@@ -1,4 +1,4 @@
-import type { PostingCheck } from "@satsang/distribution-domain";
+import { type PostingCheck, studioPublicationMatchesFile } from "@satsang/distribution-domain";
 import type { LineageState } from "./studio-lineage";
 import type {
   PublicStudioOutput,
@@ -48,7 +48,7 @@ function publicUrl(value: string | null | undefined): string | null {
  * must never be counted as a confirmed live upload. */
 export function studioPostingState(
   pkg: Pick<PublicStudioPackage, "id" | "isTest" | "revision">,
-  output: Pick<PublicStudioOutput, "id" | "channel">,
+  output: Pick<PublicStudioOutput, "id" | "channel" | "workflow">,
   publications: readonly PublicStudioPublication[],
   options: {
     accountId?: string | undefined;
@@ -65,7 +65,7 @@ export function studioPostingState(
         (!options.accountId || item.selectedAccountId === options.accountId),
     )
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.attempt - a.attempt);
-  const current = receipts.find((item) => item.packageRevision === pkg.revision);
+  const current = receipts.find((item) => studioPublicationMatchesFile(pkg, output, item));
   const earlier = receipts.find(
     (item) => item.packageRevision < pkg.revision && !item.isTest && item.status === "PUBLISHED",
   );

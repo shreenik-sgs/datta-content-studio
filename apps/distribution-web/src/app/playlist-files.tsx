@@ -1,7 +1,11 @@
 "use client";
 
 import { DISTRIBUTION_LANGUAGE_NAMES } from "@satsang/distribution-contracts";
-import { studioChannelLabel } from "@satsang/distribution-domain";
+import {
+  studioChannelLabel,
+  studioFileStatus,
+  studioFileWorkflowStep,
+} from "@satsang/distribution-domain";
 import { useId, useState } from "react";
 import { studioOutputLength, studioOutputState } from "../lib/studio-lineage";
 import type { StudioListing, StudioPlaylistPostingCheck } from "../lib/studio-model";
@@ -23,7 +27,6 @@ import {
   studioSourceWithoutTeaching,
 } from "../lib/studio-source-outcome";
 import { useHubTimestamp } from "./hub-locale";
-import { packageWorkflowStep } from "./studio-progress-summary";
 import { StudioSeriesActions } from "./studio-series-actions";
 import "./studio-lineage.css";
 
@@ -120,7 +123,7 @@ export function PlaylistFiles({
       index,
       shown: value.outputs.filter(
         (output) =>
-          (!workflowStep || packageWorkflowStep(value) === workflowStep) &&
+          (!workflowStep || studioFileWorkflowStep(value, output) === workflowStep) &&
           (postingFilter === "all" || postingState(value, output).key === postingFilter) &&
           (channel === "all" || output.channel === channel) &&
           `${value.source.title} ${output.title} ${output.asset?.filename ?? ""}`
@@ -147,17 +150,8 @@ export function PlaylistFiles({
         ) ??
         availableActions[0] ??
         "submit");
-  const recordingSelection = selectedAction === "submit" || selectedAction === "approve";
-  function selectionForScope(ids: ReadonlySet<string>, action: SeriesAction) {
-    if (action !== "submit" && action !== "approve")
-      return new Set(selectable.filter((output) => ids.has(output.id)).map((output) => output.id));
-    return new Set(
-      packages
-        .filter((pkg) => pkg.outputs.some((output) => output.included && ids.has(output.id)))
-        .flatMap((pkg) =>
-          pkg.outputs.filter((output) => output.included).map((output) => output.id),
-        ),
-    );
+  function selectionForScope(ids: ReadonlySet<string>, _action: SeriesAction) {
+    return new Set(selectable.filter((output) => ids.has(output.id)).map((output) => output.id));
   }
   const selected = selectionForScope(selection, selectedAction);
   function chooseAction(action: SeriesAction) {
@@ -177,12 +171,8 @@ export function PlaylistFiles({
   const canSelect = Boolean(onRefresh && (canCurate || canReview || canPublish));
   const skipped = packages.filter(studioSourceWithoutTeaching);
   const waiting = packages.filter((value) => !value.outputs.length && !skipped.includes(value));
-  const includedCount = (value: PublicStudioPackage) =>
-    value.outputs.filter((o) => o.included).length;
-  const drafts = packages.filter((value) => value.status === "DRAFT" && includedCount(value));
-  const submitted = packages.filter(
-    (value) => value.status === "IN_REVIEW" && includedCount(value),
-  );
+  const drafts = seriesCandidates(packages, "submit");
+  const submitted = seriesCandidates(packages, "approve");
   const nextReview = canReview ? submitted[0] : undefined;
   const nextDraft = canCurate ? drafts[0] : undefined;
   const actionLabel = (value: PublicStudioPackage) => {
@@ -211,10 +201,22 @@ export function PlaylistFiles({
         <section className="panel" aria-label="Review handoff" style={{ marginBlock: 16 }}>
           <h4>Next action</h4>
           <p>
-            {drafts.reduce((count, value) => count + includedCount(value), 0)} files awaiting
-            Curator submission ·{" "}
-            {submitted.reduce((count, value) => count + includedCount(value), 0)} files ready for
-            Approver review.
+            {drafts.reduce(
+              (count, value) =>
+                count +
+                value.outputs.filter((o) =>
+                  ["DRAFT", "CHANGES_REQUESTED"].includes(studioFileStatus(value, o)),
+                ).length,
+              0,
+            )}{" "}
+            files awaiting Curator submission ·{" "}
+            {submitted.reduce(
+              (count, value) =>
+                count +
+                value.outputs.filter((o) => studioFileStatus(value, o) === "IN_REVIEW").length,
+              0,
+            )}{" "}
+            files ready for Approver review.
           </p>
           {canReview && !canCurate && drafts.length > 0 && (
             <p>
@@ -225,8 +227,8 @@ export function PlaylistFiles({
             </p>
           )}
           <p>
-            Review and approval apply to each recording’s included files. Posting is a separate
-            action after approval.
+            Select individual files for submission or approval. Posting is a separate action after
+            approval.
           </p>
           {packages.length > 0 && packages.every((value) => value.isTest) && (
             <p>
@@ -391,9 +393,7 @@ export function PlaylistFiles({
       {canSelect && (
         <div className="file-selection-summary">
           <span id={selectionScopeId}>
-            {recordingSelection
-              ? "Selecting a file selects its recording’s complete set of included files for submission or approval."
-              : "Select individual files for posting or retraction."}
+            Select only the files you want to act on. Other files from the same day stay unchanged.
           </span>
           <span>The header checkbox selects all files shown by your filters.</span>
           {selected.size > 0 && (

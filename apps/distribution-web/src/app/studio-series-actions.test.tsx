@@ -118,11 +118,11 @@ it("has one selected action, no All shortcut or second selection list, and submi
       expect(host.querySelector("table")).toBeNull();
       expect(host.textContent).not.toContain("Choose recordings");
       expect(checks(host)).toHaveLength(1); // acknowledgement only
-      expect(host.textContent).toContain("1 file in 1 recordings ready");
+      expect(host.textContent).toContain("1 file in 1 recording ready");
       expect(posts(fetcher)).toHaveLength(0);
-      expect(button(host, "Confirm submit · 1 files").disabled).toBe(true);
+      expect(button(host, "Confirm submit · 1 file").disabled).toBe(true);
       await act(async () => checks(host)[0]?.click());
-      await act(async () => button(host, "Confirm submit · 1 files").click());
+      await act(async () => button(host, "Confirm submit · 1 file").click());
       expect(posts(fetcher)).toHaveLength(1);
       expect(posts(fetcher)[0]?.[0]).toContain("/second/submit");
       expect(host.textContent).toContain("Submitted for Approver review");
@@ -144,13 +144,13 @@ it("uses the exact table selection for posting and shows the target without addi
     async (host, fetcher) => {
       expect(button(host, "Post All")).toBeUndefined();
       await act(async () => button(host, "Post Selected").click());
-      expect(host.textContent).toContain("1 file in 1 recordings ready");
+      expect(host.textContent).toContain("1 file in 1 recording ready");
       expect(checks(host)).toHaveLength(1);
       expect(host.textContent).toContain("https://www.youtube.com/@gurubhavana");
       expect(host.textContent).toContain("GuruBhavanamADPT");
       expect(posts(fetcher)).toHaveLength(0);
       await act(async () => checks(host)[0]?.click());
-      await act(async () => button(host, "Confirm post · 1 files (test)").click());
+      await act(async () => button(host, "Confirm post · 1 file (test)").click());
       expect(JSON.parse(posts(fetcher)[0]?.[1].body)).toMatchObject({
         outputIds: ["file-two"],
         accounts: { youtube: "guru" },
@@ -188,9 +188,9 @@ it("approves submitted selections only after acknowledgement without posting", a
     expect(button(host, "Approve All")).toBeUndefined();
     await act(async () => button(host, "Approve Selected").click());
     expect(posts(fetcher)).toHaveLength(0);
-    expect(button(host, "Confirm approve · 1 files").disabled).toBe(true);
+    expect(button(host, "Confirm approve · 1 file").disabled).toBe(true);
     await act(async () => checks(host)[0]?.click());
-    await act(async () => button(host, "Confirm approve · 1 files").click());
+    await act(async () => button(host, "Confirm approve · 1 file").click());
     expect(posts(fetcher)).toHaveLength(1);
     expect(posts(fetcher)[0]?.[0]).toContain("/review");
     expect(JSON.parse(posts(fetcher)[0]?.[1].body)).toMatchObject({
@@ -210,14 +210,14 @@ it("cancel returns to the table; reopening requires fresh review and source-righ
       await act(async () => button(host, "Approve Selected").click());
       expect(checks(host)).toHaveLength(2);
       await act(async () => checks(host)[1]?.click());
-      expect(button(host, "Confirm approve · 1 files").disabled).toBe(true);
+      expect(button(host, "Confirm approve · 1 file").disabled).toBe(true);
       await act(async () => checks(host)[0]?.click());
-      expect(button(host, "Confirm approve · 1 files").disabled).toBe(false);
+      expect(button(host, "Confirm approve · 1 file").disabled).toBe(false);
       await act(async () => button(host, "Cancel").click());
       expect(host.querySelector("dialog")).toBeNull();
       await act(async () => button(host, "Approve Selected").click());
       expect([...checks(host)].every((c) => !c.checked)).toBe(true);
-      expect(button(host, "Confirm approve · 1 files").disabled).toBe(true);
+      expect(button(host, "Confirm approve · 1 file").disabled).toBe(true);
       expect(posts(fetcher)).toHaveLength(0);
     },
     undefined,

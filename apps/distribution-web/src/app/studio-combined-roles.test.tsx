@@ -42,13 +42,13 @@ it("explains the Curator handoff to an Approver without offering draft approval 
     );
     expect(host.textContent).toContain("Awaiting Curator submission");
     expect(host.querySelector('[aria-label="Curator handoff"]')?.textContent).toContain(
-      "Submit package for review",
+      "Submit selected files for review",
     );
     expect(host.textContent).toContain("it does not upload videos to YouTube");
     const labels = [...host.querySelectorAll("button")].map((button) => button.textContent?.trim());
-    expect(labels).not.toContain("Approve package");
+    expect(labels).not.toContain("Approve selected files");
     expect(labels).not.toContain("Approve master permissions");
-    expect(labels).not.toContain("Submit package for review");
+    expect(labels).not.toContain("Submit selected files for review");
     expect(labels).not.toContain("Run test publication");
     expect(labels).not.toContain("Next: check and submit →");
     expect(host.querySelectorAll("form")).toHaveLength(0);
@@ -157,20 +157,26 @@ it("shows exactly one stage of actions for a combined operator and preserves the
         />,
       ),
     );
-    expect(button("Continue to approval review")).toBeDefined();
-    expect(button("Approve package")).toBeUndefined();
+    expect(button("Submit selected files for review")).toBeDefined();
+    expect(button("Approve selected files")).toBeUndefined();
     expect(button("Run test publication")).toBeUndefined();
-    await act(async () => button("Continue to approval review")?.click());
+    await act(async () =>
+      host.querySelector<HTMLInputElement>('input[name="submitOutput"]')?.click(),
+    );
+    await act(async () => button("Submit selected files for review")?.click());
     expect(host.textContent).toContain("Step 4 of 6");
     expect(host.querySelectorAll('section[aria-label="Content workflow"]')).toHaveLength(1);
-    expect(button("Continue to approval review")).toBeUndefined();
-    expect(button("Approve package")).toBeDefined();
-    expect(button("Approve package")?.disabled).toBe(true);
+    expect(button("Submit selected files for review")).toBeUndefined();
+    expect(button("Approve selected files")).toBeDefined();
+    expect(button("Approve selected files")?.disabled).toBe(true);
+    await act(async () =>
+      host.querySelector<HTMLInputElement>('input[name="reviewOutput"]')?.click(),
+    );
     await act(async () => button("Approve master permissions")?.click());
-    expect(button("Approve package")?.disabled).toBe(false);
+    expect(button("Approve selected files")?.disabled).toBe(false);
     expect(button("Run test publication")).toBeUndefined();
     expect(host.querySelector('textarea[name="instructions"]')).toBeNull();
-    await act(async () => button("Approve package")?.click());
+    await act(async () => button("Approve selected files")?.click());
     expect(document.activeElement?.getAttribute("role")).toBe("alert");
     expect(host.querySelector('[role="alert"]')?.textContent).toContain(
       "confirm the review checkbox",
@@ -178,12 +184,12 @@ it("shows exactly one stage of actions for a combined operator and preserves the
     expect(button("Run test publication")).toBeUndefined();
     await act(async () => {
       host.querySelector<HTMLInputElement>('input[name="confirmTeachingIntegrity"]')?.click();
-      button("Approve package")?.click();
+      button("Approve selected files")?.click();
     });
     expect(host.textContent).toContain("Step 6 of 6");
     expect(host.textContent).toContain("Approved and locked");
-    expect(button("Approve package")).toBeUndefined();
-    expect(button("Continue to approval review")).toBeUndefined();
+    expect(button("Approve selected files")).toBeUndefined();
+    expect(button("Submit selected files for review")).toBeUndefined();
     expect(button("Run test publication")).toBeDefined();
     expect(document.activeElement?.id).toBe(`package-publishing-${value.id}`);
     expect(scroll).toHaveBeenCalled();

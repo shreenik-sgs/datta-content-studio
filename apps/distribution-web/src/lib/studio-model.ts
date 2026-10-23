@@ -26,6 +26,7 @@ export type StudioDetail = {
   publications: PublicStudioPublication[];
   readiness: StudioReadiness;
   blockers: string[];
+  outputBlockers?: Record<string, string[]>;
   reviewAssignment?: { sourceLanguage: string; blocker: string | null };
 };
 export type StudioListing = {
@@ -71,6 +72,8 @@ export const STUDIO_PUBLICATION_LABELS: Record<StudioPublication["status"], stri
 };
 
 const messages: Record<string, string> = {
+  STUDIO_FILE_LOCKED:
+    "This file is submitted or approved and cannot be edited. Select a draft or a file returned for changes.",
   INVALID_STUDIO_OUTPUT_SELECTION:
     "The selected files have changed. Refresh and select the files again.",
   INVALID_STUDIO_PUBLICATION_SELECTION:

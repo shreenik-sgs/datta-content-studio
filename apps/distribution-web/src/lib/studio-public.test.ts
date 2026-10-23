@@ -149,6 +149,26 @@ describe("public Studio signed-media and published-blog boundaries", () => {
     expect(m.publicationMedia).not.toHaveBeenCalled();
     expect(m.read).not.toHaveBeenCalled();
   });
+  it("keeps a signed link valid for the same approved file after sibling-only package changes", async () => {
+    const data = fixture();
+    data.package = { ...data.package, status: "DRAFT", revision: 7 };
+    data.output.workflow = {
+      status: "APPROVED",
+      actorId: "approver",
+      updatedAt: "2026-10-24T00:00:00Z",
+      approval: {
+        reviewerId: "approver",
+        revision: 4,
+        sourceRevision: 2,
+        approvedAt: "2026-10-24T00:00:00Z",
+        fingerprint: "verified-by-repository",
+      },
+    };
+    m.publicationMedia.mockResolvedValue(data);
+    expect((await GET(new Request(url()), params())).status).toBe(200);
+    data.output.workflow.status = "CHANGES_REQUESTED";
+    expect((await GET(new Request(url()), params())).status).toBe(404);
+  });
   it("binds every signed identity and rejects TEST data even with a valid production token", async () => {
     for (const change of [
       { package: { ...fixture().package, id: outputId } },

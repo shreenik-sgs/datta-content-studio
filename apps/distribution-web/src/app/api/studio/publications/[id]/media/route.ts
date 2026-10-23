@@ -1,4 +1,5 @@
 import { verifyStudioMediaToken } from "@satsang/distribution-assets";
+import { studioPublicationMatchesFile } from "@satsang/distribution-domain";
 import { distributionHubPolicyEnabled } from "../../../../../../lib/auth";
 import { json, singleRange } from "../../../../../../lib/http";
 import { privateAssets } from "../../../../../../lib/runtime";
@@ -29,7 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       result.publication.packageRevision === claims.revision &&
       result.publication.outputId === claims.outputId &&
       result.package.id === claims.packageId &&
-      result.package.revision === claims.revision &&
+      studioPublicationMatchesFile(result.package, result.output, result.publication) &&
       result.output.id === claims.outputId &&
       result.output.asset?.sha256 === claims.sha256;
     const asset = initial.output.asset;

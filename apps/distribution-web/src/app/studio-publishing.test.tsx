@@ -75,6 +75,8 @@ async function render(
         />,
       ),
     );
+    const selectAll = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (selectAll) await act(async () => selectAll.click());
     await check(host, publish, refresh);
   } finally {
     await act(async () => root.unmount());
@@ -82,7 +84,7 @@ async function render(
 }
 const post = (host: HTMLElement) =>
   [...host.querySelectorAll("button")].find((b) =>
-    /^(Publish approved|Run test)/.test(b.textContent ?? ""),
+    /^(Post selected|Run test)/.test(b.textContent ?? ""),
   );
 it("explains missing setup only for included destinations and links Admin settings", async () => {
   await render(detail(), async (host, publish, refresh) => {
@@ -275,7 +277,7 @@ it("preselects the default, submits the chosen alternative and locks a queued de
     });
     expect(host.textContent).toContain("YouTube visibility: public");
     await act(async () => post(host)?.click());
-    expect(publish).toHaveBeenCalledWith({ youtube: "second" });
+    expect(publish).toHaveBeenCalledWith({ youtube: "second" }, ["output-one"]);
   });
   data.publications = [
     {
@@ -340,6 +342,6 @@ it("lets an approver select GuruBhavanamADPT among accounts but blocks it until 
       }
     });
     await act(async () => post(host)?.click());
-    expect(publish).toHaveBeenCalledWith({ youtube: "connected" });
+    expect(publish).toHaveBeenCalledWith({ youtube: "connected" }, ["output-one"]);
   });
 });
