@@ -1,4 +1,4 @@
-# Datta Content Studio
+# Datta Media Studio
 
 An independent workspace for turning authorized recordings and playlists into
 channel-specific content, reviewing it and publishing approved outputs.
@@ -8,9 +8,35 @@ channel-specific content, reviewing it and publishing approved outputs.
 - An account may hold both workflow roles. Administrative access manages channel settings;
   administrator status alone does not grant approval or publishing.
 
-Generated media retains the configured **@sgsswamiji** branding. The application
+Generated media retains its configured source/channel branding. Application branding does not
+rewrite existing videos, subtitles, closing cards or editorial decisions. The application
 is independent of SGS Datta Sannidhi: it has its own accounts, session cookie,
 database access and deployment. No Sannidhi login or user database is required.
+
+## Studio identities
+
+The product name is **Datta Media Studio**. Set `STUDIO_IDENTITY=gbadpt` for
+**Guru Bhavana**, using Sri Datta Vijayananda Teertha Swamiji’s existing channel
+portrait; set `STUDIO_IDENTITY=dp` for **Datta Peetham**, using the existing
+@sgsswamiji channel avatar. Header, sign-in copy, browser title and icon share the
+same server-side identity. On the exact configured origins
+`https://gbadpt.sgsdattasannidhi.org` and `https://dp.sgsdattasannidhi.org`, the
+identity is inferred when omitted. An explicit conflicting identity is rejected.
+Neither request headers nor URL query parameters select the studio identity.
+An unspecified identity on other origins displays only the product name.
+
+These are separate deployments of one codebase, **not folders or filters in one
+shared media library**. Each needs its own operator database, database credentials,
+private media bucket/root, worker queues, channel credentials and backups. This
+branding setting does not provide data isolation by itself. Sannidhi accounts,
+content and navigation must never be imported. Existing repository/resource
+identifiers remain stable; a product rename does not recreate AWS resources.
+
+The existing Vishnu Purana source links, master recordings, all **95 Shorts**,
+manual edits, captions and review history belong **only to GBADPT**. Localhost
+3070 is the GBADPT workspace. A future DP deployment starts with an empty database
+and media store; never initialize it from a GBADPT database backup or media export.
+Its publishing account remains disconnected until the owner configures it.
 
 ## Local setup
 
@@ -20,7 +46,7 @@ AI services. The renderer and YouTube import requirements are documented under
 
 1. `pnpm install --frozen-lockfile`
 2. Copy `.env.example` to a private `.env` and set the two database URLs to the new
-   Content Studio database. Load these variables in the shell (the worker and CLI
+   Media Studio database. Load these variables in the shell (the worker and CLI
    do not implicitly load dotenv files). For local testing set the Hub stage to
    `TEST` and its enabled flag to `true`. Publishing stays off.
 3. Run `pnpm db:migrate` as the database migration owner before starting services.

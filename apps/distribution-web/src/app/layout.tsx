@@ -3,14 +3,22 @@ import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { trustedDistributionOrigin } from "../lib/auth";
 import { access } from "../lib/runtime";
+import { STUDIO_PRODUCT_NAME, studioIdentity } from "../lib/studio-identity";
 import { HubLocaleProvider } from "./hub-locale";
 import "./globals.css";
 import "./studio-experience.css";
-export const metadata: Metadata = {
-  title: "Datta Content Studio",
-  description: "Curate, review and publish Sri Swamiji’s teachings.",
-};
+export function generateMetadata(): Metadata {
+  const identity = studioIdentity();
+  return {
+    title: identity.organization
+      ? `${STUDIO_PRODUCT_NAME} · ${identity.organization}`
+      : STUDIO_PRODUCT_NAME,
+    description: "Curate, review and publish Sri Swamiji’s teachings.",
+    ...(identity.logo ? { icons: { icon: identity.logo, apple: identity.logo } } : {}),
+  };
+}
 export default async function RootLayout({ children }: { children: ReactNode }) {
+  const identity = studioIdentity();
   const origin =
     trustedDistributionOrigin(process.env.DISTRIBUTION_APP_ORIGIN) ?? "http://localhost";
   const auth = await access(new Request(`${origin}/distribution`, { headers: await headers() }));
@@ -27,13 +35,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <HubLocaleProvider locale={auth.ok ? auth.identity.locale : "en"}>
           <nav className="topbar shell studio-topbar" aria-label="Main navigation">
             <a className="brand" href="/distribution">
-              <img
-                src="/distribution/brand/sgsswamiji-channel-avatar.jpg"
-                width="48"
-                height="48"
-                alt=""
-              />
-              <span>Datta Content Studio</span>
+              {identity.logo && (
+                <img src={identity.logo} width="48" height="48" alt={identity.logoAlt} />
+              )}
+              <span className="studio-brand-copy">
+                <span>{STUDIO_PRODUCT_NAME}</span>
+                {identity.organization && <small>{identity.organization}</small>}
+              </span>
             </a>
             {auth.ok && (
               <div className="studio-topbar-controls">

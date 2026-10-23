@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Isolated Datta Content Studio staging. Never targets Sannidhi ECS, databases or media. Persistent data retained on deletion.",
+  "Description": "Isolated Datta Media Studio staging. Never targets Sannidhi ECS, databases or media. Persistent data retained on deletion.",
   "Parameters": {
     "Ami": {
       "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
@@ -25,7 +25,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -40,7 +40,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -74,7 +74,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -92,7 +92,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -165,7 +165,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -219,7 +219,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -278,7 +278,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -381,7 +381,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -439,7 +439,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -465,7 +465,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",
@@ -499,7 +499,7 @@
         "Tags": [
           {
             "Key": "Project",
-            "Value": "Datta Content Studio"
+            "Value": "Datta Media Studio"
           },
           {
             "Key": "Environment",

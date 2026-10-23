@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Datta Content Studio images. These targets contain no Sannidhi application.
+# Datta Media Studio images. These targets contain no Sannidhi application.
 #
 #   distribution-web     default-OFF operator UI — :3070
 #   distribution-worker  default-OFF local TEST render/link jobs

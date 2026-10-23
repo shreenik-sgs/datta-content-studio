@@ -5,6 +5,7 @@ import { z } from "zod";
 import { analyticsEnabled } from "../lib/analytics-policy";
 import { trustedDistributionOrigin } from "../lib/auth";
 import { access } from "../lib/runtime";
+import { STUDIO_PRODUCT_NAME } from "../lib/studio-identity";
 import { ContentLibrary } from "./content-library";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export default async function DistributionHome({
       <main className="shell">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Datta Content Studio</p>
+            <p className="eyebrow">{STUDIO_PRODUCT_NAME}</p>
             <h1>{distributionText("en", "hub")}</h1>
           </div>
         </header>

@@ -1,4 +1,4 @@
-# Datta Content Studio staging
+# Datta Media Studio staging
 
 This stack is independent of SGS Datta Sannidhi and production. The application is
 available at https://studio-staging.sgsdattasannidhi.org/distribution.
@@ -17,6 +17,24 @@ Runtime secrets are SecureString parameters under `/datta-content-studio/staging
 Hosted staging usernames require explicit `STUDIO_TEST_LOGIN_ALIASES_JSON`; local
 aliases are not automatically enabled on hosted deployments. Both alias and email
 use the same operator password, rate limit and role authorization.
+
+## Separate GBADPT and DP installations
+
+The existing single-instance deployment scripts still target `studio-staging`.
+Do not point both proposed subdomains at that one database or run these scripts
+unchanged to create a second installation. Resource names, credentials, storage,
+backup destinations and service identifiers must be isolated per deployment.
+
+- GBADPT: `STUDIO_IDENTITY=gbadpt`, origin `https://gbadpt.sgsdattasannidhi.org`.
+  Owns the Vishnu Purana masters and 95 Shorts. The owner currently keeps these
+  local; a code deployment does not authorize copying media to staging.
+- DP: `STUDIO_IDENTITY=dp`, origin `https://dp.sgsdattasannidhi.org`.
+  Start empty, with its own operators, database and storage. No GBADPT imports or
+  channel credentials. Its publishing account will be configured later.
+
+Before activating either, test that an authenticated account/session, media ID,
+asset URL and queued job from the other installation cannot access its data.
+Logo selection does not replace database/storage isolation.
 
 ## Deploy and verify
 

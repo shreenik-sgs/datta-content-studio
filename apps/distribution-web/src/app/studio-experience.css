@@ -16,6 +16,19 @@ body .studio-topbar {
 .studio-topbar .brand img {
   width: 40px;
   height: 40px;
+  border-radius: 50%;
+}
+.studio-brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.3;
+}
+.studio-brand-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: normal;
 }
 .studio-topbar-controls {
   margin-left: auto;
