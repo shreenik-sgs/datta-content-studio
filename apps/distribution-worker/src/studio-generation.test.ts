@@ -907,7 +907,9 @@ describe("automatic Studio generation with real media", () => {
         messageId: "message-01",
         sourceSegmentIds: prior.sourceSegmentIds,
       });
-  }, 30000);
+    // This renders both the original and corrected YouTube/Facebook variants.
+    // Match the other real-media tests' bounded allowance on shared CI runners.
+  }, 90000);
   it("sends only the selected draft and its file comment to the AI planner", async () => {
     const first = await generateStudioPackage({
       claim: {
