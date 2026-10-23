@@ -11,6 +11,7 @@ import {
   seriesActionName,
   seriesCandidates,
 } from "../lib/studio-series-actions";
+import { StudioActionDialog } from "./studio-action-dialog";
 
 export function StudioSeriesActions({
   packages,
@@ -18,7 +19,6 @@ export function StudioSeriesActions({
   canReview,
   canPublish,
   onRefresh,
-  onPreview,
   selectedOutputIds,
   selectedAction,
   onActionChange,
@@ -28,14 +28,13 @@ export function StudioSeriesActions({
   canReview: boolean;
   canPublish: boolean;
   onRefresh: () => Promise<void>;
-  onPreview: (pkg: PublicStudioPackage, outputId: string) => void;
-  selectedOutputIds?: ReadonlySet<string>;
+  selectedOutputIds: ReadonlySet<string>;
   selectedAction?: SeriesAction;
   onActionChange?: (action: SeriesAction) => void;
 }) {
   const [action, setAction] = useState<SeriesAction | null>(null);
   const [rows, setRows] = useState<SeriesRow[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [requestedCount, setRequestedCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -45,7 +44,6 @@ export function StudioSeriesActions({
   const [finished, setFinished] = useState(false);
   const [accounts, setAccounts] = useState<Partial<Record<StudioChannel, string>>>({});
   const locked = useRef(false);
-  const panel = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!running) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -65,8 +63,12 @@ export function StudioSeriesActions({
       : (available.find((kind) => kind !== "retract" && seriesCandidates(packages, kind).length) ??
         available[0] ??
         "submit");
-  const eligible = seriesCandidates(packages, toolbarAction);
-  const chosen = rows.filter((row) => selected.has(row.id) && !row.blocker);
+  const eligible = seriesCandidates(packages, toolbarAction).filter((pkg) =>
+    pkg.outputs.some((output) => selectedOutputIds.has(output.id)),
+  );
+  const chosen = rows.filter((row) => !row.blocker);
+  const blocked = rows.filter((row) => row.blocker);
+  const unavailableCount = Math.max(0, requestedCount - rows.reduce((n, row) => n + row.count, 0));
   const count = chosen.reduce((n, row) => n + row.count, 0);
   const channels = [
     ...new Set(
@@ -92,7 +94,7 @@ export function StudioSeriesActions({
     );
   const sourceApprovalNeeded =
     action === "approve" && chosen.some((row) => row.source?.state === "RIGHTS_CLEARED");
-  async function prepare(kind: SeriesAction, all: boolean) {
+  async function prepare(kind: SeriesAction) {
     if (locked.current || !permitted(kind)) return;
     locked.current = true;
     setBusy(true);
@@ -103,31 +105,29 @@ export function StudioSeriesActions({
     setConfirmed(false);
     setRightsConfirmed(false);
     setRows([]);
-    setSelected(new Set());
+    setRequestedCount(selectedOutputIds.size);
     setAccounts({});
     try {
-      const candidates =
-        !all && selectedOutputIds
-          ? packages.filter((p) => p.outputs.some((o) => selectedOutputIds.has(o.id)))
-          : packages;
+      const selectedIds = new Set(selectedOutputIds);
+      const candidates = packages.filter((p) => p.outputs.some((o) => selectedIds.has(o.id)));
       const prepared = await prepareSeriesRows(candidates, kind);
-      setRows(prepared);
-      setSelected(
-        new Set(
-          prepared
-            .filter(
-              (r) =>
-                !r.blocker &&
-                (all ||
-                  (selectedOutputIds &&
-                    (r.outputId
-                      ? selectedOutputIds.has(r.outputId)
-                      : r.publication
-                        ? selectedOutputIds.has(r.publication.outputId)
-                        : r.detail.package.outputs.some((o) => selectedOutputIds.has(o.id))))),
-            )
-            .map((r) => r.id),
-        ),
+      setRows(
+        prepared
+          .filter((row) =>
+            row.outputId
+              ? selectedIds.has(row.outputId)
+              : row.publication
+                ? selectedIds.has(row.publication.outputId)
+                : row.detail.package.outputs.some((o) => selectedIds.has(o.id)),
+          )
+          .map((row) => ({
+            ...row,
+            blocker:
+              candidates.find((pkg) => pkg.id === row.detail.package.id)?.revision !==
+              row.detail.package.revision
+                ? "This recording changed after selection. Refresh the file list and review it again."
+                : row.blocker,
+          })),
       );
     } catch (e) {
       setError(
@@ -138,7 +138,6 @@ export function StudioSeriesActions({
     } finally {
       setBusy(false);
       locked.current = false;
-      panel.current?.focus();
     }
   }
   async function execute() {
@@ -205,27 +204,12 @@ export function StudioSeriesActions({
         <button
           className="button primary"
           type="button"
-          disabled={
-            busy ||
-            Boolean(action) ||
-            !eligible.length ||
-            (selectedOutputIds !== undefined && !selectedOutputIds.size)
-          }
-          onClick={() => void prepare(toolbarAction, false)}
+          disabled={busy || Boolean(action) || !eligible.length || !selectedOutputIds.size}
+          onClick={() => void prepare(toolbarAction)}
         >
           {seriesActionName[toolbarAction]} Selected
         </button>
-        <button
-          className="button"
-          type="button"
-          disabled={busy || Boolean(action) || !eligible.length}
-          onClick={() => void prepare(toolbarAction, true)}
-        >
-          {seriesActionName[toolbarAction]} All
-        </button>
-        {selectedOutputIds !== undefined && (
-          <span aria-live="polite">{selectedOutputIds.size} files selected</span>
-        )}
+        <span aria-live="polite">{selectedOutputIds.size} files selected</span>
       </div>
       {isTest && (
         <p className="muted">
@@ -234,28 +218,29 @@ export function StudioSeriesActions({
       )}
       {toolbarAction === "approve" && !eligible.length && (
         <p>
-          No recordings await approval. The Curator must submit them first using Submit All or
-          Submit Selected.
+          Select submitted recordings to approve. Drafts must first be submitted by the Curator.
         </p>
       )}
-      {toolbarAction === "post" && !eligible.length && (
-        <p>Post becomes available after approval.</p>
-      )}
+      {toolbarAction === "post" && !eligible.length && <p>Select approved files to post.</p>}
       {action && (
-        <section
-          ref={panel}
-          tabIndex={-1}
-          aria-label={`${seriesActionName[action]} selection`}
-          className="file-action-confirmation"
+        <StudioActionDialog
+          title={`${seriesActionName[action]} selected files`}
+          busy={busy}
+          onClose={() => setAction(null)}
+          closeLabel={finished ? "Back to files" : "Cancel"}
         >
-          <h4>
-            {seriesActionName[action]} · {count} files in{" "}
-            {new Set(chosen.map((r) => r.detail.package.id)).size} recordings selected
-          </h4>
+          {!busy && rows.length > 0 && (
+            <p className="action-selection-count">
+              <strong>
+                {count} {count === 1 ? "file" : "files"}
+              </strong>{" "}
+              in {new Set(chosen.map((r) => r.detail.package.id)).size} recordings ready
+            </p>
+          )}
           {(action === "submit" || action === "approve") && (
-            <p>
-              Review applies to each selected recording’s complete set of included files, shown
-              together below.
+            <p className="muted">
+              Applies to every included file in the selected recordings.
+              {action === "approve" ? " Approval does not post anything." : ""}
             </p>
           )}
           {busy && (
@@ -273,12 +258,28 @@ export function StudioSeriesActions({
                 : "No recordings are ready for this action."}
             </p>
           )}
+          {!busy && !error && unavailableCount > 0 && (
+            <output>
+              {unavailableCount} selected files are no longer eligible for this action. They will
+              not be changed.
+            </output>
+          )}
           {rows.length > 0 && (
             <>
-              <p>
-                {rows.filter((r) => r.blocker).length} blocked selections. Blocked items are
-                excluded; see the reason beside each one.
-              </p>
+              {blocked.length > 0 && (
+                <details className="action-review-details" open>
+                  <summary>
+                    {blocked.reduce((n, row) => n + row.count, 0)} files cannot proceed
+                  </summary>
+                  <ul>
+                    {blocked.map((row) => (
+                      <li key={row.id}>
+                        <strong>{row.title}</strong>: {row.blocker}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {action === "retract" && (
                 <p>
                   Queued posts can be cancelled. Published YouTube videos require removal in YouTube
@@ -287,105 +288,39 @@ export function StudioSeriesActions({
                 </p>
               )}
               <fieldset disabled={busy || finished} style={{ border: 0, padding: 0 }}>
-                <legend>
-                  {action === "submit" || action === "approve"
-                    ? "Choose recordings (all included files in each)"
-                    : "Choose individual files"}
-                </legend>
-                <div className="actions wrap">
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={() => {
-                      setSelected(new Set(rows.filter((r) => !r.blocker).map((r) => r.id)));
-                      setConfirmed(false);
-                      setRightsConfirmed(false);
-                    }}
-                  >
-                    Select all eligible
-                  </button>
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={() => {
-                      setSelected(new Set());
-                      setConfirmed(false);
-                      setRightsConfirmed(false);
-                    }}
-                  >
-                    Clear selection
-                  </button>
-                </div>
-                <div style={{ maxHeight: 420, overflow: "auto", marginBlock: 12 }}>
-                  {rows.map((row) => (
-                    <div
-                      key={row.id}
-                      style={{ borderBottom: "1px solid #ddd", padding: "12px 4px" }}
-                    >
-                      <label style={{ display: "flex", gap: 12, alignItems: "start" }}>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(row.id)}
-                          disabled={Boolean(row.blocker)}
-                          onChange={(e) => {
-                            const next = new Set(selected);
-                            if (e.target.checked) next.add(row.id);
-                            else next.delete(row.id);
-                            setSelected(next);
-                            setConfirmed(false);
-                            setRightsConfirmed(false);
-                          }}
-                        />
-                        <span>
-                          {row.title} · {row.count} {row.count === 1 ? "file" : "files"}
-                          {row.publication ? ` · ${row.publication.status}` : ""}
-                        </span>
-                      </label>
-                      {row.blocker && <p>{row.blocker}</p>}
-                      <details>
-                        <summary>
-                          {row.source ? "Files and master permissions" : "Preview files"}
-                        </summary>
-                        <ul>
-                          {row.detail.package.outputs
-                            .filter(
-                              (o) =>
-                                o.included &&
-                                (!row.outputId || o.id === row.outputId) &&
-                                (!row.publication || o.id === row.publication.outputId),
-                            )
-                            .map((o) => (
-                              <li key={o.id}>
-                                <button
-                                  type="button"
-                                  className="button"
-                                  onClick={() => onPreview(row.detail.package, o.id)}
-                                >
-                                  {o.title}
-                                </button>
-                              </li>
-                            ))}
-                        </ul>
-                        {row.source && (
-                          <p>
-                            Rights holder: {row.source.rights?.owner ?? "Missing"}
-                            <br />
-                            Authorization: {row.source.rights?.authorizationBasis ?? "Missing"}
-                            <br />
-                            Channels: {row.source.rights?.channels.join(", ")}
-                            <br />
-                            Territories: {row.source.rights?.territories.join(", ")}
-                            <br />
-                            Visibility: {row.source.rights?.privacyClass}
-                            <br />
-                            Release: {row.source.rights?.releaseAt ?? "Immediate"} · Expiry:{" "}
-                            {row.source.rights?.expiresAt ?? "None"}
-                          </p>
-                        )}
-                      </details>
-                    </div>
-                  ))}
-                </div>
+                <legend className="visually-hidden">Confirm selection</legend>
+                {sourceApprovalNeeded && (
+                  <details className="action-review-details">
+                    <summary>
+                      Review master permissions for{" "}
+                      {chosen.filter((row) => row.source?.state === "RIGHTS_CLEARED").length}{" "}
+                      recordings
+                    </summary>
+                    <ul>
+                      {chosen
+                        .filter((row) => row.source?.state === "RIGHTS_CLEARED")
+                        .map((row) => (
+                          <li key={row.id}>
+                            <strong>{row.title}</strong>
+                            <p>
+                              Rights holder: {row.source?.rights?.owner ?? "Missing"}
+                              <br />
+                              Authorization: {row.source?.rights?.authorizationBasis ?? "Missing"}
+                              <br />
+                              Channels: {row.source?.rights?.channels.join(", ")}
+                              <br />
+                              Territories: {row.source?.rights?.territories.join(", ")}
+                              <br />
+                              Visibility: {row.source?.rights?.privacyClass}
+                              <br />
+                              Release: {row.source?.rights?.releaseAt ?? "Immediate"} · Expiry:{" "}
+                              {row.source?.rights?.expiresAt ?? "None"}
+                            </p>
+                          </li>
+                        ))}
+                    </ul>
+                  </details>
+                )}
                 {action === "post" &&
                   targets.map(({ channel, connection, account, id }) => (
                     <div key={channel}>
@@ -482,37 +417,35 @@ export function StudioSeriesActions({
                   ? ` · ${chosen.length - results.length} not attempted`
                   : ""}
               </h4>
-              <ul>
-                {results.map((result) => (
-                  <li key={result.id}>
-                    <strong>{result.title}</strong>: {result.message}
-                    {result.remoteUrl && (
-                      <>
-                        {" "}
-                        <a href={result.remoteUrl} target="_blank" rel="noreferrer">
-                          View channel post
-                        </a>
-                      </>
-                    )}
-                    {!result.ok && action === "retract" && result.channel === "youtube" && (
-                      <>
-                        {" "}
-                        <a href="https://studio.youtube.com" target="_blank" rel="noreferrer">
-                          Open YouTube Studio
-                        </a>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <details className="action-review-details">
+                <summary>See results</summary>
+                <ul>
+                  {results.map((result) => (
+                    <li key={result.id}>
+                      <strong>{result.title}</strong>: {result.message}
+                      {result.remoteUrl && (
+                        <>
+                          {" "}
+                          <a href={result.remoteUrl} target="_blank" rel="noreferrer">
+                            View channel post
+                          </a>
+                        </>
+                      )}
+                      {!result.ok && action === "retract" && result.channel === "youtube" && (
+                        <>
+                          {" "}
+                          <a href="https://studio.youtube.com" target="_blank" rel="noreferrer">
+                            Open YouTube Studio
+                          </a>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </details>
             </section>
           )}
-          {!busy && (
-            <button type="button" className="button" onClick={() => setAction(null)}>
-              Close selection
-            </button>
-          )}
-        </section>
+        </StudioActionDialog>
       )}
     </div>
   );

@@ -218,9 +218,10 @@ export function PlaylistFiles({
           </p>
           {canReview && !canCurate && drafts.length > 0 && (
             <p>
-              Drafts must first be checked and submitted by the Curator using
-              <strong> Submit All</strong> or <strong>Submit Selected</strong> above the file list.
-              Approval controls become available after submission.
+              Drafts must first be checked by the Curator, then selected in the file list and sent
+              using
+              <strong> Submit Selected</strong>. Approval controls become available after
+              submission.
             </p>
           )}
           <p>
@@ -381,7 +382,6 @@ export function PlaylistFiles({
             canReview={canReview}
             canPublish={canPublish}
             onRefresh={onRefresh}
-            onPreview={onPreview}
             selectedOutputIds={selected}
             selectedAction={selectedAction}
             onActionChange={chooseAction}
@@ -395,7 +395,7 @@ export function PlaylistFiles({
               ? "Selecting a file selects its recording’s complete set of included files for submission or approval."
               : "Select individual files for posting or retraction."}
           </span>
-          <span>“All” includes every eligible file in this series, even outside the filters.</span>
+          <span>The header checkbox selects all files shown by your filters.</span>
           {selected.size > 0 && (
             <button type="button" className="button" onClick={() => setSelection(new Set())}>
               Clear selection

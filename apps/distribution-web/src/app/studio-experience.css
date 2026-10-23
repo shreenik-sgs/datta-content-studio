@@ -378,19 +378,56 @@ body .file-action-toolbar {
 .file-action-toolbar label {
   margin: 0;
 }
-.file-action-confirmation {
+.studio-action-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  color: var(--ink);
+  box-shadow: 0 24px 80px #102d2540;
+}
+.studio-action-dialog::backdrop {
+  background: #102d2566;
+}
+.studio-action-dialog h3 {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+.file-action-toolbar .studio-action-dialog p {
+  margin: 12px 0;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.studio-action-dialog .action-selection-count strong {
+  font-size: 20px;
+}
+.studio-action-dialog > .button {
+  margin-top: 12px;
+}
+.studio-action-dialog fieldset {
+  margin: 16px 0 0;
+  min-width: 0;
+}
+.studio-action-dialog label {
+  line-height: 1.5;
+}
+.action-review-details {
   margin-block: 16px;
-  padding: 20px;
-  border: 1px solid #c5d7cd;
-  border-radius: 10px;
-  background: #f4f8f3;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
-.file-action-confirmation:focus {
-  outline: 2px solid var(--kamala);
-  outline-offset: 3px;
+.action-review-details li + li {
+  margin-top: 12px;
 }
-.file-action-confirmation h4 {
-  margin-top: 0;
+@media (max-width: 600px) {
+  .studio-action-dialog {
+    padding: 20px;
+  }
 }
 .file-selection-summary {
   display: flex;
@@ -735,7 +772,7 @@ body .file-list-controls {
   border-bottom: 1px solid var(--line);
 }
 @media (min-width: 1100px) {
-  .file-list-controls:has(.file-action-toolbar):not(:has(.file-action-confirmation)) {
+  .file-list-controls:has(.file-action-toolbar) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
     gap: 20px;

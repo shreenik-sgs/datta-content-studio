@@ -309,7 +309,8 @@
 .playlist-files-table .playlist-file-master {
   min-width: 12rem;
   max-width: 17rem;
-  vertical-align: top;
+  vertical-align: middle;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 .playlist-file-master > span,
