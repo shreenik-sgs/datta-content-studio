@@ -2,6 +2,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import type { PublicStudioPublication, StudioListing } from "../lib/studio-model";
 import { PlaylistFiles } from "./playlist-files";
 import { StudioPanel } from "./studio-panel";
 import { value } from "./studio-workflow-fixture";
@@ -109,11 +110,65 @@ it("explains reviewed parts with no suitable excerpt instead of implying they ar
     await act(async () =>
       root.render(<PlaylistFiles packages={[empty]} onOpen={onOpen} onPreview={vi.fn()} />),
     );
-    expect(host.textContent).toContain("1 sections checked — no complete teaching selected");
+    expect(host.textContent).toContain("1 source recording with no generated files");
     expect(host.textContent).not.toContain("still need generated files");
     expect(host.textContent).not.toContain("as generation finishes");
     await act(async () => host.querySelector("button")?.click());
     expect(onOpen).toHaveBeenCalledWith(empty);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("explains an empty source without rejecting the successful recording with the same title", async () => {
+  const { host, root } = setup();
+  const onOpen = vi.fn();
+  const empty = {
+    ...first,
+    id: "musical-source-package",
+    source: { ...first.source, masterId: "musical-source" },
+    outputs: [],
+    status: "FAILED" as const,
+    failure: "STUDIO_NO_SUITABLE_CHANNELS",
+    generationProgress: {
+      phase: "drafting" as const,
+      provider: "gemini" as const,
+      completed: 0,
+      total: 1,
+      excludedChannels: [
+        {
+          channel: "youtube" as const,
+          reason: "This source contains devotional singing, not a spoken discourse.",
+        },
+      ],
+    },
+  };
+  try {
+    await act(async () =>
+      root.render(
+        <PlaylistFiles
+          packages={[empty, first]}
+          sourceLinks={{ "musical-source": "https://www.youtube.com/watch?v=0UO6eFncU9I" }}
+          onOpen={onOpen}
+          onPreview={vi.fn()}
+        />,
+      ),
+    );
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(host.textContent).toContain(
+      "This source contains devotional singing, not a spoken discourse.",
+    );
+    expect(host.textContent).toContain("A different recording with this title has 1 file.");
+    expect(host.textContent).not.toContain("no complete teaching selected");
+    expect(
+      host.querySelector('a[href="https://www.youtube.com/watch?v=0UO6eFncU9I"]'),
+    ).not.toBeNull();
+    await act(async () =>
+      [...host.querySelectorAll("button")]
+        .find((b) => b.textContent === "View existing file")
+        ?.click(),
+    );
+    expect(onOpen).toHaveBeenCalledWith(first);
   } finally {
     await act(async () => root.unmount());
   }
@@ -150,6 +205,95 @@ it("shows every recording's files immediately, filters by channel and previews w
     expect(host.querySelectorAll("tbody tr")).toHaveLength(1);
     expect(host.textContent).toContain("Second recording");
     expect(host.textContent).not.toContain("First recording");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("keeps approval separate from another account's posted receipt", async () => {
+  const { host, root } = setup();
+  const approved = {
+    ...first,
+    isTest: false,
+    status: "APPROVED" as const,
+    approval: {
+      reviewerId: "approver",
+      revision: first.revision,
+      sourceRevision: first.source.revision,
+      approvedAt: first.updatedAt,
+    },
+  };
+  const publication: PublicStudioPublication = {
+    id: "posting-on-account-a",
+    packageId: approved.id,
+    packageRevision: approved.revision,
+    outputId: approved.outputs[0]?.id ?? "",
+    channel: "youtube",
+    isTest: false,
+    status: "PUBLISHED",
+    selectedAccountId: "account-a",
+    attempt: 1,
+    error: null,
+    remoteId: "existing-video",
+    remoteUrl: "https://www.youtube.com/watch?v=existing",
+    createdAt: first.updatedAt,
+    updatedAt: first.updatedAt,
+  };
+  const readiness: StudioListing["readiness"] = {
+    isTest: false,
+    generation: {
+      available: true,
+      transcription: "configured",
+      intelligence: "configured",
+      translation: true,
+      reason: null,
+    },
+    channels: [
+      {
+        channel: "youtube",
+        label: "YouTube",
+        ready: true,
+        reason: null,
+        accountId: "account-b",
+        transport: "buffer",
+        accounts: [
+          { id: "account-a", label: "Channel A", isDefault: false, ready: true, reason: null },
+          { id: "account-b", label: "Channel B", isDefault: true, ready: true, reason: null },
+        ],
+      },
+    ],
+  };
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  try {
+    await act(async () =>
+      root.render(
+        <PlaylistFiles
+          packages={[approved]}
+          publications={[publication]}
+          readiness={readiness}
+          onOpen={vi.fn()}
+          onPreview={vi.fn()}
+        />,
+      ),
+    );
+    const reviewStatus = () =>
+      host.querySelector("tbody tr td:nth-last-child(2) .lineage-status")?.textContent;
+    const postingStatus = () =>
+      host.querySelector("tbody tr td:last-child .lineage-status")?.textContent;
+    expect(reviewStatus()).toBe("Approved");
+    expect(postingStatus()).toBe("No Studio posting record");
+    const account = host.querySelector<HTMLSelectElement>(
+      'select[aria-label="Posting status account"]',
+    );
+    if (!account) throw Error("Missing account filter");
+    await act(async () => {
+      account.value = "account-a";
+      account.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(reviewStatus()).toBe("Approved");
+    expect(postingStatus()).toBe("Posted");
+    expect(fetcher).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
   }
@@ -199,6 +343,7 @@ it.each([
       );
       expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
       expect(host.querySelector('[aria-label="Content workflow"]')).toBeNull();
+      expect(host.querySelectorAll('[aria-label="Series workflow"]')).toHaveLength(1);
       expect(host.querySelector('[aria-label="Recording in bundle"]')).toBeNull();
       expect(host.textContent).not.toContain("Excluded earlier curation");
       await act(async () =>
@@ -217,6 +362,7 @@ it.each([
       );
       expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
       expect(host.querySelector('[aria-label="Content workflow"]')).toBeNull();
+      expect(host.querySelectorAll('[aria-label="Series workflow"]')).toHaveLength(1);
       expect(requests.mock.calls.some(([url]) => url.endsWith("/old-curation"))).toBe(false);
     } finally {
       await act(async () => root.unmount());

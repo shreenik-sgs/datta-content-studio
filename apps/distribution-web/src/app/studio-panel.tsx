@@ -41,9 +41,9 @@ import { StudioLineage } from "./studio-lineage";
 import { StudioMediaSummary } from "./studio-media-editor";
 import { StudioDraftPostingHistory } from "./studio-posting-check";
 import { StudioPreviewDialog } from "./studio-preview-dialog";
+import { StudioProgressSummary } from "./studio-progress-summary";
 import { StudioPublishing } from "./studio-publishing";
 import { StudioQualitySelection } from "./studio-quality-selection";
-import { StudioSeriesActions } from "./studio-series-actions";
 import { StudioSourceRecovery } from "./studio-source-recovery";
 import { StudioSourceReview } from "./studio-source-review";
 import { StudioWorkflow } from "./studio-workflow";
@@ -198,6 +198,7 @@ export function StudioOutputPreview({
         : `${channel} post text`;
   return (
     <>
+      <StudioProgressSummary packages={[{ ...value, outputs: [output] }]} preview />
       {output.asset?.mimeType === "video/mp4" ? (
         <section aria-labelledby={`media-heading-${output.id}`}>
           <h4 id={`media-heading-${output.id}`}>Video file</h4>
@@ -274,8 +275,9 @@ export function StudioOutputPreview({
             </p>
           )}
           <p>
-            <strong>Original audio:</strong> {spokenLanguage}. The master audio is retained;
-            translations do not dub or replace the voice.
+            <strong>Original audio:</strong> Retained without dubbing. The import language setting
+            is {spokenLanguage}; speech may switch languages within a recording. This setting is not
+            a language check of this clip.
           </p>
           <p>
             <strong>Embedded subtitles:</strong>{" "}
@@ -458,6 +460,7 @@ export function StudioPanel({
     masterIds: readonly string[];
     packageIds?: readonly string[];
     playlistId?: string;
+    sourceLinks?: Readonly<Record<string, string>>;
   };
   onBackToBundle?: () => void;
   content?: ContentMaster;
@@ -472,6 +475,7 @@ export function StudioPanel({
   const [selectedId, setSelectedId] = useState<string | null>(initialPackageId ?? null);
   const [detail, setDetail] = useState<StudioDetail | null>(null);
   const [filter, setFilter] = useState("active");
+  const [seriesStep, setSeriesStep] = useState<number | null>(null);
   const [masterSearch, setMasterSearch] = useState("");
   const [additionalSource, setAdditionalSource] = useState<ContentMaster | null>(null);
   const [unstarted, setUnstarted] = useState<ContentMaster[]>([]);
@@ -488,6 +492,15 @@ export function StudioPanel({
   const [regenerating, setRegenerating] = useState(false);
   const [previewOutput, setPreviewOutput] = useState<string | null>(null);
   const [manualEdit, setManualEdit] = useState<{ id: string; sequence: number } | null>(null);
+  const manualEditAvailable = Boolean(
+    manualEdit && detail?.package.outputs.some((output) => output.id === manualEdit.id),
+  );
+  useEffect(() => {
+    if (!manualEditAvailable || !detail?.package.id) return;
+    const target = document.getElementById(`package-actions-${detail.package.id}`);
+    target?.scrollIntoView({ block: "start", behavior: "smooth" });
+    target?.focus({ preventScroll: true });
+  }, [manualEditAvailable, detail?.package.id]);
   const [bundlePreview, setBundlePreview] = useState<{
     packageId: string;
     outputId: string;
@@ -746,7 +759,7 @@ export function StudioPanel({
     const preview = previewPackage?.outputs.find((output) => output.id === bundlePreview?.outputId);
     return (
       <section className="panel" aria-label="Intelligent content" style={{ minWidth: 0 }}>
-        <div className="actions wrap">
+        <div className="actions wrap series-context-heading">
           <strong>{bundle.title}</strong>
           <button className="button" type="button" onClick={onBackToBundle}>
             Back to playlist overview
@@ -757,16 +770,24 @@ export function StudioPanel({
           <output>Loading playlist files…</output>
         ) : (
           <>
-            <StudioSeriesActions
-              packages={bundlePackages}
-              canCurate={canCreate}
-              canReview={canReview}
-              canPublish={canPublish}
-              onRefresh={() => load(undefined, true)}
-              onPreview={(item, outputId) => setBundlePreview({ packageId: item.id, outputId })}
-            />
+            {scope !== "complete" && (
+              <StudioProgressSummary
+                packages={bundlePackages}
+                publications={listing?.publications ?? []}
+                totalRecordings={bundle.totalRecordings}
+                selectedStep={seriesStep}
+                onStep={setSeriesStep}
+              />
+            )}
             <PlaylistFiles
+              sourceLinks={bundle.sourceLinks}
               showHandoff={false}
+              workflowStep={seriesStep}
+              onClearStep={() => setSeriesStep(null)}
+              publications={listing?.publications ?? []}
+              readiness={listing?.readiness}
+              playlistId={bundle.playlistId}
+              onRefresh={() => load(undefined, true)}
               totalRecordings={bundle.totalRecordings}
               packages={bundlePackages}
               canCurate={canCreate}
@@ -779,6 +800,25 @@ export function StudioPanel({
         )}
         {previewPackage && preview && (
           <StudioPreviewDialog onClose={() => setBundlePreview(null)}>
+            <div className="preview-file-heading">
+              <h3>{preview.title}</h3>
+              {preview.included && studioCanEdit(previewPackage.status, capabilities) ? (
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={() => {
+                    select(previewPackage);
+                    setManualEdit({ id: preview.id, sequence: (manualEdit?.sequence ?? 0) + 1 });
+                  }}
+                >
+                  Edit this file
+                </button>
+              ) : (
+                <button className="button" type="button" onClick={() => select(previewPackage)}>
+                  Open recording workflow
+                </button>
+              )}
+            </div>
             <StudioOutputPreview
               value={previewPackage}
               output={preview}
@@ -799,6 +839,7 @@ export function StudioPanel({
     >
       {bundle && (
         <PlaylistReviewNavigation
+          sourceLinks={bundle.sourceLinks}
           title={bundle.title}
           packages={bundlePackages}
           selectedId={selectedId}
@@ -854,55 +895,7 @@ export function StudioPanel({
           </button>
         )}
       </div>
-      {value && (
-        <div className="actions wrap" aria-label="Delete content">
-          <StorageCleanup
-            key={`cleanup-package-${value.id}`}
-            kind="package"
-            id={value.id}
-            onDeleted={() => {
-              setSelectedId(null);
-              setDetail(null);
-            }}
-          />
-          {!content && (
-            <StorageCleanup
-              key={`cleanup-master-${value.source.masterId}`}
-              kind="master"
-              id={value.source.masterId}
-              onDeleted={() => {
-                setSelectedId(null);
-                setDetail(null);
-              }}
-            />
-          )}
-        </div>
-      )}
-      {value && siblingPackages.length > 1 && (
-        <details open>
-          <summary>All content in this master’s workspace</summary>
-          <label className="package-selection">
-            Curation batches from this master
-            <select
-              value={value.id}
-              onChange={(event) => {
-                const item = siblingPackages.find(
-                  (candidate) => candidate.id === event.target.value,
-                );
-                if (item) select(item);
-              }}
-            >
-              {siblingPackages.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {studioStatusLabel(item)} · {formatTimestamp(item.createdAt)} ·{" "}
-                  {item.id.slice(0, 8)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </details>
-      )}
-      {scope !== "complete" && (value || (content && listing?.packages.length === 0)) && (
+      {(value || (content && listing?.packages.length === 0)) && (
         <StudioWorkflow
           value={value}
           combinedRoles={combinedRoles}
@@ -996,9 +989,56 @@ export function StudioPanel({
           }}
         />
       )}
+      {value && (
+        <div className="actions wrap" aria-label="Delete content">
+          <StorageCleanup
+            key={`cleanup-package-${value.id}`}
+            kind="package"
+            id={value.id}
+            onDeleted={() => {
+              setSelectedId(null);
+              setDetail(null);
+            }}
+          />
+          {!content && (
+            <StorageCleanup
+              key={`cleanup-master-${value.source.masterId}`}
+              kind="master"
+              id={value.source.masterId}
+              onDeleted={() => {
+                setSelectedId(null);
+                setDetail(null);
+              }}
+            />
+          )}
+        </div>
+      )}
+      {value && siblingPackages.length > 1 && (
+        <details open>
+          <summary>All content in this master’s workspace</summary>
+          <label className="package-selection">
+            Curation batches from this master
+            <select
+              value={value.id}
+              onChange={(event) => {
+                const item = siblingPackages.find(
+                  (candidate) => candidate.id === event.target.value,
+                );
+                if (item) select(item);
+              }}
+            >
+              {siblingPackages.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {studioStatusLabel(item)} · {formatTimestamp(item.createdAt)} ·{" "}
+                  {item.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </details>
+      )}
       {value?.status === "DRAFT" && canReview && !canCreate && (
-        <section className="panel" aria-label="Curator handoff" style={{ marginBlock: 16 }}>
-          <h3>These files have not been submitted for approval</h3>
+        <aside className="workflow-context-note" aria-label="Curator handoff">
           <p>
             The Curator must open this recording under Continue Existing Curation, check its files,
             then choose <strong>Submit package for review</strong> in step 3. You can then use
@@ -1009,12 +1049,9 @@ export function StudioPanel({
             choose the target account and post them.
           </p>
           {value.isTest && (
-            <p>
-              <strong>This is a test workspace.</strong> Its publication action is a simulation; it
-              does not upload videos to YouTube.
-            </p>
+            <p className="muted">This is a test workspace; it does not upload videos to YouTube.</p>
           )}
-        </section>
+        </aside>
       )}
       {detail && value && ["IN_REVIEW", "APPROVED"].includes(value.status) && (
         <StudioPublishing
@@ -1030,8 +1067,8 @@ export function StudioPanel({
         />
       )}
       {value?.provenance?.discovery && (
-        <section className="notice" aria-label="Discovery coverage">
-          <strong>Section-by-section discovery completed</strong>
+        <details className="workflow-context-note" aria-label="Discovery coverage">
+          <summary>Section-by-section discovery completed</summary>
           <p>
             {value.provenance.discovery.sections.length} sections reviewed;{" "}
             {value.provenance.discovery.sections.reduce((n, s) => n + s.accepted, 0)} new distinct
@@ -1040,7 +1077,7 @@ export function StudioPanel({
             or repeated messages excluded. This records the review coverage, not a guarantee that
             every possible teaching was found.
           </p>
-        </section>
+        </details>
       )}
       {canCreate && value?.status === "FAILED" && value.generation?.mode === "discover" && (
         <p>

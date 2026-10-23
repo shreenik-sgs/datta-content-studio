@@ -1,5 +1,6 @@
 "use client";
-import { type PublicStudioPackage, STUDIO_STATUS_LABELS } from "../lib/studio-model";
+import { type PublicStudioPackage, studioStatusLabel } from "../lib/studio-model";
+import { studioSourceVideo } from "../lib/studio-source-outcome";
 
 export function PlaylistReviewNavigation({
   title,
@@ -10,6 +11,7 @@ export function PlaylistReviewNavigation({
   onSelect,
   onBack,
   onAllFiles,
+  sourceLinks = {},
 }: {
   title: string;
   packages: readonly PublicStudioPackage[];
@@ -19,9 +21,12 @@ export function PlaylistReviewNavigation({
   onSelect: (value: PublicStudioPackage) => void;
   onBack?: (() => void) | undefined;
   onAllFiles?: (() => void) | undefined;
+  sourceLinks?: Readonly<Record<string, string>> | undefined;
 }) {
   const index = packages.findIndex((item) => item.id === selectedId);
   const next = index >= 0 ? packages[index + 1] : undefined;
+  const selected = packages[index];
+  const source = selected && studioSourceVideo(sourceLinks[selected.source.masterId]);
   return (
     <nav className="playlist-review-navigation" aria-label="Bundle review">
       <div className="actions wrap">
@@ -50,7 +55,16 @@ export function PlaylistReviewNavigation({
             {index < 0 && <option value="">Choose a recording</option>}
             {packages.map((item, position) => (
               <option key={item.id} value={item.id}>
-                {position + 1}. {item.source.title} · {STUDIO_STATUS_LABELS[item.status]}
+                {position + 1}. {item.source.title}
+                {packages.some(
+                  (p) =>
+                    p.source.title === item.source.title &&
+                    p.source.masterId !== item.source.masterId,
+                )
+                  ? ` · source ${studioSourceVideo(sourceLinks[item.source.masterId])?.id ?? item.source.masterId.slice(0, 8)}`
+                  : ""}
+                {" · "}
+                {studioStatusLabel(item)}
               </option>
             ))}
           </select>
@@ -64,6 +78,13 @@ export function PlaylistReviewNavigation({
           Next recording →
         </button>
       </div>
+      {source && (
+        <p>
+          <a href={source.url} target="_blank" rel="noopener noreferrer">
+            Original video · {source.id}
+          </a>
+        </p>
+      )}
       <p className="muted">
         {completed
           ? "Browse the approved files for each recording. Approved files are locked against editing."

@@ -1,59 +1,71 @@
 .studio-workflow {
-  margin: 20px 0 26px;
-  padding: 20px;
-  border: 1px solid #cebcc4;
-  border-radius: 16px;
-  background: var(--wash);
+  margin: 0 0 22px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface, white);
   min-width: 0;
 }
 .studio-workflow-heading {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
 }
 .studio-workflow-heading h3 {
   margin: 0;
+  font-size: 14px;
 }
 .studio-workflow-heading > span {
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--kamala-deep);
 }
+.studio-workflow-heading > .button {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
 .studio-workflow > p {
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+  margin-block: 8px 0;
 }
 .studio-workflow ol {
   list-style: none;
   padding: 0;
-  margin: 18px 0;
+  margin: 12px 0 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
 }
 .studio-workflow li {
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface, white);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #f4f6f2;
 }
 .studio-workflow .workflow-readonly,
 .studio-workflow li button {
   display: flex;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 8px;
   width: 100%;
   height: 100%;
-  min-height: 112px;
+  min-height: 84px;
   border: 0;
-  padding: 16px;
-  border-radius: 12px;
+  padding: 12px 10px;
+  border-radius: 7px;
   text-align: left;
   color: inherit;
   background: transparent;
   cursor: pointer;
+  box-sizing: border-box;
 }
 .studio-workflow li button:focus-visible {
-  outline: 3px solid var(--kamala-deep);
+  outline: 3px solid var(--kamala);
   outline-offset: 3px;
 }
 .studio-workflow li button:disabled {
@@ -64,94 +76,159 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 4px;
   overflow-wrap: anywhere;
 }
+.workflow-step-copy strong {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
 .workflow-step-copy small {
-  line-height: 1.5;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
 }
 .workflow-number {
   display: inline-flex;
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  align-self: flex-start;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
+  border: 1px solid #cbd7ce;
   border-radius: 50%;
+  font-size: 11px;
   font-weight: 700;
+  background: white;
 }
 .workflow-state {
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
 }
 .studio-workflow .workflow-current {
-  border: 2px solid var(--kamala-deep);
+  border-color: #adcbbc;
+  background: #edf5ed;
 }
 .workflow-current .workflow-number {
   background: var(--kamala-deep);
+  border-color: var(--kamala-deep);
   color: white;
 }
 .workflow-current .workflow-state {
   color: var(--kamala-deep);
+  font-weight: 650;
 }
 .workflow-done .workflow-number {
-  background: #e6f2e9;
-  color: #245b35;
+  background: #e4eee4;
+  border-color: #d5e3d5;
+  color: #365b3c;
 }
 .workflow-stopped {
   opacity: 0.7;
 }
+.studio-workflow li button[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--kamala);
+}
 .studio-workflow .workflow-explanation {
-  font-size: 13px;
+  font-size: 12px;
   margin-bottom: 0;
 }
-@media (min-width: 1250px) {
-  .studio-workflow ol {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-  .studio-workflow .workflow-readonly,
-  .studio-workflow li button {
-    flex-direction: column;
-  }
-}
-@media (max-width: 700px) {
-  .studio-workflow {
-    padding: 14px;
-  }
-  .studio-workflow ol {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .studio-workflow .workflow-readonly,
-  .studio-workflow li button {
-    min-height: 88px;
-    padding: 12px;
-    flex-direction: column;
-  }
-}
-
 .workflow-navigation {
   display: flex;
   gap: 12px;
-  justify-content: space-between;
   align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
-  margin-top: 18px;
+  margin-top: 12px;
 }
 .workflow-navigation > span {
-  font-size: 13px;
+  font-size: 12px;
 }
 .workflow-navigation .button {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 12px;
   white-space: normal;
 }
-
 .studio-workflow .workflow-readonly {
   cursor: default;
-  box-sizing: border-box;
-  border: 1px solid var(--line);
 }
-.studio-workflow .workflow-readonly.workflow-current {
-  border: 2px solid var(--kamala-deep);
+.workflow-summary .workflow-readonly,
+.workflow-summary li button {
+  min-height: 66px;
+}
+@media (min-width: 1100px) and (min-height: 800px) {
+  .studio-workflow {
+    position: sticky;
+    top: 10px;
+    z-index: 4;
+    box-shadow: 0 3px 15px #17382a0b;
+  }
+}
+.studio-preview-dialog .studio-workflow {
+  position: static;
+  box-shadow: none;
+  margin-bottom: 16px;
+  padding: 12px;
+}
+.studio-preview-dialog .studio-workflow-heading h3 {
+  font-size: 12px;
+}
+.studio-preview-dialog .workflow-summary .workflow-readonly {
+  padding: 8px;
+  min-height: 54px;
+  gap: 6px;
+}
+.studio-preview-dialog .workflow-step-copy strong {
+  font-size: 11px;
+}
+.studio-preview-dialog .workflow-number {
+  flex-basis: 18px;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+}
+@media (max-width: 1050px) {
+  .studio-workflow ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .studio-workflow li button,
+  .studio-workflow .workflow-readonly {
+    min-height: 76px;
+  }
+  .workflow-summary .workflow-readonly,
+  .workflow-summary li button {
+    min-height: 60px;
+  }
+}
+@media (max-width: 500px) {
+  .studio-workflow {
+    padding: 12px;
+  }
+  .studio-workflow ol {
+    gap: 5px;
+  }
+  .studio-workflow li button,
+  .studio-workflow .workflow-readonly {
+    flex-direction: column;
+    gap: 6px;
+    padding: 9px;
+  }
+  .workflow-step-copy small {
+    display: none;
+  }
+  .workflow-step-copy strong {
+    font-size: 11px;
+  }
+  .workflow-state {
+    font-size: 10px;
+  }
+  .workflow-navigation .button {
+    width: 100%;
+  }
+  .studio-preview-dialog .workflow-number {
+    display: none;
+  }
 }

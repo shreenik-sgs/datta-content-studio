@@ -174,7 +174,12 @@ export function CurationSettings() {
     });
   }
   return (
-    <>
+    <div className="studio-settings">
+      <nav className="studio-settings-navigation" aria-label="Settings sections">
+        <a href="#settings-curation">Curation defaults</a>
+        <a href="#settings-publishing">Publishing accounts</a>
+        <a href="#settings-delivery">Media delivery</a>
+      </nav>
       {message && <output className="notice">{message}</output>}
       {value.isTest && (
         <p className="notice">
@@ -188,72 +193,75 @@ export function CurationSettings() {
           the private channel settings file and encryption key before credentials can be saved.
         </p>
       )}
-      <section className="panel">
-        <h2>Curation</h2>
+      <section className="panel" id="settings-curation" aria-labelledby="settings-curation-title">
+        <h2 id="settings-curation-title">Curation defaults</h2>
         <p>
           <a href="/distribution/live">Live channel monitoring</a> — channel permissions, capture
           status and generated broadcast bundles.
         </p>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            void save({
-              action: "app-links",
-              appLinks: {
-                web: String(data.get("web") ?? "").trim(),
-                ios: String(data.get("ios") ?? "").trim(),
-                android: String(data.get("android") ?? "").trim(),
-              },
-            });
-          }}
-        >
-          <fieldset disabled={busy || !value.writable}>
-            <legend>Website &amp; app-download links</legend>
-            <label>
-              Website (fallback)
-              <input
-                key={value.appLinks.web}
-                name="web"
-                type="url"
-                required
-                maxLength={2048}
-                defaultValue={value.appLinks.web}
-              />
-            </label>
-            <label>
-              iOS App Store
-              <input
-                key={value.appLinks.ios ?? ""}
-                name="ios"
-                type="url"
-                maxLength={2048}
-                defaultValue={value.appLinks.ios ?? ""}
-                placeholder="Add after App Store approval"
-              />
-            </label>
-            <label>
-              Android Play Store
-              <input
-                key={value.appLinks.android ?? ""}
-                name="android"
-                type="url"
-                maxLength={2048}
-                defaultValue={value.appLinks.android ?? ""}
-                placeholder="Add when the Play Store listing is ready"
-              />
-            </label>
-            <p className="muted">
-              The “SGS Datta Sannidhi” link in the Hub player uses the viewer’s device and falls
-              back to the website when its store link is empty. New renders remember these links. No
-              raw address is printed on the card. Downloaded MP4s have no clickable links; social
-              channels require their supported link placement.
-            </p>
-            <button type="submit" className="button">
-              Save website &amp; app links
-            </button>
-          </fieldset>
-        </form>
+        <details className="settings-disclosure">
+          <summary>Website and app links</summary>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              void save({
+                action: "app-links",
+                appLinks: {
+                  web: String(data.get("web") ?? "").trim(),
+                  ios: String(data.get("ios") ?? "").trim(),
+                  android: String(data.get("android") ?? "").trim(),
+                },
+              });
+            }}
+          >
+            <fieldset disabled={busy || !value.writable}>
+              <legend>Website &amp; app-download links</legend>
+              <label>
+                Website (fallback)
+                <input
+                  key={value.appLinks.web}
+                  name="web"
+                  type="url"
+                  required
+                  maxLength={2048}
+                  defaultValue={value.appLinks.web}
+                />
+              </label>
+              <label>
+                iOS App Store
+                <input
+                  key={value.appLinks.ios ?? ""}
+                  name="ios"
+                  type="url"
+                  maxLength={2048}
+                  defaultValue={value.appLinks.ios ?? ""}
+                  placeholder="Add after App Store approval"
+                />
+              </label>
+              <label>
+                Android Play Store
+                <input
+                  key={value.appLinks.android ?? ""}
+                  name="android"
+                  type="url"
+                  maxLength={2048}
+                  defaultValue={value.appLinks.android ?? ""}
+                  placeholder="Add when the Play Store listing is ready"
+                />
+              </label>
+              <p className="muted">
+                The “SGS Datta Sannidhi” link in the Hub player uses the viewer’s device and falls
+                back to the website when its store link is empty. New renders remember these links.
+                No raw address is printed on the card. Downloaded MP4s have no clickable links;
+                social channels require their supported link placement.
+              </p>
+              <button type="submit" className="button">
+                Save website &amp; app links
+              </button>
+            </fieldset>
+          </form>
+        </details>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -363,13 +371,17 @@ export function CurationSettings() {
           guidance are chosen in each master’s workspace. Curator and Approver duties stay separate.
         </p>
       </section>
-      <section className="panel">
-        <h2>Publishing connections</h2>
+      <section
+        className="panel"
+        id="settings-publishing"
+        aria-labelledby="settings-publishing-title"
+      >
+        <h2 id="settings-publishing-title">Publishing accounts</h2>
         <p>
           Save multiple target accounts here. In step 6, choose one account for each channel before
           posting.
         </p>
-        <details>
+        <details className="settings-disclosure">
           <summary>Add a YouTube target account</summary>
           <form
             onSubmit={(event) => {
@@ -417,7 +429,7 @@ export function CurationSettings() {
           For Buffer channels, connect the Ashrama account in Buffer first, then enter its API token
           and channel ID here. Enter provider tokens, never social account passwords.
         </p>
-        <div className="library-grid">
+        <div className="library-grid settings-channel-grid">
           {STUDIO_CHANNELS.filter((c) => c !== "website").map((channel) => {
             const accounts = value.accounts.filter((v) => v.platform === channel);
             const a = accounts.find((v) => v.isDefault) ?? accounts[0];
@@ -494,7 +506,10 @@ export function CurationSettings() {
         </p>
       </section>
       {selected && (
-        <section className="panel" aria-label={`${studioChannelLabel(selected)} connection`}>
+        <section
+          className="panel settings-connection"
+          aria-label={`${studioChannelLabel(selected)} connection`}
+        >
           <h2 ref={connectionHeading} tabIndex={-1}>
             {studioChannelLabel(selected)}
           </h2>
@@ -847,7 +862,7 @@ export function CurationSettings() {
           )}
         </section>
       )}
-      <details className="panel">
+      <details className="panel settings-disclosure" id="settings-delivery">
         <summary>Media delivery settings</summary>
         <form
           onSubmit={(e) => {
@@ -869,6 +884,6 @@ export function CurationSettings() {
           </button>
         </form>
       </details>
-    </>
+    </div>
   );
 }

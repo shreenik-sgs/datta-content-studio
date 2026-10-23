@@ -1708,6 +1708,35 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
         studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision, outputIds }),
       ).rejects.toThrow("INVALID_STUDIO_OUTPUT_SELECTION");
   });
+  it("lists series posting receipts in one scoped batch without deleted or cross-world records", async () => {
+    const first = await fixture();
+    const second = await fixture();
+    const a = await approved(first);
+    const b = await approved(second);
+    const aJobs = await studio.publish(first.reviewer, a.id, { expectedRevision: a.revision });
+    const bJobs = await studio.publish(second.reviewer, b.id, { expectedRevision: b.revision });
+    const both = await studio.listPublicationsForPackages(first.ctx, [a.id, b.id, a.id]);
+    expect(new Set(both.map((job) => job.id))).toEqual(
+      new Set([...aJobs, ...bJobs].map((job) => job.id)),
+    );
+    expect(await studio.listPublicationsForPackages(first.ctx, [])).toEqual([]);
+    expect(await studio.listPublicationsForPackages(identity(false), [a.id, b.id])).toEqual([]);
+    await expect(
+      studio.listPublicationsForPackages({ ...first.ctx, roles: [] }, [a.id]),
+    ).rejects.toThrow("FORBIDDEN");
+    await migration.query(
+      "UPDATE distribution.studio_package SET deleted_at=clock_timestamp() WHERE id=$1",
+      [a.id],
+    );
+    expect(
+      (await studio.listPublicationsForPackages(first.ctx, [a.id, b.id])).map((job) => job.id),
+    ).toEqual(bJobs.map((job) => job.id));
+    await migration.query(
+      "UPDATE distribution.content_master SET deleted_at=clock_timestamp() WHERE id=$1",
+      [b.source.masterId],
+    );
+    expect(await studio.listPublicationsForPackages(first.ctx, [a.id, b.id])).toEqual([]);
+  });
   it("retracts only selected local jobs, retaining edits and denying curator/cross-world/stale access", async () => {
     const f = await fixture();
     const pkg = await approved(f);

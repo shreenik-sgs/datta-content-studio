@@ -131,7 +131,9 @@ describe("selected output review preview", () => {
     const html = renderToStaticMarkup(
       <StudioOutputPreview value={value} output={output} canDownload={false} />,
     );
-    const videoSection = html.slice(0, html.indexOf("</section>"));
+    const videoStart = html.indexOf(`<section aria-labelledby="media-heading-${output.id}">`);
+    const videoSection = html.slice(videoStart, html.indexOf("</section>", videoStart));
+    expect(html).toContain('aria-label="File workflow"');
     expect(videoSection).toContain("Video file");
     expect(videoSection).not.toContain(output.body);
     expect(videoSection).not.toContain(output.rationale);
@@ -147,7 +149,8 @@ describe("selected output review preview", () => {
     const html = renderToStaticMarkup(
       <StudioOutputPreview value={value} output={output} canDownload={false} />,
     );
-    expect(html).toContain("Original audio:</strong> తెలుగు");
+    expect(html).toContain("Original audio:</strong> Retained without dubbing");
+    expect(html).toContain("not a language check of this clip");
     expect(html).toContain("Embedded subtitles:</strong> English (translation)");
     expect(html).toContain("remain visible when player CC is off");
     expect(html).toContain("Optional player CC tracks");

@@ -23,6 +23,12 @@ it("opens a bookmarked series directly at all files, including recordings beyond
   const children = packages.map((pkg, index) => ({
     id: `child-${index}`,
     masterId: pkg.source.masterId,
+    source: {
+      provider: "youtube",
+      kind: "video",
+      id: String(index).padStart(11, "0"),
+      url: `https://www.youtube.com/watch?v=${String(index).padStart(11, "0")}`,
+    },
   }));
   const parent = {
     id: bundleId,

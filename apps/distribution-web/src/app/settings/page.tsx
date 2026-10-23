@@ -14,9 +14,15 @@ export default async function Settings() {
   );
   if (!auth.ok) notFound();
   return (
-    <main className="shell">
-      <a href="/distribution">Back to workspace</a>
-      <h1>Curation &amp; Publishing</h1>
+    <main className="shell studio-settings-page">
+      <a className="studio-back-link" href="/distribution">
+        ← Back to workspace
+      </a>
+      <header className="studio-page-intro">
+        <p className="eyebrow">Administration</p>
+        <h1>Curation &amp; Publishing</h1>
+        <p>Manage generation defaults, connected accounts and media delivery.</p>
+      </header>
       <CurationSettings />
     </main>
   );

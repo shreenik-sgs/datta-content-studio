@@ -1,6 +1,6 @@
 import { distributionText } from "@satsang/distribution-contracts";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { analyticsEnabled } from "../lib/analytics-policy";
 import { trustedDistributionOrigin } from "../lib/auth";
@@ -45,6 +45,14 @@ export default async function DistributionHome({
         </section>
       </main>
     );
+  }
+  if (
+    auth.capabilities.includes("operations.manage") &&
+    !auth.capabilities.some((capability) =>
+      ["content.create", "content.review", "content.publish"].includes(capability),
+    )
+  ) {
+    redirect("/distribution/settings");
   }
   return (
     <ContentLibrary

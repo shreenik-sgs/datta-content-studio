@@ -26,13 +26,17 @@ export type SeriesResult = {
   channel?: StudioChannel;
 };
 
-export async function seriesRequest<T>(path: string, body?: unknown): Promise<T> {
+export async function seriesRequest<T>(
+  path: string,
+  body?: unknown,
+  timeoutMs = 30000,
+): Promise<T> {
   let response: Response;
   let data: T & { error?: string };
   try {
     response = await fetch(path, {
       cache: "no-store",
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(timeoutMs),
       ...(body === undefined
         ? {}
         : {

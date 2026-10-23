@@ -1,11 +1,14 @@
 :root {
-  --ink: #25151d;
-  --muted: #71636a;
-  --kamala: #a82b5a;
-  --kamala-deep: #812047;
-  --wash: #fff5f8;
-  --line: #eadde2;
+  --ink: #202b29;
+  --muted: #626d69;
+  --kamala: #176b5d;
+  --kamala-deep: #115246;
+  --wash: #f1f5f2;
+  --line: #dce2dd;
   --surface: #fff;
+  --border: var(--line);
+  --danger: #a93237;
+  --danger-wash: #fff2f1;
   color-scheme: light;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -15,8 +18,9 @@
 body {
   margin: 0;
   color: var(--ink);
-  background: linear-gradient(35deg, #f9e2eb 0%, #fff9fb 26%, #fff 60%);
+  background: #f6f7f4;
   min-height: 100dvh;
+  line-height: 1.5;
 }
 button,
 input,
@@ -39,7 +43,7 @@ a {
 }
 button:disabled {
   opacity: 0.55;
-  cursor: wait;
+  cursor: not-allowed;
 }
 button:focus-visible,
 a:focus-visible,
@@ -70,7 +74,7 @@ h1:focus {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--kamala-deep);
+  color: var(--ink);
   text-decoration: none;
   font-weight: 650;
 }
@@ -147,15 +151,21 @@ h2 {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-.primary,
-.danger {
+.primary {
   background: var(--kamala);
   border-color: var(--kamala);
   color: white;
 }
-.primary:hover,
-.danger:hover {
+.primary:hover {
   background: var(--kamala-deep);
+}
+.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: white;
+}
+.danger:hover {
+  background: #86282c;
 }
 .quiet {
   border: 0;
@@ -389,7 +399,7 @@ summary {
 .export-form {
   display: flex;
   gap: 12px;
-  align-items: end;
+  align-items: flex-end;
   flex-wrap: wrap;
 }
 .export-form label {

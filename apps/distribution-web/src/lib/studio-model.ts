@@ -1,4 +1,5 @@
 import type {
+  PostingCheck,
   StudioAsset,
   StudioOutput,
   StudioPackage,
@@ -28,7 +29,17 @@ export type StudioDetail = {
 };
 export type StudioListing = {
   packages: PublicStudioPackage[];
+  /** Posting receipts are fetched together for the visible workspace, never per file. */
+  publications?: PublicStudioPublication[];
   readiness: StudioReadiness;
+};
+export type StudioPlaylistPostingCheck = {
+  playlistId: string;
+  accountId: string;
+  checkedAt: string;
+  /** Ignore check results if the current package revision differs. */
+  revisions: Record<string, number>;
+  checks: Record<string, PostingCheck>;
 };
 
 export const STUDIO_STATUS_LABELS: Record<StudioPackage["status"], string> = {

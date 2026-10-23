@@ -76,9 +76,7 @@ for (const completed of [false, true]) {
         expect(host.textContent).toContain("Recording 2 of 2");
         expect(select?.value).toBe(second.id);
         expect(next?.disabled).toBe(true);
-        expect(host.querySelectorAll('[aria-label="Content workflow"]')).toHaveLength(
-          completed ? 0 : 1,
-        );
+        expect(host.querySelectorAll('[aria-label="Content workflow"]')).toHaveLength(1);
         expect(
           requests.mock.calls.some(([url]) => url.endsWith("/unrelated-earlier-curation")),
         ).toBe(false);

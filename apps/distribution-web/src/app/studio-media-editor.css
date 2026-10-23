@@ -1,15 +1,16 @@
 .studio-source-player,
 .studio-export-controls {
-  border: 1px solid #d8d3d5;
-  border-radius: 12px;
-  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
   margin-block: 1rem;
+  background: var(--surface);
 }
 .studio-source-player video {
   display: block;
   width: 100%;
-  max-height: 420px;
-  background: #181518;
+  max-height: min(52dvh, 520px);
+  background: #18231e;
   border-radius: 8px;
   object-fit: contain;
 }
@@ -31,13 +32,42 @@
   display: block;
   font-weight: normal;
 }
+.studio-source-player h3 {
+  margin-block: 0 8px;
+}
+.studio-export-controls legend {
+  font-weight: 650;
+  padding-inline: 8px;
+}
+.studio-editor-grid input[type="range"] {
+  accent-color: var(--kamala);
+  min-height: 32px;
+  border: 0;
+  padding-inline: 0;
+}
+.studio-file-editor {
+  scroll-margin-top: 22px;
+}
+.studio-file-editor .actions {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
 
 .studio-file-editor label {
-  color: #33282f;
+  color: var(--ink);
 }
 .studio-file-editor label small {
-  color: #625960;
+  color: var(--muted);
 }
 .studio-file-editor [role="alert"] {
-  color: #9f1d35;
+  color: var(--danger);
+}
+@media (max-width: 600px) {
+  .studio-source-player,
+  .studio-export-controls {
+    padding: 14px;
+  }
+  .studio-source-player video {
+    max-height: 42dvh;
+  }
 }

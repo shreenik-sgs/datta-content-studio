@@ -256,6 +256,14 @@ export function OnlineImportPanel({
           totalRecordings: reviewItem.childIds?.length ?? 0,
           title: reviewItem.title ?? "Playlist",
           playlistId: reviewItem.id,
+          sourceLinks: Object.fromEntries(
+            (reviewItem.childIds ?? []).flatMap((id) => {
+              const child = items.find((value) => value.id === id);
+              return child?.masterId && child.source?.url
+                ? [[child.masterId, child.source.url]]
+                : [];
+            }),
+          ),
           masterIds: (reviewItem.childIds ?? []).flatMap((id) => {
             const child = items.find((value) => value.id === id);
             return child?.masterId ? [child.masterId] : [];

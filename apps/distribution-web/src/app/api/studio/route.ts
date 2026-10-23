@@ -3,6 +3,7 @@ import { json } from "../../../lib/http";
 import { access } from "../../../lib/runtime";
 import {
   publicStudioPackage,
+  publicStudioPublication,
   studioJson,
   studioProblem,
   studioReadiness,
@@ -14,12 +15,21 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
   try {
     const query = studioListSchema.parse(Object.fromEntries(new URL(request.url).searchParams));
-    const packages = await studioRepository().list(auth.context, query);
+    const repo = studioRepository();
+    const packages = (await repo.list(auth.context, query)).filter(
+      (item) => !query.status || item.status === query.status,
+    );
+    const [publications, readiness] = await Promise.all([
+      repo.listPublicationsForPackages(
+        auth.context,
+        packages.map((item) => item.id),
+      ),
+      studioReadiness(auth.context),
+    ]);
     return json({
-      packages: packages
-        .filter((item) => !query.status || item.status === query.status)
-        .map(publicStudioPackage),
-      readiness: await studioReadiness(auth.context),
+      packages: packages.map(publicStudioPackage),
+      publications: publications.map(publicStudioPublication),
+      readiness,
     });
   } catch (error) {
     return studioProblem(error);

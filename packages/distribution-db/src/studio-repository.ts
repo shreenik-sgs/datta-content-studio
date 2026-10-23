@@ -1839,6 +1839,21 @@ export function createIntelligentContentRepository(
         );
         return rows.rows.map(publication);
       }),
+    listPublicationsForPackages: (ctx: DistributionContext, ids: readonly string[]) =>
+      transaction(async (client) => {
+        await access(client, ctx);
+        if (!ids.length) return [];
+        const rows = await client.query(
+          `SELECT j.* FROM distribution.studio_publication_job j
+           JOIN distribution.studio_package p ON p.id=j.package_id AND p.is_test=j.is_test
+           JOIN distribution.content_master m ON m.id=p.master_id AND m.is_test=p.is_test
+           WHERE j.is_test=$1 AND j.package_id=ANY($2::uuid[])
+             AND p.deleted_at IS NULL AND m.deleted_at IS NULL
+           ORDER BY j.created_at,j.id`,
+          [ctx.isTest, [...new Set(ids)]],
+        );
+        return rows.rows.map(publication);
+      }),
     claimPublication: (input: {
       isTest: boolean;
       workerId: string;

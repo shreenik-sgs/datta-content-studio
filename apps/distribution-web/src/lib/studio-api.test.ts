@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
   create: vi.fn(),
   get: vi.fn(),
   listPublications: vi.fn(),
+  listPublicationsForPackages: vi.fn(),
   enqueueGeneration: vi.fn(),
   revise: vi.fn(),
   submit: vi.fn(),
@@ -158,6 +159,7 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
     for (const method of [m.enqueueGeneration, m.revise, m.submit, m.review, m.discard])
       method.mockResolvedValue(pkg);
     m.listPublications.mockResolvedValue([]);
+    m.listPublicationsForPackages.mockResolvedValue([]);
     m.publish.mockResolvedValue([]);
     m.readiness.mockResolvedValue(readiness);
     m.getOutputAsset.mockResolvedValue(descriptor);
@@ -228,6 +230,31 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
     expect((await POST(request(command))).status).toBe(201);
     expect(m.access).toHaveBeenLastCalledWith(expect.any(Request), "content.create");
     expect(m.create).toHaveBeenCalledWith(context, command);
+  });
+  it("loads posting visibility once for only the returned packages and sanitizes receipts", async () => {
+    const otherId = "66666666-6666-4666-8666-666666666666";
+    m.list.mockResolvedValue([pkg, { ...pkg, id: otherId, status: "DISCARDED" }]);
+    m.listPublicationsForPackages.mockResolvedValue([
+      {
+        packageId: id,
+        accountId: "target",
+        remoteUrl: "javascript:alert(1)",
+        error: "private diagnostics",
+      },
+    ]);
+    const response = await GET(new Request("http://localhost/api/studio?status=IN_REVIEW"));
+    const body = await response.json();
+    expect(m.listPublicationsForPackages).toHaveBeenCalledExactlyOnceWith(context, [id]);
+    expect(body.packages).toHaveLength(1);
+    expect(body.publications).toEqual([
+      {
+        packageId: id,
+        selectedAccountId: "target",
+        remoteUrl: null,
+        error: "STUDIO_PUBLICATION_FAILED",
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain("private diagnostics");
   });
   it("returns safe filenames and actionable master blockers without storage addresses", async () => {
     const response = await detail(new Request("http://localhost/api/studio"), {

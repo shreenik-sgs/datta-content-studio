@@ -19,7 +19,10 @@ describe("Studio package list withdrawal visibility", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     m.access.mockResolvedValue({ ok: true, context });
-    m.repo.mockReturnValue({ list: m.list });
+    m.repo.mockReturnValue({
+      list: m.list,
+      listPublicationsForPackages: vi.fn().mockResolvedValue([]),
+    });
     m.list.mockResolvedValue([]);
     m.readiness.mockResolvedValue({ channels: [] });
   });

@@ -19,6 +19,9 @@ export function StudioSeriesActions({
   canPublish,
   onRefresh,
   onPreview,
+  selectedOutputIds,
+  selectedAction,
+  onActionChange,
 }: {
   packages: readonly PublicStudioPackage[];
   canCurate: boolean;
@@ -26,6 +29,9 @@ export function StudioSeriesActions({
   canPublish: boolean;
   onRefresh: () => Promise<void>;
   onPreview: (pkg: PublicStudioPackage, outputId: string) => void;
+  selectedOutputIds?: ReadonlySet<string>;
+  selectedAction?: SeriesAction;
+  onActionChange?: (action: SeriesAction) => void;
 }) {
   const [action, setAction] = useState<SeriesAction | null>(null);
   const [rows, setRows] = useState<SeriesRow[]>([]);
@@ -51,6 +57,15 @@ export function StudioSeriesActions({
   const permitted = (kind: SeriesAction) =>
     kind === "submit" ? canCurate : kind === "approve" ? canReview : canPublish;
   const available = (["submit", "approve", "post", "retract"] as const).filter(permitted);
+  const [chosenAction, setChosenAction] = useState<SeriesAction | null>(null);
+  const requestedAction = selectedAction ?? chosenAction;
+  const toolbarAction =
+    requestedAction && available.includes(requestedAction)
+      ? requestedAction
+      : (available.find((kind) => kind !== "retract" && seriesCandidates(packages, kind).length) ??
+        available[0] ??
+        "submit");
+  const eligible = seriesCandidates(packages, toolbarAction);
   const chosen = rows.filter((row) => selected.has(row.id) && !row.blocker);
   const count = chosen.reduce((n, row) => n + row.count, 0);
   const channels = [
@@ -91,9 +106,29 @@ export function StudioSeriesActions({
     setSelected(new Set());
     setAccounts({});
     try {
-      const prepared = await prepareSeriesRows(packages, kind);
+      const candidates =
+        !all && selectedOutputIds
+          ? packages.filter((p) => p.outputs.some((o) => selectedOutputIds.has(o.id)))
+          : packages;
+      const prepared = await prepareSeriesRows(candidates, kind);
       setRows(prepared);
-      setSelected(new Set(all ? prepared.filter((r) => !r.blocker).map((r) => r.id) : []));
+      setSelected(
+        new Set(
+          prepared
+            .filter(
+              (r) =>
+                !r.blocker &&
+                (all ||
+                  (selectedOutputIds &&
+                    (r.outputId
+                      ? selectedOutputIds.has(r.outputId)
+                      : r.publication
+                        ? selectedOutputIds.has(r.publication.outputId)
+                        : r.detail.package.outputs.some((o) => selectedOutputIds.has(o.id))))),
+            )
+            .map((r) => r.id),
+        ),
+      );
     } catch (e) {
       setError(
         e instanceof Error && e.message === "STUDIO_SERIES_LOAD_FAILED"
@@ -146,55 +181,64 @@ export function StudioSeriesActions({
   }
   if (!available.length) return null;
   return (
-    <section className="panel" aria-label="Series actions" style={{ marginBlock: 20 }}>
-      <h3>Series actions</h3>
-      <p>Submit and approve selected recordings together. Post or retract individual Shorts.</p>
-      {isTest && (
-        <p>
-          <strong>
-            Test workspace: posting and retraction are simulations. No external videos are posted or
-            removed.
-          </strong>
-        </p>
-      )}
-      <div className="actions wrap">
-        {available.map((kind) => (
-          <div
-            key={kind}
-            className="actions wrap"
-            style={{
-              border: "1px solid var(--border, #ddd)",
-              borderRadius: 10,
-              padding: 8,
-              marginTop: 0,
+    <div className="file-action-toolbar" aria-label="File actions">
+      <div className="file-action-buttons">
+        <label>
+          <span className="visually-hidden">Action</span>
+          <select
+            aria-label="File action"
+            value={toolbarAction}
+            disabled={busy || Boolean(action)}
+            onChange={(event) => {
+              const nextAction = event.target.value as SeriesAction;
+              setChosenAction(nextAction);
+              onActionChange?.(nextAction);
             }}
           >
-            <button
-              className="button"
-              type="button"
-              disabled={busy || (kind !== "retract" && !seriesCandidates(packages, kind).length)}
-              onClick={() => void prepare(kind, true)}
-            >
-              {seriesActionName[kind]} All
-            </button>
-            <button
-              className="button"
-              type="button"
-              disabled={busy || (kind !== "retract" && !seriesCandidates(packages, kind).length)}
-              onClick={() => void prepare(kind, false)}
-            >
-              {seriesActionName[kind]} Selected
-            </button>
-          </div>
-        ))}
+            {available.map((kind) => (
+              <option key={kind} value={kind}>
+                {seriesActionName[kind]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="button primary"
+          type="button"
+          disabled={
+            busy ||
+            Boolean(action) ||
+            !eligible.length ||
+            (selectedOutputIds !== undefined && !selectedOutputIds.size)
+          }
+          onClick={() => void prepare(toolbarAction, false)}
+        >
+          {seriesActionName[toolbarAction]} Selected
+        </button>
+        <button
+          className="button"
+          type="button"
+          disabled={busy || Boolean(action) || !eligible.length}
+          onClick={() => void prepare(toolbarAction, true)}
+        >
+          {seriesActionName[toolbarAction]} All
+        </button>
+        {selectedOutputIds !== undefined && (
+          <span aria-live="polite">{selectedOutputIds.size} files selected</span>
+        )}
       </div>
-      {canReview && !seriesCandidates(packages, "approve").length && (
+      {isTest && (
+        <p className="muted">
+          Test workspace · Posting is simulated. Nothing is sent to or removed from YouTube.
+        </p>
+      )}
+      {toolbarAction === "approve" && !eligible.length && (
         <p>
           No recordings await approval. The Curator must submit them first using Submit All or
           Submit Selected.
         </p>
       )}
-      {canPublish && !seriesCandidates(packages, "post").length && (
+      {toolbarAction === "post" && !eligible.length && (
         <p>Post becomes available after approval.</p>
       )}
       {action && (
@@ -202,12 +246,18 @@ export function StudioSeriesActions({
           ref={panel}
           tabIndex={-1}
           aria-label={`${seriesActionName[action]} selection`}
-          style={{ marginTop: 20 }}
+          className="file-action-confirmation"
         >
           <h4>
             {seriesActionName[action]} · {count} files in{" "}
             {new Set(chosen.map((r) => r.detail.package.id)).size} recordings selected
           </h4>
+          {(action === "submit" || action === "approve") && (
+            <p>
+              Review applies to each selected recording’s complete set of included files, shown
+              together below.
+            </p>
+          )}
           {busy && (
             <output>
               {running
@@ -219,7 +269,7 @@ export function StudioSeriesActions({
           {!busy && !rows.length && !error && (
             <p>
               {action === "retract"
-                ? "No posting requests exist for this series. Drafts have not been posted."
+                ? "No posting requests exist in Studio for this series. Check the channel for videos uploaded outside Studio."
                 : "No recordings are ready for this action."}
             </p>
           )}
@@ -249,6 +299,7 @@ export function StudioSeriesActions({
                     onClick={() => {
                       setSelected(new Set(rows.filter((r) => !r.blocker).map((r) => r.id)));
                       setConfirmed(false);
+                      setRightsConfirmed(false);
                     }}
                   >
                     Select all eligible
@@ -259,6 +310,7 @@ export function StudioSeriesActions({
                     onClick={() => {
                       setSelected(new Set());
                       setConfirmed(false);
+                      setRightsConfirmed(false);
                     }}
                   >
                     Clear selection
@@ -462,6 +514,6 @@ export function StudioSeriesActions({
           )}
         </section>
       )}
-    </section>
+    </div>
   );
 }
