@@ -59,6 +59,19 @@ export const STUDIO_PUBLICATION_LABELS: Record<StudioPublication["status"], stri
 };
 
 const messages: Record<string, string> = {
+  STUDIO_ALREADY_POSTED:
+    "This file or excerpt is already posted to the selected channel. It will not be sent again.",
+  STUDIO_ALREADY_QUEUED:
+    "This file or excerpt already has a publishing request for this channel. Wait for its result; it will not be sent twice.",
+  STUDIO_POSSIBLE_DUPLICATE:
+    "A matching title or description, or an uncertain earlier send, needs review. Compare the existing video in Posting history before posting. Nothing new was sent.",
+  STUDIO_POSTING_CHECK_UNAVAILABLE:
+    "The channel's posting history could not be checked. Nothing was sent. Check the Buffer connection and try again.",
+  STUDIO_POSTING_CHECK_INCOMPLETE:
+    "The channel history could not be read completely. Nothing was sent. Retry the check before publishing.",
+  STUDIO_POSTING_CHECK_STALE:
+    "The channel check expired before sending. Refresh and try again; nothing was posted.",
+
   STUDIO_ACTION_UNCONFIRMED:
     "The Hub could not confirm this action. It may already have been saved. Refresh the package and check its current status before retrying. Existing sources, drafts and approvals are retained.",
   STUDIO_CLOSING_CHANNEL_REQUIRED:

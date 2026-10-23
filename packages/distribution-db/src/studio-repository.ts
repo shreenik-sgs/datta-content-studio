@@ -5,6 +5,7 @@ import {
   type ContentMaster,
   type DistributionChannel,
   type PlaylistCuration,
+  type PostingCheck,
   type StudioAdditionalMessage,
   type StudioChannel,
   type StudioFeedback,
@@ -19,12 +20,14 @@ import {
   assertStudioCorrectionIsolation,
   assertStudioDiscoveryIsolation,
   contentExportDecision,
+  postingCheckBlock,
   requireContentRevision,
   requireIndependentContentReview,
   studioCanDiscard,
   studioCanEdit,
   studioCorrectionTargets,
   studioExternalProcessingDecision,
+  studioKnownPostingMatch,
   studioNeedsSuitabilityReview,
   studioPackageBlockers,
   studioSourceMatches,
@@ -207,6 +210,7 @@ const publicationRefusals = new Set([
 const failure = (code: string) => (knownFailures.has(code) ? code : "GENERATION_FAILED");
 function publication(row: QueryResultRow): StudioPublication {
   return {
+    duplicateCheck: row.duplicate_check ?? null,
     id: row.id,
     packageId: row.package_id,
     packageRevision: row.package_revision,
@@ -503,6 +507,29 @@ export function createIntelligentContentRepository(
     )
       throw new Error("STUDIO_LEASE_LOST");
     return { pkg, row };
+  }
+  async function postingMatches(
+    client: PoolClient,
+    pkg: StudioPackage,
+    output: StudioOutput,
+    accountId: string,
+    destination: string,
+    excludeId: string | null = null,
+  ) {
+    const rows = await client.query(
+      `SELECT j.*,r.snapshot FROM distribution.studio_publication_job j
+       JOIN distribution.studio_revision r ON r.package_id=j.package_id AND r.is_test=j.is_test AND r.revision=j.package_revision
+       WHERE j.is_test=$1 AND j.channel=$2 AND (j.destination_key=$3 OR (j.destination_key IS NULL AND j.account_id=$4 AND j.status<>'RUNNING'))
+         AND ($5::uuid IS NULL OR j.id<>$5) AND j.status IN ('RUNNING','PROCESSING','PUBLISHED','UNCERTAIN','FAILED')`,
+      [pkg.isTest, output.channel, destination, accountId, excludeId],
+    );
+    return rows.rows.flatMap((row) => {
+      const match = studioKnownPostingMatch(pkg.source.sha256, output, {
+        publication: publication(row),
+        package: row.snapshot,
+      });
+      return match ? [match] : [];
+    });
   }
   function active(pkg: StudioPackage) {
     if (pkg.status === "DISCARDED") throw new Error("STUDIO_DISCARDED");
@@ -1831,6 +1858,71 @@ export function createIntelligentContentRepository(
           };
         }
         return null;
+      }),
+    checkPostingHistory: (
+      ctx: DistributionContext,
+      id: string,
+      accountId: string,
+      destination: string,
+      channel: StudioChannel,
+    ) =>
+      transaction(async (client) => {
+        await access(client, ctx);
+        const pkg = await load(client, ctx.isTest, id);
+        const results: Record<string, PostingCheck["matches"]> = {};
+        for (const output of pkg.outputs.filter((o) => o.channel === channel))
+          results[output.id] = await postingMatches(client, pkg, output, accountId, destination);
+        return results;
+      }),
+    reservePublicationDestination: (
+      claim: StudioPublicationClaim,
+      accountId: string,
+      check: PostingCheck,
+    ) =>
+      transaction(async (client) => {
+        // Serialize checks for a real channel even when two packages/account aliases race.
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+          `studio-posting:${claim.publication.isTest}:${check.destination}`,
+        ]);
+        const { pkg, row } = await checkedPublication(client, claim);
+        if (row.account_id && row.account_id !== accountId)
+          throw Error("PUBLISHING_ACCOUNT_CHANGED");
+        if (check.error) {
+          // Failed discovery has no verified physical channel identity. Do not pin its
+          // fallback identifier and make the recovered connection impossible to retry.
+          await client.query(
+            "UPDATE distribution.studio_publication_job SET duplicate_check=$3 WHERE id=$1 AND is_test=$2",
+            [row.id, pkg.isTest, check],
+          );
+          await publicationState(client, row, "BLOCKED", check.error);
+          return { allowed: false, check };
+        }
+        if (row.destination_key && row.destination_key !== check.destination)
+          throw Error("PUBLISHING_ACCOUNT_CHANGED");
+        if (
+          Date.now() - Date.parse(check.checkedAt) > 60000 ||
+          Date.parse(check.checkedAt) > Date.now() + 1000 ||
+          !Number.isFinite(Date.parse(check.checkedAt))
+        )
+          throw Error("STUDIO_POSTING_CHECK_STALE");
+        const output = pkg.outputs.find((o) => o.id === row.output_id);
+        if (!output) throw Error("OUTPUT_CHANGED");
+        const matches = await postingMatches(
+          client,
+          pkg,
+          output,
+          accountId,
+          check.destination,
+          row.id,
+        );
+        const result: PostingCheck = { ...check, matches: [...matches, ...check.matches] };
+        await client.query(
+          "UPDATE distribution.studio_publication_job SET account_id=$3,destination_key=$4,duplicate_check=$5 WHERE id=$1 AND is_test=$2",
+          [row.id, pkg.isTest, accountId, check.destination, result],
+        );
+        const block = postingCheckBlock(result);
+        if (block) await publicationState(client, row, "BLOCKED", block);
+        return { allowed: !block, check: result };
       }),
     revalidatePublication: (claim: StudioPublicationClaim) =>
       transaction(async (client): Promise<Eligibility> => {

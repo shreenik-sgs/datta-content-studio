@@ -39,6 +39,7 @@ import { StudioGenerationProgressView } from "./studio-generation-progress";
 import { StudioHistory } from "./studio-history";
 import { StudioLineage } from "./studio-lineage";
 import { StudioMediaSummary } from "./studio-media-editor";
+import { StudioDraftPostingHistory } from "./studio-posting-check";
 import { StudioPreviewDialog } from "./studio-preview-dialog";
 import { StudioPublishing } from "./studio-publishing";
 import { StudioQualitySelection } from "./studio-quality-selection";
@@ -1473,6 +1474,9 @@ export function StudioPanel({
           )}
           <div id={`package-files-${value.id}`} tabIndex={-1}>
             <StudioQualitySelection messages={value.provenance?.excludedMessages} />
+            {!["IN_REVIEW", "APPROVED"].includes(value.status) && (
+              <StudioDraftPostingHistory detail={detail} />
+            )}
             {value.outputs.length > 0 && (
               <StudioLineage
                 value={value}

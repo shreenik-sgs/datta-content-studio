@@ -138,3 +138,4 @@ export * from "./storage-cleanup";
 export * from "./studio-source-branding";
 
 export * from "./studio-discovery";
+export * from "./studio-posting-check";

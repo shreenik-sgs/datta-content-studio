@@ -7,6 +7,7 @@ import {
 } from "@satsang/distribution-domain";
 import { useState } from "react";
 import { STUDIO_PUBLICATION_LABELS, type StudioDetail, studioMessage } from "../lib/studio-model";
+import { StudioPostingCheck } from "./studio-posting-check";
 
 /** Show delivery readiness before approval, and keep the next action above the files. */
 export function StudioPublishing({
@@ -177,6 +178,16 @@ export function StudioPublishing({
                   Connect the intended channel in Buffer, then save its channel ID and API token in
                   Curation &amp; Publishing.
                 </p>
+              )}
+              {channel === "youtube" && id && account && !account.connectionPending && (
+                <StudioPostingCheck
+                  key={`${value.id}:${id}`}
+                  packageId={value.id}
+                  revision={value.revision}
+                  accountId={id}
+                  outputs={outputs}
+                  publications={publications}
+                />
               )}
               {current
                 .filter((p) => outputs.some((output) => output.id === p.outputId))

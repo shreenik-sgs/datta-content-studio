@@ -101,6 +101,10 @@ function fixture(isTest = false) {
     leaseOwner: "worker",
   };
   const repository = {
+    reservePublicationDestination: vi.fn(async (_claim, _account, check) => ({
+      allowed: true,
+      check,
+    })),
     claimPublication: vi.fn(async () => claim as StudioPublicationClaim | null),
     revalidatePublication: vi.fn<StudioPublishingPorts["repository"]["revalidatePublication"]>(
       async () => ({ accepted: true, package: pkg }),
@@ -471,4 +475,102 @@ describe("durable Studio publication worker", () => {
     });
     expect(fetcher).not.toHaveBeenCalled();
   });
+});
+
+it("never enters a provider when the durable duplicate reservation refuses", async () => {
+  const f = fixture();
+  await configure(f.ports);
+  f.repository.reservePublicationDestination.mockImplementationOnce(
+    async (_claim, _account, check) => ({ allowed: false, check }),
+  );
+  await runStudioPublicationOnce(f.ports);
+  expect(f.repository.reservePublicationDestination).toHaveBeenCalledOnce();
+  expect(f.fetcher).not.toHaveBeenCalled();
+  expect(f.repository.completePublication).not.toHaveBeenCalled();
+});
+it("checks YouTube uploads outside Studio and blocks a metadata match before createPost", async () => {
+  const f = fixture();
+  f.output.channel = "youtube";
+  f.output.format = "short";
+  if (!f.output.asset) throw Error("MISSING_ASSET");
+  f.output.asset = { ...f.output.asset, mimeType: "video/mp4" };
+  f.claim.publication.channel = "youtube";
+  await configure(f.ports, {
+    platform: "youtube",
+    defaults: {
+      youtube: { privacy: "private", madeForKids: false, isAiGenerated: false, categoryId: "27" },
+    },
+  });
+  f.fetcher.mockResolvedValueOnce(
+    Response.json({
+      data: {
+        channel: {
+          id: "channel-1",
+          service: "youtube",
+          serviceId: `UC${"x".repeat(22)}`,
+          organizationId: "org",
+          isDisconnected: false,
+          isLocked: false,
+        },
+      },
+    }),
+  );
+  f.fetcher.mockResolvedValueOnce(
+    Response.json({
+      data: {
+        posts: {
+          edges: [
+            {
+              node: {
+                id: "external",
+                channelId: "channel-1",
+                channelService: "youtube",
+                status: "sent",
+                text: f.output.body,
+                metadata: { title: f.output.title },
+                sentAt: "2026-10-22T00:00:00Z",
+                externalLink: "https://www.youtube.com/watch?v=abcdefghijk",
+              },
+            },
+          ],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      },
+    }),
+  );
+  f.repository.reservePublicationDestination.mockImplementationOnce(
+    async (_claim, _account, check) => ({ allowed: check.matches.length === 0, check }),
+  );
+  await runStudioPublicationOnce(f.ports);
+  expect(f.repository.reservePublicationDestination.mock.calls[0]?.[2].matches[0]).toMatchObject({
+    state: "NEEDS_REVIEW",
+    origin: "channel",
+  });
+  expect(f.fetcher).toHaveBeenCalledTimes(2);
+  expect(
+    f.fetcher.mock.calls.every(([, i]) => JSON.parse(String(i?.body)).query.startsWith("query")),
+  ).toBe(true);
+});
+it("fails closed on a broken channel-history query without attempting a send", async () => {
+  const f = fixture();
+  f.output.channel = "youtube";
+  f.output.format = "short";
+  if (!f.output.asset) throw Error("MISSING_ASSET");
+  f.output.asset = { ...f.output.asset, mimeType: "video/mp4" };
+  f.claim.publication.channel = "youtube";
+  await configure(f.ports, {
+    platform: "youtube",
+    defaults: {
+      youtube: { privacy: "private", madeForKids: false, isAiGenerated: false, categoryId: "27" },
+    },
+  });
+  f.fetcher.mockRejectedValue(Error("secret provider diagnostics"));
+  f.repository.reservePublicationDestination.mockImplementationOnce(
+    async (_claim, _account, check) => ({ allowed: !check.error, check }),
+  );
+  await runStudioPublicationOnce(f.ports);
+  expect(f.repository.reservePublicationDestination.mock.calls[0]?.[2].error).toBe(
+    "STUDIO_POSTING_CHECK_UNAVAILABLE",
+  );
+  expect(f.fetcher).toHaveBeenCalledTimes(1);
 });

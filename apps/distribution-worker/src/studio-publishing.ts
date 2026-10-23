@@ -6,8 +6,13 @@ import {
   loadStudioProviderConfig,
   studioProviderAccountBlock,
   studioSettingsPath,
+  studioYoutubeHistory,
 } from "@satsang/distribution-db";
-import type { StudioPackage } from "@satsang/distribution-domain";
+import {
+  type PostingCheck,
+  type StudioPackage,
+  studioChannelPostingMatches,
+} from "@satsang/distribution-domain";
 import {
   type StudioProviderCheckpoint,
   type StudioProviderOutcome,
@@ -17,7 +22,10 @@ import {
 
 type Repository = Pick<
   ReturnType<typeof createIntelligentContentRepository>,
-  "claimPublication" | "revalidatePublication" | "completePublication"
+  | "claimPublication"
+  | "revalidatePublication"
+  | "completePublication"
+  | "reservePublicationDestination"
 >;
 export type StudioPublishingPorts = {
   repository: Repository;
@@ -230,6 +238,39 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
       text: claim.output.body,
       ...(media ? { media } : {}),
     };
+    if (!savedCheckpoint) {
+      let check: PostingCheck = {
+        checkedAt: new Date().toISOString(),
+        destination: `${account.platform}:${account.transport}:${account.providerAccountId}`,
+        scanned: 0,
+        error: null,
+        matches: [],
+      };
+      if (account.platform === "youtube") {
+        try {
+          const inventory = await studioYoutubeHistory(account, ports.fetcher ?? fetch);
+          check = {
+            ...check,
+            checkedAt: inventory.checkedAt,
+            destination: inventory.destination,
+            scanned: inventory.posts.length,
+            matches: studioChannelPostingMatches(claim.output, inventory.posts),
+          };
+        } catch (error) {
+          check.error =
+            error instanceof Error && error.message === "STUDIO_POSTING_CHECK_INCOMPLETE"
+              ? error.message
+              : "STUDIO_POSTING_CHECK_UNAVAILABLE";
+        }
+      }
+      if (!(await fresh())) return true;
+      const reservation = await ports.repository.reservePublicationDestination(
+        claim,
+        account.id,
+        check,
+      );
+      if (!reservation.allowed) return true;
+    }
     const adapter = createSocialPlatformAdapter({
       account,
       accessToken: account.accessToken,
@@ -316,6 +357,7 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
       "PUBLISHING_ACCOUNT_CHANGED",
       "STUDIO_PUBLISH_ACCOUNT_REQUIRED",
       "CHECKPOINT_INVALID",
+      "STUDIO_POSTING_CHECK_STALE",
       "PUBLICATION_TIMEOUT",
       "STUDIO_PROVIDER_CONFIG_INVALID",
     ]);

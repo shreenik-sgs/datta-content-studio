@@ -204,6 +204,7 @@ export type StudioPublicationStatus =
   | "UNCERTAIN"
   | "CANCELLED";
 export type StudioPublication = {
+  duplicateCheck?: import("./studio-posting-check").PostingCheck | null;
   id: string;
   packageId: string;
   packageRevision: number;

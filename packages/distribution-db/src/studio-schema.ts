@@ -164,6 +164,8 @@ export const distributionStudioPublicationJob = distributionSchema.table(
     remoteId: text("remote_id"),
     remoteUrl: text("remote_url"),
     checkpoint: jsonb("checkpoint"),
+    destinationKey: text("destination_key"),
+    duplicateCheck: jsonb("duplicate_check"),
     ...lease(),
   },
   (table) => [
@@ -174,6 +176,7 @@ export const distributionStudioPublicationJob = distributionSchema.table(
       table.packageRevision,
       table.outputId,
     ),
+    index("studio_publication_destination").on(table.isTest, table.destinationKey, table.status),
     index("studio_publication_queue").on(table.isTest, table.status, table.availableAt),
     foreignKey({
       name: "studio_publication_revision_fk",

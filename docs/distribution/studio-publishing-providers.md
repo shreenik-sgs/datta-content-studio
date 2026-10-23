@@ -87,3 +87,34 @@ Provision `STUDIO_CHANNEL_CONFIG_FILE` for production, `STUDIO_CHANNEL_CONFIG_TE
 Admin writes encrypt the whole configuration with AES-256-GCM, validate a private temporary file and rename it atomically. Revision checks and an exclusive lock prevent lost updates. Tokens never return in API responses or HTML; blank token fields preserve existing values. Disconnect removes credentials from the active configuration. Test settings never fall back to production. Existing private unencrypted operator configuration remains readable for migration; an Admin save seals it. Saving validates structure, not live token validity.
 
 WhatsApp uses the opted-in-recipient model requested by the owner. Its form captures phone-number ID, Business Account ID, access token, template name/language, Meta app secret and webhook verification token. These are preparatory settings: no webhook endpoint or recipient-consent store is currently implemented, so automatic WhatsApp sending remains blocked even with credentials. Do not register a fictional callback or represent this as WhatsApp Channels/groups support. Meta’s message-template API and delivery-status webhooks must be integrated before this connection can be enabled. Branded WhatsApp post/image drafts can already be generated and reviewed.
+
+## Duplicate protection and posting history
+
+Before a new live send, Studio checks past publication snapshots for the selected
+physical channel. The same output, identical media checksum, or same source
+excerpt/language/format is refused across revisions and packages. A changed closing
+card does not turn an already posted excerpt into new content. An atomic channel
+reservation serializes workers; processing and uncertain deliveries continue to
+block duplicates. Receipt polling resumes the original provider post, never a new
+send. TEST simulations remain isolated from LIVE history.
+
+For YouTube, a read-only paginated Buffer query also checks sent and queued channel
+posts, including uploads made directly on YouTube that Buffer has synchronized.
+Similar titles or descriptions produce a **possible duplicate**, never a fabricated
+publication receipt. Failed or incomplete reads block sending. Step 6 includes a
+per-file posting-history table with comparison links and check timestamps; its
+button performs only this read-only check, including for drafts. There is no idle
+polling. The worker repeats the check immediately before reserving a new send;
+a successful screen check is not a reusable authorization token.
+
+Limitations: Buffer synchronization can omit very recent, private or older native
+uploads. Renamed/re-edited external videos cannot be reliably identified by
+metadata alone. This is not Content ID or audiovisual fingerprint matching and
+cannot guarantee detection of an external upload racing the final send. Keep one
+LIVE Studio deployment responsible for a channel. Suspected duplicates require
+human comparison; Studio does not silently overwrite or repost them.
+
+Deploy migration `0024_living_wither.sql` and the updated runtime column grants
+before updating web/worker images. Drain any old publishing workers first. This
+migration adds posting evidence to the publication ledger, without changing any
+media, edits, approvals or draft states.

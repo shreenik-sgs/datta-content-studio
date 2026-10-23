@@ -1693,6 +1693,103 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       ),
     ).toBe(true);
   });
+  it("atomically reserves duplicate files across packages, keeping uncertain sends blocked", async () => {
+    const first = await fixture({ channels: ["x"] });
+    const second = await fixture({ channels: ["x"] });
+    const p1 = await approved(first);
+    const p2 = await approved(second);
+    const j1 = await studio.publish(first.reviewer, p1.id, {
+      expectedRevision: p1.revision,
+      accounts: { x: "a" },
+    });
+    const j2 = await studio.publish(second.reviewer, p2.id, {
+      expectedRevision: p2.revision,
+      accounts: { x: "a" },
+    });
+    const c1 = await studio.claimPublication({
+      isTest: true,
+      workerId: "guard-one",
+      publicationId: j1.find((j) => j.channel === "x")?.id,
+    });
+    const c2 = await studio.claimPublication({
+      isTest: true,
+      workerId: "guard-two",
+      publicationId: j2.find((j) => j.channel === "x")?.id,
+    });
+    if (!c1 || !c2) throw Error("MISSING_CLAIM");
+    expect(c1.output.asset?.sha256).toBe(c2.output.asset?.sha256);
+    const check = {
+      checkedAt: new Date().toISOString(),
+      destination: "x:canonical",
+      scanned: 20,
+      error: null,
+      matches: [],
+    };
+    const results = await Promise.all([
+      studio.reservePublicationDestination(c1, "a", check),
+      studio.reservePublicationDestination(c2, "a", check),
+    ]);
+    expect(results.filter((r) => r.allowed)).toHaveLength(1);
+    expect(results.find((r) => !r.allowed)?.check.matches[0]?.state).toBe("IN_PROGRESS");
+    const winner = results[0]?.allowed ? c1 : c2;
+    await studio.completePublication(winner, {
+      status: "UNCERTAIN",
+      error: "PUBLICATION_OUTCOME_UNKNOWN",
+    });
+    const history = await studio.checkPostingHistory(first.ctx, p1.id, "a", "x:canonical", "x");
+    expect(
+      Object.values(history)
+        .flat()
+        .some((m) => m.state === "NEEDS_REVIEW"),
+    ).toBe(true);
+  });
+  it("can recover a failed external scan without pinning a fallback destination", async () => {
+    const f = await fixture({ channels: ["x"] });
+    const pkg = await approved(f);
+    const jobs = await studio.publish(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      accounts: { x: "recovery-account" },
+    });
+    const first = await studio.claimPublication({
+      isTest: true,
+      workerId: "recover-check",
+      publicationId: jobs[0]?.id,
+    });
+    if (!first) throw Error("MISSING_CLAIM");
+    expect(
+      (
+        await studio.reservePublicationDestination(first, "recovery-account", {
+          checkedAt: new Date().toISOString(),
+          destination: "x:buffer:fallback",
+          scanned: 0,
+          matches: [],
+          error: "STUDIO_POSTING_CHECK_UNAVAILABLE",
+        })
+      ).allowed,
+    ).toBe(false);
+    await studio.publish(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      accounts: { x: "recovery-account" },
+    });
+    const retry = await studio.claimPublication({
+      isTest: true,
+      workerId: "recover-check",
+      publicationId: jobs[0]?.id,
+    });
+    if (!retry) throw Error("MISSING_RETRY");
+    expect(
+      (
+        await studio.reservePublicationDestination(retry, "recovery-account", {
+          checkedAt: new Date().toISOString(),
+          destination: "x:recovered-channel",
+          scanned: 20,
+          matches: [],
+          error: null,
+        })
+      ).allowed,
+    ).toBe(true);
+    await studio.completePublication(retry, { status: "SIMULATED" });
+  });
   it("queues each approved output once and TEST cannot become live publication", async () => {
     const f = await fixture();
     const pkg = await approved(f);
