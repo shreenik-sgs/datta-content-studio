@@ -30,6 +30,8 @@ import {
   studioKnownPostingMatch,
   studioNeedsSuitabilityReview,
   studioPackageBlockers,
+  studioRetractionDecision,
+  studioSelectedOutputs,
   studioSourceMatches,
   studioSourceRange,
   studioStatusAfterOutputDiscard,
@@ -1040,7 +1042,7 @@ export function createIntelligentContentRepository(
            WHERE p.is_test=$1 AND p.deleted_at IS NULL AND m.deleted_at IS NULL AND ($2::uuid IS NULL OR p.master_id=$2)
            AND ($3::boolean OR m.state<>'WITHDRAWN')
            AND ($4::uuid IS NULL OR p.id::text IN (SELECT value->>'packageId' FROM distribution.online_import source CROSS JOIN LATERAL jsonb_each(source.curation->'items') WHERE source.id=$4 AND source.is_test=p.is_test AND source.deleted_at IS NULL))
-           ORDER BY p.updated_at DESC,p.id LIMIT 100`,
+           ORDER BY p.updated_at DESC,p.id LIMIT CASE WHEN $4::uuid IS NULL THEN 100 ELSE NULL END`,
           [
             ctx.isTest,
             input.masterId ?? null,
@@ -1718,18 +1720,24 @@ export function createIntelligentContentRepository(
     publish: (
       ctx: DistributionContext,
       id: string,
-      input: { expectedRevision: number; accounts?: Partial<Record<StudioChannel, string>> },
+      input: {
+        expectedRevision: number;
+        accounts?: Partial<Record<StudioChannel, string>>;
+        outputIds?: string[] | undefined;
+      },
     ) =>
       transaction(async (client) => {
         await access(client, ctx, "content.publish");
         const pkg = await load(client, ctx.isTest, id, true);
         requireContentRevision(pkg.revision, input.expectedRevision);
         await publicationEligible(client, pkg);
+        const outputs = studioSelectedOutputs(pkg.outputs, input.outputIds);
+        const selectedIds = outputs.map((output) => output.id);
         const previous = await client.query(
           "SELECT * FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND package_revision=$3 FOR UPDATE",
           [pkg.id, pkg.isTest, pkg.revision],
         );
-        for (const row of previous.rows) {
+        for (const row of previous.rows.filter((row) => selectedIds.includes(row.output_id))) {
           const selected = input.accounts?.[row.channel as StudioChannel];
           if (!selected || row.account_id === selected) continue;
           if (
@@ -1744,7 +1752,7 @@ export function createIntelligentContentRepository(
             [row.id, pkg.isTest, selected],
           );
         }
-        for (const output of pkg.outputs.filter((value) => value.included))
+        for (const output of outputs)
           await client.query(
             "INSERT INTO distribution.studio_publication_job(package_id,is_test,package_revision,output_id,channel,requested_by,account_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(package_id,is_test,package_revision,output_id) DO NOTHING",
             [
@@ -1761,7 +1769,7 @@ export function createIntelligentContentRepository(
           "SELECT * FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND package_revision=$3 AND status='BLOCKED' AND remote_id IS NULL AND checkpoint IS NULL FOR UPDATE",
           [pkg.id, pkg.isTest, pkg.revision],
         );
-        for (const row of blocked.rows) {
+        for (const row of blocked.rows.filter((row) => selectedIds.includes(row.output_id))) {
           await client.query(
             "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2",
             [row.id, pkg.isTest],
@@ -1777,6 +1785,49 @@ export function createIntelligentContentRepository(
           [pkg.id, pkg.isTest, pkg.revision],
         );
         return rows.rows.map(publication);
+      }),
+    retract: (
+      ctx: DistributionContext,
+      id: string,
+      input: { expectedRevision: number; publicationIds: string[] },
+    ) =>
+      transaction(async (client) => {
+        await access(client, ctx, "content.publish");
+        const pkg = await load(client, ctx.isTest, id, true);
+        requireContentRevision(pkg.revision, input.expectedRevision);
+        if (
+          !input.publicationIds.length ||
+          input.publicationIds.length > 200 ||
+          new Set(input.publicationIds).size !== input.publicationIds.length
+        )
+          throw Error("INVALID_STUDIO_PUBLICATION_SELECTION");
+        // Lock in the same order as the sender. A queued cancellation wins before a
+        // claim, or the already claimed send is reported as unconfirmed, never erased.
+        const selected = await client.query(
+          "SELECT * FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND id=ANY($3::uuid[]) ORDER BY id FOR UPDATE",
+          [id, ctx.isTest, input.publicationIds],
+        );
+        if (selected.rows.length !== input.publicationIds.length)
+          throw Error("INVALID_STUDIO_PUBLICATION_SELECTION");
+        const results = [];
+        for (const row of selected.rows) {
+          const result = studioRetractionDecision(publication(row), Boolean(row.checkpoint));
+          if (result === "CANCELLED") {
+            await publicationState(client, row, "CANCELLED", "STUDIO_PUBLICATION_RETRACTED");
+            await attempt(client, row, "CANCELLED", {
+              action: "RETRACTED",
+              requestedBy: ctx.userId,
+            });
+          } else if (result !== "ALREADY_CANCELLED") {
+            await attempt(client, row, row.status, {
+              action: "RETRACTION_REQUIRES_CHANNEL",
+              requestedBy: ctx.userId,
+            });
+          }
+          const current = await publicationRow(client, ctx.isTest, row.id);
+          results.push({ publication: publication(current), result });
+        }
+        return results;
       }),
     listPublications: (ctx: DistributionContext, id: string) =>
       transaction(async (client) => {

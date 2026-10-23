@@ -43,6 +43,7 @@ import { StudioDraftPostingHistory } from "./studio-posting-check";
 import { StudioPreviewDialog } from "./studio-preview-dialog";
 import { StudioPublishing } from "./studio-publishing";
 import { StudioQualitySelection } from "./studio-quality-selection";
+import { StudioSeriesActions } from "./studio-series-actions";
 import { StudioSourceRecovery } from "./studio-source-recovery";
 import { StudioSourceReview } from "./studio-source-review";
 import { StudioWorkflow } from "./studio-workflow";
@@ -755,15 +756,26 @@ export function StudioPanel({
         {loading ? (
           <output>Loading playlist files…</output>
         ) : (
-          <PlaylistFiles
-            totalRecordings={bundle.totalRecordings}
-            packages={bundlePackages}
-            canCurate={canCreate}
-            canReview={canReview}
-            canPublish={canPublish}
-            onOpen={select}
-            onPreview={(item, outputId) => setBundlePreview({ packageId: item.id, outputId })}
-          />
+          <>
+            <StudioSeriesActions
+              packages={bundlePackages}
+              canCurate={canCreate}
+              canReview={canReview}
+              canPublish={canPublish}
+              onRefresh={() => load(undefined, true)}
+              onPreview={(item, outputId) => setBundlePreview({ packageId: item.id, outputId })}
+            />
+            <PlaylistFiles
+              showHandoff={false}
+              totalRecordings={bundle.totalRecordings}
+              packages={bundlePackages}
+              canCurate={canCreate}
+              canReview={canReview}
+              canPublish={canPublish}
+              onOpen={select}
+              onPreview={(item, outputId) => setBundlePreview({ packageId: item.id, outputId })}
+            />
+          </>
         )}
         {previewPackage && preview && (
           <StudioPreviewDialog onClose={() => setBundlePreview(null)}>

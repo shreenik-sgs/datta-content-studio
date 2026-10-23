@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   review: vi.fn(),
   discard: vi.fn(),
   publish: vi.fn(),
+  retract: vi.fn(),
   getOutputAsset: vi.fn(),
   readiness: vi.fn(),
 }));
@@ -173,6 +174,40 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
       rights: null,
       approval: null,
     });
+  });
+  it("requires publishing authority for retraction and rejects empty selections", async () => {
+    const result = await action(
+      request({ expectedRevision: 2, publicationIds: [] }),
+      params("retract"),
+    );
+    expect(m.access).toHaveBeenCalledWith(expect.any(Request), "content.publish");
+    expect(result.status).toBe(400);
+    expect(m.retract).not.toHaveBeenCalled();
+  });
+  it("returns per-file retraction outcomes without leaking private account IDs", async () => {
+    m.retract.mockResolvedValue([
+      {
+        result: "REMOVE_ON_CHANNEL",
+        publication: {
+          id: outputId,
+          accountId: "private-account",
+          remoteUrl: "https://youtube.com/watch?v=known",
+          error: null,
+        },
+      },
+    ]);
+    const result = await action(
+      request({ expectedRevision: 2, publicationIds: [outputId] }),
+      params("retract"),
+    );
+    expect(result.status).toBe(200);
+    expect(m.retract).toHaveBeenCalledWith(context, id, {
+      expectedRevision: 2,
+      publicationIds: [outputId],
+    });
+    const data = await result.json();
+    expect(data.results[0].result).toBe("REMOVE_ON_CHANNEL");
+    expect(data.results[0].publication).not.toHaveProperty("accountId");
   });
   it("authenticates before parsing, repository or storage work", async () => {
     m.access.mockResolvedValue({

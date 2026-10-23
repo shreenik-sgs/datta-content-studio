@@ -1681,6 +1681,112 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     ).rejects.toThrow("STUDIO_CLOSING_CHANNEL_REQUIRED");
     expect(await studio.listPublications(f.reviewer, pkg.id)).toEqual([]);
   });
+  it("posts only selected outputs and does not retry an unselected blocked job", async () => {
+    const f = await fixture();
+    const pkg = await approved(f);
+    const [first, second] = pkg.outputs.filter((o) => o.included);
+    if (!first || !second) throw Error("TWO_OUTPUTS_REQUIRED");
+    await studio.publish(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [first.id],
+    });
+    let jobs = await studio.listPublications(f.reviewer, pkg.id);
+    expect(jobs.map((j) => j.outputId)).toEqual([first.id]);
+    await migration.query(
+      "UPDATE distribution.studio_publication_job SET status='BLOCKED',last_error='CHANNEL_NOT_CONNECTED' WHERE id=$1",
+      [jobs[0]?.id],
+    );
+    await studio.publish(f.reviewer, pkg.id, {
+      expectedRevision: pkg.revision,
+      outputIds: [second.id],
+    });
+    jobs = await studio.listPublications(f.reviewer, pkg.id);
+    expect(jobs.find((j) => j.outputId === first.id)?.status).toBe("BLOCKED");
+    expect(jobs.find((j) => j.outputId === second.id)?.status).toBe("QUEUED");
+    for (const outputIds of [[], [randomUUID()], [first.id, first.id]])
+      await expect(
+        studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision, outputIds }),
+      ).rejects.toThrow("INVALID_STUDIO_OUTPUT_SELECTION");
+  });
+  it("retracts only selected local jobs, retaining edits and denying curator/cross-world/stale access", async () => {
+    const f = await fixture();
+    const pkg = await approved(f);
+    const jobs = await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision });
+    const first = jobs[0];
+    const second = jobs[1];
+    if (!first || !second) throw Error("TWO_JOBS_REQUIRED");
+    const input = { expectedRevision: pkg.revision, publicationIds: [first.id] };
+    await expect(studio.retract(f.ctx, pkg.id, input)).rejects.toThrow("FORBIDDEN");
+    await expect(studio.retract({ ...f.reviewer, isTest: false }, pkg.id, input)).rejects.toThrow();
+    await expect(
+      studio.retract(f.reviewer, pkg.id, { ...input, expectedRevision: pkg.revision - 1 }),
+    ).rejects.toThrow();
+    await expect(
+      studio.retract(f.reviewer, pkg.id, { ...input, publicationIds: [randomUUID()] }),
+    ).rejects.toThrow("INVALID_STUDIO_PUBLICATION_SELECTION");
+    expect((await studio.retract(f.reviewer, pkg.id, input))[0]?.result).toBe("CANCELLED");
+    expect((await studio.retract(f.reviewer, pkg.id, input))[0]?.result).toBe("ALREADY_CANCELLED");
+    const after = await studio.listPublications(f.reviewer, pkg.id);
+    expect(after.find((j) => j.id === first.id)?.status).toBe("CANCELLED");
+    expect(after.find((j) => j.id === second.id)?.status).toBe("QUEUED");
+    expect(
+      await studio.claimPublication({
+        isTest: true,
+        workerId: "retract-test",
+        publicationId: first.id,
+      }),
+    ).toBeNull();
+    expect(await studio.get(f.ctx, pkg.id)).toEqual(pkg);
+    const audit = await migration.query(
+      "SELECT detail FROM distribution.studio_publication_attempt WHERE publication_id=$1 AND detail->>'action'='RETRACTED'",
+      [first.id],
+    );
+    expect(audit.rows).toHaveLength(1);
+    expect(audit.rows[0].detail.requestedBy).toBe(f.reviewer.userId);
+  });
+  it("does not revoke an active sending lease or claim removal of a published channel post", async () => {
+    const f = await fixture({ channels: ["x"], isTest: false });
+    const pkg = await approved(f);
+    const [job] = await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision });
+    if (!job) throw Error("JOB_REQUIRED");
+    const claim = await studio.claimPublication({
+      isTest: false,
+      workerId: "sending-test",
+      publicationId: job.id,
+    });
+    if (!claim) throw Error("CLAIM_REQUIRED");
+    const input = { expectedRevision: pkg.revision, publicationIds: [job.id] };
+    expect((await studio.retract(f.reviewer, pkg.id, input))[0]?.result).toBe("CHECK_CHANNEL");
+    const active = await migration.query(
+      "SELECT status,lease_token FROM distribution.studio_publication_job WHERE id=$1",
+      [job.id],
+    );
+    expect(active.rows[0]).toMatchObject({ status: "RUNNING", lease_token: claim.leaseToken });
+    await migration.query(
+      "UPDATE distribution.studio_publication_job SET status='PUBLISHED',remote_id='remote-video',remote_url='https://example.com/video' WHERE id=$1",
+      [job.id],
+    );
+    expect((await studio.retract(f.reviewer, pkg.id, input))[0]?.result).toBe("REMOVE_ON_CHANNEL");
+    expect((await studio.listPublications(f.reviewer, pkg.id))[0]?.status).toBe("PUBLISHED");
+    const testFixture = await fixture({ channels: ["x"] });
+    const testPackage = await approved(testFixture);
+    const [testJob] = await studio.publish(testFixture.reviewer, testPackage.id, {
+      expectedRevision: testPackage.revision,
+    });
+    if (!testJob) throw Error("TEST_JOB_REQUIRED");
+    await migration.query(
+      "UPDATE distribution.studio_publication_job SET status='SIMULATED' WHERE id=$1",
+      [testJob.id],
+    );
+    expect(
+      (
+        await studio.retract(testFixture.reviewer, testPackage.id, {
+          expectedRevision: testPackage.revision,
+          publicationIds: [testJob.id],
+        })
+      )[0]?.result,
+    ).toBe("CANCELLED");
+  });
   it("pins the chosen publishing destination and refuses retargeting on retry", async () => {
     const f = await fixture();
     const pkg = await approved(f);

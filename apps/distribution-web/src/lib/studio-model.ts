@@ -59,6 +59,12 @@ export const STUDIO_PUBLICATION_LABELS: Record<StudioPublication["status"], stri
 };
 
 const messages: Record<string, string> = {
+  INVALID_STUDIO_OUTPUT_SELECTION:
+    "The selected files have changed. Refresh and select the files again.",
+  INVALID_STUDIO_PUBLICATION_SELECTION:
+    "The selected posting records are no longer available. Refresh and try again.",
+  STUDIO_PUBLICATION_RETRACTED:
+    "Retracted from Studio. The local file and approval history are retained.",
   STUDIO_ALREADY_POSTED:
     "This file or excerpt is already posted to the selected channel. It will not be sent again.",
   STUDIO_ALREADY_QUEUED:

@@ -136,9 +136,16 @@ export const studioDiscardSchema = z
 export const studioPublishSchema = z
   .object({
     expectedRevision: revision,
+    outputIds: z.array(z.string().uuid()).min(1).max(200).refine(unique).optional(),
     accounts: z
       .record(z.enum(STUDIO_CHANNELS), z.string().regex(/^[A-Za-z0-9_.:@-]{1,160}$/))
       .optional(),
+  })
+  .strict();
+export const studioRetractSchema = z
+  .object({
+    expectedRevision: revision,
+    publicationIds: z.array(z.string().uuid()).min(1).max(200).refine(unique),
   })
   .strict();
 export const studioRegenerateSchema = z

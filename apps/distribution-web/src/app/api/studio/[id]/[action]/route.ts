@@ -2,6 +2,7 @@ import {
   studioDiscardSchema,
   studioPublishSchema,
   studioRegenerateSchema,
+  studioRetractSchema,
   studioReviewSchema,
   studioReviseSchema,
   studioSubmitSchema,
@@ -10,6 +11,7 @@ import { loadStudioProviderConfig, studioSettingsPath } from "@satsang/distribut
 import {
   type DistributionCapability,
   studioPublishingAccounts,
+  studioSelectedOutputs,
 } from "@satsang/distribution-domain";
 import { z } from "zod";
 import { json } from "../../../../../lib/http";
@@ -29,6 +31,7 @@ const permissions: Record<string, DistributionCapability | undefined> = {
   review: "content.review",
   discard: undefined,
   publish: "content.publish",
+  retract: "content.publish",
 };
 export async function POST(
   request: Request,
@@ -57,7 +60,7 @@ export async function POST(
       );
       const accounts = studioPublishingAccounts(
         config.accounts,
-        pkg.outputs.filter((output) => output.included).map((output) => output.channel),
+        studioSelectedOutputs(pkg.outputs, command.outputIds).map((output) => output.channel),
         command.accounts ?? {},
         auth.context.isTest,
       );
@@ -65,6 +68,15 @@ export async function POST(
         publications: (await repo.publish(auth.context, id, { ...command, accounts })).map(
           publicStudioPublication,
         ),
+      });
+    }
+    if (action === "retract") {
+      const results = await repo.retract(auth.context, id, studioRetractSchema.parse(body));
+      return json({
+        results: results.map((entry) => ({
+          ...entry,
+          publication: publicStudioPublication(entry.publication),
+        })),
       });
     }
     const value =

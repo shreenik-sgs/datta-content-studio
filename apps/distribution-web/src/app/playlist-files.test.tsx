@@ -52,7 +52,7 @@ it("separates drafts from submitted work and directs an Approver only to a submi
     expect(host.textContent).toContain(
       "1 files awaiting Curator submission · 1 files ready for Approver review",
     );
-    expect(host.textContent).toContain("Approval controls appear after submission");
+    expect(host.textContent).toContain("Approval controls become available after submission");
     expect(host.textContent).toContain("publication is simulated");
     expect(
       host.querySelector('button[aria-label="Open workflow for First recording"]')?.textContent,
@@ -84,7 +84,7 @@ it("gives the Curator an explicit check-and-submit entry without approving on na
     expect(
       host.querySelector('button[aria-label="Open workflow for First recording"]')?.textContent,
     ).toBe("Check & submit");
-    expect(host.textContent).not.toContain("Approval controls appear after submission");
+    expect(host.textContent).not.toContain("Approval controls become available after submission");
     await act(async () =>
       [...host.querySelectorAll("button")]
         .find((b) => b.textContent === "Check & submit next recording")

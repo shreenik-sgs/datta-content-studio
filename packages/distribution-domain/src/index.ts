@@ -139,3 +139,4 @@ export * from "./studio-source-branding";
 
 export * from "./studio-discovery";
 export * from "./studio-posting-check";
+export * from "./studio-bulk-actions";

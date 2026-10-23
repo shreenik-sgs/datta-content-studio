@@ -16,12 +16,14 @@ export function PlaylistFiles({
   canCurate = false,
   canReview = false,
   canPublish = false,
+  showHandoff = true,
 }: {
   packages: readonly PublicStudioPackage[];
   totalRecordings?: number | undefined;
   canCurate?: boolean;
   canReview?: boolean;
   canPublish?: boolean;
+  showHandoff?: boolean;
   onOpen: (value: PublicStudioPackage) => void;
   onPreview: (value: PublicStudioPackage, outputId: string) => void;
 }) {
@@ -78,7 +80,7 @@ export function PlaylistFiles({
           )
           .join("")}
       </p>
-      {(canCurate || canReview) && (drafts.length > 0 || submitted.length > 0) && (
+      {showHandoff && (canCurate || canReview) && (drafts.length > 0 || submitted.length > 0) && (
         <section className="panel" aria-label="Review handoff" style={{ marginBlock: 16 }}>
           <h4>Next action</h4>
           <p>
@@ -89,10 +91,9 @@ export function PlaylistFiles({
           </p>
           {canReview && !canCurate && drafts.length > 0 && (
             <p>
-              Drafts must first be checked and submitted by the Curator. Ask the Curator to choose
-              <strong> Check &amp; submit</strong> for each recording, then
-              <strong> Submit package for review</strong>. Approval controls appear after
-              submission.
+              Drafts must first be checked and submitted by the Curator using
+              <strong> Submit All</strong> or <strong>Submit Selected</strong> in Series actions.
+              Approval controls become available after submission.
             </p>
           )}
           <p>
