@@ -467,3 +467,47 @@ it.each(["lost-response", "refresh-failed"])(
     }
   },
 );
+
+it("lets the Curator name a normal playlist link before import", async () => {
+  vi.stubGlobal("React", React);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const fetcher = vi.fn(async (_url: string, options?: RequestInit) =>
+    Response.json(
+      options?.method === "POST"
+        ? {
+            item: {
+              id: "named",
+              source: { kind: "playlist" },
+              status: "QUEUED",
+              title: "My teachings",
+            },
+          }
+        : { items: [], available: true },
+    ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<OnlineImportPanel locale="en" showForm onOpen={vi.fn()} />));
+    const name = host.querySelector<HTMLInputElement>('input[name="title"]');
+    const url = host.querySelector<HTMLInputElement>('input[name="url"]');
+    if (!name || !url) throw Error("fields");
+    name.value = "My teachings";
+    url.value = "https://www.youtube.com/playlist?list=PLMyTeachings001";
+    await act(async () =>
+      host
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const post = fetcher.mock.calls.find(([, options]) => options?.method === "POST");
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
+      action: "import",
+      title: "My teachings",
+      includePlaylist: true,
+    });
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

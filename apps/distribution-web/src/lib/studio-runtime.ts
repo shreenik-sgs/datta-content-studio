@@ -36,9 +36,13 @@ function publicAsset(asset: StudioAsset): PublicStudioAsset {
     byteSize: asset.byteSize,
   };
 }
-export function publicStudioPackage(value: StudioPackage): PublicStudioPackage {
+export function publicStudioPackage(
+  value: StudioPackage,
+  workspaceName?: string,
+): PublicStudioPackage {
   return {
     ...value,
+    ...(workspaceName ? { workspaceName } : {}),
     failure:
       value.failure && /^[A-Z][A-Z0-9_]{0,99}$/.test(value.failure)
         ? value.failure

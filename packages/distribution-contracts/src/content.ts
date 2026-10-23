@@ -139,6 +139,7 @@ export const contentApprovalSchema = z
   .strict();
 export const contentMasterSchema = z
   .object({
+    workspaceName: z.string().trim().min(1).max(200).nullable().optional(),
     sourceUrl: z.string().url().optional(),
     id: z.string().uuid(),
     title: z.string().min(1).max(200),

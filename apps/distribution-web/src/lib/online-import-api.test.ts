@@ -3,6 +3,7 @@ const m = vi.hoisted(() => ({
   access: vi.fn(),
   enqueue: vi.fn(),
   enqueueBundle: vi.fn(),
+  rename: vi.fn(),
   retry: vi.fn(),
   list: vi.fn(),
   ready: vi.fn(),
@@ -128,4 +129,23 @@ it("looks up a recording's series without listing other sources or exposing anot
   m.access.mockResolvedValue({ ok: false, response: Response.json({}, { status: 403 }) });
   expect((await GET(new Request(`http://localhost?masterId=${id}`))).status).toBe(403);
   expect(m.bundlesForMaster).not.toHaveBeenCalled();
+});
+
+it("accepts a custom name for a video or playlist and renames without a running downloader", async () => {
+  expect((await POST(request({ ...input, title: "My teachings" }))).status).toBe(202);
+  expect(m.enqueue).toHaveBeenLastCalledWith(
+    context,
+    expect.objectContaining({ title: "My teachings" }),
+  );
+  m.ready.mockResolvedValue(false);
+  const data = {
+    action: "rename",
+    id: "00000000-0000-4000-8000-000000000001",
+    name: "New series name",
+    expectedName: null,
+  };
+  m.rename.mockResolvedValue({ id: data.id, title: data.name });
+  expect((await POST(request(data))).status).toBe(200);
+  expect(m.rename).toHaveBeenCalledWith(context, data.id, data);
+  expect((await POST(request({ ...data, name: "  " }))).status).toBe(400);
 });

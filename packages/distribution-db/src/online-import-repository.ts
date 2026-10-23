@@ -18,6 +18,7 @@ import {
   requireDistributionCapability,
 } from "./repository.js";
 import type { StudioRoleAuthority } from "./studio-authority.js";
+import { renameMasterWorkspace, workspaceNameValue } from "./workspace-names.js";
 
 export type OnlineImportClaim = OnlineImport & {
   isTest: boolean;
@@ -30,7 +31,8 @@ function dto(row: QueryResultRow): OnlineImport {
   return {
     id: row.id,
     source: row.source,
-    title: row.title,
+    title: row.workspace_name ?? row.title,
+    workspaceName: row.workspace_name ?? null,
     status: row.status,
     masterId: row.master_id,
     parentId: row.parent_id,
@@ -96,11 +98,12 @@ export function createOnlineImportRepository(
       language: string;
       category: string;
       parentId?: string;
+      workspaceName?: string;
     },
   ) {
     const result = await client.query(
-      `INSERT INTO distribution.online_import(is_test,source,source_key,requested_by,language,category,parent_id)
-      VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(source_key,is_test) WHERE deleted_at IS NULL DO UPDATE SET source_key=excluded.source_key RETURNING *`,
+      `INSERT INTO distribution.online_import(is_test,source,source_key,requested_by,language,category,parent_id,workspace_name)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(source_key,is_test) WHERE deleted_at IS NULL DO UPDATE SET source_key=excluded.source_key RETURNING *`,
       [
         input.isTest,
         input.source,
@@ -109,6 +112,7 @@ export function createOnlineImportRepository(
         input.language,
         input.category,
         input.parentId ?? null,
+        input.workspaceName ?? null,
       ],
     );
     return dto(result.rows[0]);
@@ -159,6 +163,11 @@ export function createOnlineImportRepository(
         { userId, isTest },
         { ...input, language: row.language, category: row.category },
       ));
+    if (!existing && row.workspace_name)
+      await client.query(
+        "UPDATE distribution.content_master SET workspace_name=$3 WHERE id=$1 AND is_test=$2",
+        [masterId, isTest, row.workspace_name],
+      );
     await client.query(
       "UPDATE distribution.online_import SET status='COMPLETE',master_id=$3,title=$4,lease_token=NULL,lease_until=NULL,error=NULL,updated_at=now() WHERE id=$1 AND is_test=$2 AND deleted_at IS NULL",
       [row.id, isTest, masterId, input.title],
@@ -166,6 +175,32 @@ export function createOnlineImportRepository(
     return { masterId, duplicate: Boolean(existing) };
   }
   return {
+    rename: (
+      context: DistributionContext,
+      id: string,
+      input: { name: string; expectedName: string | null },
+    ) =>
+      transaction(async (client) => {
+        const isTest = distributionWorld(context);
+        await requireDistributionCapability(client, context, ["content.create"]);
+        await allowed(context.userId, isTest);
+        const name = workspaceNameValue(input.name);
+        const { rows } = await client.query(
+          "SELECT * FROM distribution.online_import WHERE id=$1 AND is_test=$2 AND deleted_at IS NULL FOR UPDATE",
+          [id, isTest],
+        );
+        const row = rows[0];
+        if (!row) throw Error("NOT_FOUND");
+        if (row.master_id)
+          await renameMasterWorkspace(client, context, row.master_id, name, input.expectedName);
+        else if ((row.workspace_name ?? null) !== input.expectedName)
+          throw Error("WORKSPACE_NAME_CONFLICT");
+        const result = await client.query(
+          "UPDATE distribution.online_import SET workspace_name=$3,updated_at=now() WHERE id=$1 AND is_test=$2 RETURNING *",
+          [id, isTest, name],
+        );
+        return dto(result.rows[0]);
+      }),
     enqueueBundle: (
       context: DistributionContext,
       input: { urls: string; title: string; language: string; category: string },
@@ -333,12 +368,19 @@ export function createOnlineImportRepository(
     },
     enqueue: (
       context: DistributionContext,
-      input: { url: string; includePlaylist?: boolean; language: string; category: string },
+      input: {
+        url: string;
+        title?: string | undefined;
+        includePlaylist?: boolean;
+        language: string;
+        category: string;
+      },
     ) =>
       transaction(async (client) => {
         const isTest = distributionWorld(context);
         await requireDistributionCapability(client, context, ["content.create"]);
         const source = onlineVideoSource(input.url, input.includePlaylist);
+        const name = input.title === undefined ? undefined : workspaceNameValue(input.title);
         if (
           !["en", "hi", "te", "kn", "ta", "ml", "gu", "sa"].includes(input.language) ||
           !CONTENT_CATEGORIES.includes(input.category as never)
@@ -363,16 +405,22 @@ export function createOnlineImportRepository(
           requestedBy: context.userId,
           language: input.language,
           category: input.category,
+          ...(name ? { workspaceName: name } : {}),
         });
       }),
     list: async (
       context: DistributionContext,
-      options: { summaries?: boolean; rootId?: string | undefined; offset?: number } = {},
+      options: {
+        summaries?: boolean;
+        rootId?: string | undefined;
+        query?: string | undefined;
+        offset?: number;
+      } = {},
     ) => {
       await requireDistributionCapability(pool, context, ["content.create", "content.review"]);
       const items = (
         await pool.query(
-          `WITH roots AS (SELECT * FROM distribution.online_import WHERE is_test=$1 AND deleted_at IS NULL AND ($2::uuid IS NULL AND parent_id IS NULL OR id=$2) ORDER BY created_at DESC,id LIMIT $3 OFFSET $4)
+          `WITH roots AS (SELECT * FROM distribution.online_import WHERE is_test=$1 AND deleted_at IS NULL AND ($2::uuid IS NULL AND parent_id IS NULL OR id=$2) AND ($2::uuid IS NOT NULL OR strpos(lower(concat_ws(' ',workspace_name,title)),lower($6))>0) ORDER BY created_at DESC,id LIMIT $3 OFFSET $4)
          SELECT * FROM roots UNION SELECT i.* FROM distribution.online_import i WHERE NOT $5::boolean AND i.is_test=$1 AND i.deleted_at IS NULL AND i.id IN (SELECT jsonb_array_elements_text(child_ids)::uuid FROM roots)`,
           [
             distributionWorld(context),
@@ -380,9 +428,24 @@ export function createOnlineImportRepository(
             options.summaries ? 20 : options.rootId ? 1 : 50,
             options.rootId ? 0 : Math.max(0, options.offset ?? 0),
             options.summaries ?? false,
+            (options.query ?? "").slice(0, 200),
           ],
         )
       ).rows.map(dto);
+      const masterIds = items.flatMap((item) => (item.masterId ? [item.masterId] : []));
+      if (masterIds.length) {
+        const names = await pool.query(
+          "SELECT id,workspace_name,title FROM distribution.content_master WHERE is_test=$1 AND id=ANY($2::uuid[]) AND deleted_at IS NULL",
+          [context.isTest, masterIds],
+        );
+        for (const item of items) {
+          const master = names.rows.find((m) => m.id === item.masterId);
+          if (master) {
+            item.workspaceName = master.workspace_name ?? null;
+            item.title = master.workspace_name ?? master.title;
+          }
+        }
+      }
       const ids = items.flatMap((item) =>
         Object.values(item.curation?.items ?? {}).flatMap((value) =>
           value.packageId ? [value.packageId] : [],
@@ -436,13 +499,13 @@ export function createOnlineImportRepository(
     bundlesForMaster: async (context: DistributionContext, masterId: string) => {
       await requireDistributionCapability(pool, context, ["content.create", "content.review"]);
       const rows = await pool.query(
-        `SELECT DISTINCT p.id, p.title, jsonb_array_length(p.child_ids) AS recordings
+        `SELECT DISTINCT p.id, COALESCE(p.workspace_name,p.title) AS title, jsonb_array_length(p.child_ids) AS recordings
          FROM distribution.online_import i
          JOIN distribution.content_master m ON m.id=i.master_id AND m.is_test=i.is_test
          JOIN distribution.online_import p ON p.is_test=i.is_test AND p.child_ids ? i.id::text
          WHERE i.is_test=$1 AND i.master_id=$2 AND i.deleted_at IS NULL
            AND m.deleted_at IS NULL AND p.deleted_at IS NULL
-         ORDER BY p.title,p.id`,
+         ORDER BY title,p.id`,
         [distributionWorld(context), masterId],
       );
       return rows.rows.map((row) => ({

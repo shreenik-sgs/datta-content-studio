@@ -53,6 +53,92 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
       category: "bhajans",
       asset: asset(),
     });
+  it("renames organizing labels without changing source versions, rights or approval", async () => {
+    const original = await create();
+    const cleared = await repository.attestRights(ctx, original.id, {
+      expectedRevision: original.revision,
+      rights,
+    });
+    const approved = await repository.approve(reviewer, original.id, {
+      expectedRevision: cleared.revision,
+    });
+    const renamed = await repository.rename(ctx, original.id, {
+      name: "  My special teaching  ",
+      expectedName: null,
+    });
+    expect(renamed.workspaceName).toBe("My special teaching");
+    expect(renamed.title).toBe(original.title);
+    expect(renamed.currentVersion).toEqual(approved.currentVersion);
+    expect(renamed.approval).toEqual(approved.approval);
+    expect(renamed.revision).toBe(approved.revision);
+    expect(renamed.state).toBe(approved.state);
+    expect(
+      (await repository.list(ctx, { query: "special teaching" })).some((m) => m.id === original.id),
+    ).toBe(true);
+    await expect(
+      repository.rename(ctx, original.id, { name: "Stale name", expectedName: null }),
+    ).rejects.toThrow("WORKSPACE_NAME_CONFLICT");
+    await expect(
+      repository.rename(reviewer, original.id, {
+        name: "Not allowed",
+        expectedName: renamed.workspaceName ?? null,
+      }),
+    ).rejects.toThrow("FORBIDDEN");
+    await expect(
+      repository.rename(other, original.id, { name: "Other world", expectedName: null }),
+    ).rejects.toThrow("NOT_FOUND");
+  });
+  it("keeps a playlist's chosen name through discovery and a video's chosen name through download", async () => {
+    const imports = createOnlineImportRepository(runtime, async () => true);
+    const playlist = await imports.enqueue(ctx, {
+      url: "https://www.youtube.com/playlist?list=PLNamedCollectionTest",
+      includePlaylist: true,
+      title: "My named playlist",
+      language: "te",
+      category: "pravachanams",
+    });
+    const claim = await imports.claim(true);
+    expect(claim?.id).toBe(playlist.id);
+    if (!claim) throw Error("claim");
+    await imports.expand(
+      claim,
+      [
+        {
+          provider: "youtube",
+          kind: "video",
+          id: "NamedVid001",
+          url: "https://www.youtube.com/watch?v=NamedVid001",
+        },
+      ],
+      "Provider playlist title",
+    );
+    let items = await imports.list(ctx, { rootId: playlist.id });
+    expect(items.find((i) => i.id === playlist.id)?.title).toBe("My named playlist");
+    const child = items.find((i) => i.parentId === playlist.id);
+    if (!child) throw Error("child");
+    await imports.rename(ctx, child.id, { name: "My lesson", expectedName: null });
+    const download = await imports.claim(true);
+    expect(download?.id).toBe(child.id);
+    if (!download) throw Error("download");
+    const result = await imports.complete(download, {
+      title: "Original video title",
+      asset: asset(),
+    });
+    const master = await repository.get(ctx, result.masterId);
+    expect(master.workspaceName).toBe("My lesson");
+    expect(master.title).toBe("Original video title");
+    await repository.rename(ctx, master.id, { name: "Renamed lesson", expectedName: "My lesson" });
+    items = await imports.list(ctx, { rootId: playlist.id });
+    expect(items.find((i) => i.id === child.id)?.title).toBe("Renamed lesson");
+    await imports.rename(ctx, playlist.id, {
+      name: "My series",
+      expectedName: "My named playlist",
+    });
+    expect(
+      (await imports.list(ctx, { summaries: true, query: "My series" })).map((i) => i.id),
+    ).toContain(playlist.id);
+    expect((await imports.bundlesForMaster(ctx, master.id))[0]?.title).toBe("My series");
+  });
   it("persists a complete online master larger than 2 GB after the capacity migration", async () => {
     const byteSize = 3 * 1024 ** 3;
     const item = await repository.create(ctx, {

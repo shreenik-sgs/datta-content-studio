@@ -1050,3 +1050,25 @@ select {
   outline: 2px solid #d9bb84;
   outline-offset: 3px;
 }
+
+.workspace-rename {
+  font-size: .82rem;
+  padding: .35rem .6rem;
+  margin: .35rem;
+}
+.workspace-name-editor {
+  max-width: 36rem;
+  padding: .85rem;
+  margin-block: .5rem;
+  border: 1px solid var(--border, #cbd8d0);
+  border-radius: .7rem;
+  background: var(--surface, #fff);
+  text-align: left;
+}
+.workspace-name-editor input {
+  width: 100%;
+}
+.workspace-name-editor .muted {
+  font-size: .8rem;
+  font-weight: 400;
+}

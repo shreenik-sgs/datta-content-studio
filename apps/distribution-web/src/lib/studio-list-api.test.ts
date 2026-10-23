@@ -18,7 +18,11 @@ const context = {
 describe("Studio package list withdrawal visibility", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    m.access.mockResolvedValue({ ok: true, context });
+    m.access.mockResolvedValue({
+      ok: true,
+      context,
+      repo: { workspaceNames: vi.fn().mockResolvedValue({}) },
+    });
     m.repo.mockReturnValue({
       list: m.list,
       listPublicationsForPackages: vi.fn().mockResolvedValue([]),

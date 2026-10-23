@@ -21,6 +21,7 @@ import type { Pool, PoolClient, QueryResultRow } from "pg";
 import { invalidateActivations } from "./activation-invalidation.js";
 import { requireIndependentSourceReview } from "./review-integrity.js";
 import type { StudioRoleAuthority } from "./studio-authority.js";
+import { renameMasterWorkspace, workspaceNameValue } from "./workspace-names.js";
 
 /** Roles come from the current server-verified identity. Missing roles grant nothing. */
 export type DistributionContext = { userId: string; isTest: boolean; roles?: readonly string[] };
@@ -153,6 +154,7 @@ function dto(row: QueryResultRow): ContentMaster {
     id: row.id,
     ...(row.source_url ? { sourceUrl: row.source_url } : {}),
     title: row.title,
+    workspaceName: row.workspace_name ?? null,
     language: row.language,
     category: row.category,
     isTest: row.is_test,
@@ -308,6 +310,33 @@ export function createDistributionRepository(
   }
   return {
     capabilities: (context: DistributionContext) => grants(pool, context),
+    workspaceNames: (context: DistributionContext, ids: string[]) =>
+      transaction(context, undefined, async (client) => {
+        const result = await client.query(
+          "SELECT id,workspace_name FROM distribution.content_master WHERE is_test=$1 AND id=ANY($2::uuid[]) AND deleted_at IS NULL",
+          [distributionWorld(context), ids],
+        );
+        return Object.fromEntries(
+          result.rows
+            .filter((r) => r.workspace_name)
+            .map((r) => [r.id, r.workspace_name as string]),
+        );
+      }),
+    rename: (
+      context: DistributionContext,
+      id: string,
+      input: { name: string; expectedName: string | null },
+    ) =>
+      transaction(context, "content.create", async (client) => {
+        await renameMasterWorkspace(
+          client,
+          context,
+          id,
+          workspaceNameValue(input.name),
+          input.expectedName,
+        );
+        return read(client, context, id);
+      }),
     list: (
       context: DistributionContext,
       pagination: {
@@ -322,7 +351,7 @@ export function createDistributionRepository(
         const limit = Math.min(100, Math.max(1, Math.trunc(pagination.limit ?? 50)));
         const offset = Math.max(0, Math.trunc(pagination.offset ?? 0));
         const result = await client.query(
-          `${selectMaster} WHERE m.is_test=$1 AND m.deleted_at IS NULL AND strpos(lower(m.title),lower($4))>0 AND ($5::text IS NULL OR m.state=$5)
+          `${selectMaster} WHERE m.is_test=$1 AND m.deleted_at IS NULL AND strpos(lower(concat_ws(' ',m.workspace_name,m.title)),lower($4))>0 AND ($5::text IS NULL OR m.state=$5)
            AND ($6::text='all' OR ($6='active' AND m.state<>'WITHDRAWN') OR ($6='withdrawn' AND m.state='WITHDRAWN'))
            ORDER BY m.updated_at DESC,m.id LIMIT $2 OFFSET $3`,
           [

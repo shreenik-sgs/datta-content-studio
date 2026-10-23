@@ -1,4 +1,5 @@
 "use client";
+import { studioSourceName } from "../lib/studio-model";
 
 import { DISTRIBUTION_LANGUAGE_NAMES } from "@satsang/distribution-contracts";
 import { STUDIO_CHANNELS, studioChannelLabel } from "@satsang/distribution-domain";
@@ -73,7 +74,7 @@ export function StudioLineage({
           </span>
           <div>
             <p className="eyebrow">Master recording</p>
-            <strong>{value.source.title}</strong>
+            <strong>{studioSourceName(value)}</strong>
             <details className="lineage-identity">
               <summary>Source identifiers</summary>
               <p>Master {value.source.masterId}</p>
@@ -149,7 +150,7 @@ export function StudioLineage({
         aria-describedby={helpId}
       >
         <table className="lineage-table">
-          <caption>Derived files for {value.source.title}</caption>
+          <caption>Derived files for {studioSourceName(value)}</caption>
           <thead>
             <tr>
               <th scope="col">Filename</th>

@@ -19,6 +19,7 @@ import { ImportRecovery } from "./import-recovery";
 import { PlaylistCuration } from "./playlist-curation";
 import { StorageCleanup } from "./storage-cleanup";
 import { StudioPanel } from "./studio-panel";
+import { WorkspaceName } from "./workspace-name";
 const API = "/distribution/api/content/import";
 export function OnlineImportPanel({
   locale,
@@ -41,6 +42,7 @@ export function OnlineImportPanel({
 }) {
   const [seriesMode, setSeriesMode] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [query, setQuery] = useState("");
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [selectedBundle, setSelectedBundle] = useState<string | null>(initialBundleId ?? null);
   const [reviewing, setReviewing] = useState(Boolean(initialBundleId));
@@ -54,10 +56,12 @@ export function OnlineImportPanel({
   const [busy, setBusy] = useState(false);
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      const query = new URLSearchParams(
-        selectedBundle ? { rootId: selectedBundle } : { offset: String(offset) },
+      const params = new URLSearchParams(
+        selectedBundle
+          ? { rootId: selectedBundle }
+          : { offset: String(offset), ...(query ? { query } : {}) },
       );
-      const response = await fetch(`${API}?${query}`, {
+      const response = await fetch(`${API}?${params}`, {
         cache: "no-store",
         signal: signal
           ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
@@ -71,7 +75,7 @@ export function OnlineImportPanel({
       setAvailable(data.available);
       setProgressError("");
     },
-    [onGroupedMasters, selectedBundle, offset],
+    [onGroupedMasters, selectedBundle, offset, query],
   );
   useEffect(() => {
     const abort = new AbortController();
@@ -180,6 +184,9 @@ export function OnlineImportPanel({
     }
     void send({
       action: "import",
+      ...(String(form.get("title") ?? "").trim()
+        ? { title: String(form.get("title")).trim() }
+        : {}),
       url,
       includePlaylist,
       language: form.get("language"),
@@ -273,10 +280,29 @@ export function OnlineImportPanel({
           ),
         }}
         onOpenSource={(id, packageId) => void open(id, packageId)}
+        onRenameBundle={
+          canCurate ? (
+            <WorkspaceName
+              kind="import"
+              id={reviewItem.id}
+              title={reviewItem.title ?? "Playlist"}
+              name={reviewItem.workspaceName}
+              onSaved={load}
+            />
+          ) : undefined
+        }
         onBackToBundle={() => setReviewing(false)}
       />
     );
-  if (!showForm && !visibleItems.length && !error && !progressError && offset === 0 && !nextOffset)
+  if (
+    !showForm &&
+    !query &&
+    !visibleItems.length &&
+    !error &&
+    !progressError &&
+    offset === 0 &&
+    !nextOffset
+  )
     return null;
   return (
     <section className="panel" aria-label="Online video imports">
@@ -329,17 +355,22 @@ export function OnlineImportPanel({
                 <option value="series">Series of video links</option>
               </select>
             </label>
+            <label>
+              {seriesMode ? "Series name" : "Playlist or video name (optional)"}
+              <input
+                name="title"
+                required={seriesMode}
+                maxLength={200}
+                placeholder="e.g. Sri Vishnu Purana"
+              />
+            </label>
+            {!seriesMode && (
+              <p className="muted">
+                Leave blank to use the original title. You can rename it later.
+              </p>
+            )}
             {seriesMode ? (
               <>
-                <label>
-                  Series name
-                  <input
-                    name="title"
-                    required
-                    maxLength={200}
-                    placeholder="Sri Vishnu Purana — Days 1–60"
-                  />
-                </label>
                 <label>
                   Video links — one per line
                   <textarea
@@ -423,6 +454,33 @@ export function OnlineImportPanel({
           </fieldset>
         </form>
       )}
+      {!showForm && !selectedBundle && (
+        <form
+          className="actions wrap"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setOffset(0);
+            setQuery(String(new FormData(event.currentTarget).get("query") ?? "").trim());
+          }}
+        >
+          <label>
+            Find a playlist or series
+            <input
+              type="search"
+              name="query"
+              maxLength={200}
+              defaultValue={query}
+              placeholder="Search by name"
+            />
+          </label>
+          <button className="button" type="submit">
+            Search
+          </button>
+        </form>
+      )}
+      {!showForm && !selectedBundle && query && !visibleItems.length && (
+        <p>No sources match this name.</p>
+      )}
       {progressError && <output>{progressError}</output>}
       {error && (
         <p role="alert" style={{ color: "#a52245" }}>
@@ -478,6 +536,15 @@ export function OnlineImportPanel({
                     {item.title ??
                       `${item.source.provider} ${item.source.kind} · ${item.source.id}`}
                   </a>
+                )}
+                {canCurate && (
+                  <WorkspaceName
+                    kind="import"
+                    id={item.id}
+                    title={item.title ?? "Untitled source"}
+                    name={item.workspaceName}
+                    onSaved={load}
+                  />
                 )}
                 {isOnlineBundle(item.source) ? (
                   !showForm && selectedBundle !== item.id ? (

@@ -55,6 +55,7 @@ export type OnlineImportServiceIssue = {
 };
 
 export type OnlineImport = {
+  workspaceName?: string | null;
   id: string;
   source: OnlineVideoSource;
   title: string | null;
@@ -126,6 +127,8 @@ export function onlineVideoSource(raw: string, includePlaylist = false): OnlineV
 }
 
 export const ONLINE_IMPORT_ERRORS: Record<string, string> = {
+  WORKSPACE_NAME_INVALID: "Enter a name between 1 and 200 characters.",
+  WORKSPACE_NAME_CONFLICT: "This name changed in another session. Refresh and try again.",
   ONLINE_BUNDLE_SIZE_INVALID: "Paste between 1 and 100 video links, one per line.",
   ONLINE_BUNDLE_PROVIDER_MISMATCH:
     "Use video links from the same provider in one series. Import a playlist using its single playlist link.",

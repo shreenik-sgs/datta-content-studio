@@ -25,9 +25,18 @@ const schema = z.discriminatedUnion("action", [
     .object({
       action: z.literal("import"),
       url: z.string().max(2048),
+      title: z.string().trim().min(1).max(200).optional(),
       includePlaylist: z.boolean().default(false),
       language: z.enum(["en", "hi", "te", "kn", "ta", "ml", "gu", "sa"]),
       category: z.string().max(60),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("rename"),
+      id: z.string().uuid(),
+      name: z.string().trim().min(1).max(200),
+      expectedName: z.string().max(200).nullable(),
     })
     .strict(),
   z.object({ action: z.literal("discover-playlist"), id: z.string().uuid() }).strict(),
@@ -61,6 +70,7 @@ export async function GET(request: Request) {
     const query = z
       .object({
         rootId: z.string().uuid().optional(),
+        query: z.string().trim().max(200).optional(),
         masterId: z.string().uuid().optional(),
         offset: z.coerce.number().int().min(0).max(1000000).default(0),
       })
@@ -87,6 +97,8 @@ export async function POST(request: Request) {
       JSON.parse(new TextDecoder().decode(await readBoundedBody(request, 220000))),
     );
     const repo = repository();
+    if (data.action === "rename")
+      return json({ item: await repo.rename(auth.context, data.id, data) });
     if (!(await repo.ready(auth.context.isTest))) throw Error("ONLINE_IMPORT_DISABLED");
     if (data.action === "discover-playlist") {
       const result = await createIntelligentContentRepository(distributionPool(), {

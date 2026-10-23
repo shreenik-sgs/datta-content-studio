@@ -22,6 +22,20 @@ export async function POST(request: Request, { params }: Params) {
     const { id, action } = await params;
     z.string().uuid().parse(id);
     const body = await boundedJson(request);
+    if (action === "rename")
+      return json({
+        content: await auth.repo.rename(
+          auth.context,
+          id,
+          z
+            .object({
+              name: z.string().trim().min(1).max(200),
+              expectedName: z.string().max(200).nullable(),
+            })
+            .strict()
+            .parse(body),
+        ),
+      });
     if (action === "metadata")
       return json({
         content: await auth.repo.updateMetadata(auth.context, id, updateContentSchema.parse(body)),

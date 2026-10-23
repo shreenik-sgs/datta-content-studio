@@ -1,4 +1,5 @@
 "use client";
+import { studioSourceName } from "../lib/studio-model";
 
 import { DISTRIBUTION_LANGUAGE_NAMES } from "@satsang/distribution-contracts";
 import {
@@ -28,6 +29,7 @@ import {
 } from "../lib/studio-source-outcome";
 import { useHubTimestamp } from "./hub-locale";
 import { StudioSeriesActions } from "./studio-series-actions";
+import { WorkspaceName } from "./workspace-name";
 import "./studio-lineage.css";
 
 export function PlaylistFiles({
@@ -126,7 +128,7 @@ export function PlaylistFiles({
           (!workflowStep || studioFileWorkflowStep(value, output) === workflowStep) &&
           (postingFilter === "all" || postingState(value, output).key === postingFilter) &&
           (channel === "all" || output.channel === channel) &&
-          `${value.source.title} ${output.title} ${output.asset?.filename ?? ""}`
+          `${studioSourceName(value)} ${studioSourceName(value)} ${output.title} ${output.asset?.filename ?? ""}`
             .toLocaleLowerCase()
             .includes(search.trim().toLocaleLowerCase()),
       ),
@@ -470,14 +472,25 @@ export function PlaylistFiles({
                     {row === 0 && (
                       <th scope="rowgroup" rowSpan={shown.length} className="playlist-file-master">
                         <span>
-                          {index + 1}. {value.source.title}
+                          {index + 1}. {studioSourceName(value)}
                         </span>
                         <small>{value.outputs.length} files</small>
+                        {canCurate && (
+                          <WorkspaceName
+                            kind="master"
+                            id={value.source.masterId}
+                            title={studioSourceName(value)}
+                            name={value.workspaceName}
+                            onSaved={async () => {
+                              await onRefresh?.();
+                            }}
+                          />
+                        )}
                         <button
                           className="button"
                           type="button"
                           onClick={() => onOpen(value)}
-                          aria-label={`Open workflow for ${value.source.title}`}
+                          aria-label={`Open workflow for ${studioSourceName(value)}`}
                         >
                           {actionLabel(value)}
                         </button>
@@ -578,7 +591,7 @@ export function PlaylistFiles({
               );
               return (
                 <li key={value.id} className="source-outcome">
-                  <strong>{value.source.title}</strong>
+                  <strong>{studioSourceName(value)}</strong>
                   {source && (
                     <p>
                       <a href={source.url} target="_blank" rel="noopener noreferrer">
@@ -614,7 +627,7 @@ export function PlaylistFiles({
           <ul>
             {waiting.map((value) => (
               <li key={value.id}>
-                {value.source.title} · {studioStatusLabel(value)}{" "}
+                {studioSourceName(value)} · {studioStatusLabel(value)}{" "}
                 <button type="button" className="button" onClick={() => onOpen(value)}>
                   Open workflow
                 </button>

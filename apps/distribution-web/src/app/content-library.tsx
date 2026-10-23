@@ -15,6 +15,7 @@ import {
   type DistributionCapability,
   STUDIO_CHANNELS,
   buildMasterAssetNames,
+  contentDisplayName,
   studioChannelLabel,
 } from "@satsang/distribution-domain";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -32,6 +33,7 @@ import { StorageCleanup } from "./storage-cleanup";
 import { StudioPanel } from "./studio-panel";
 import { StudioWorkflow } from "./studio-workflow";
 import { VariantsPanel } from "./variants-panel";
+import { WorkspaceName } from "./workspace-name";
 
 import {
   type RightsErrors,
@@ -412,7 +414,9 @@ export function ContentLibrary({
 
   const visible = items.filter(
     (item) =>
-      item.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()) &&
+      `${contentDisplayName(item)} ${item.title}`
+        .toLocaleLowerCase()
+        .includes(search.toLocaleLowerCase()) &&
       ((view === "content" && item.state !== "WITHDRAWN") ||
         (view === "approvals" && item.state === "RIGHTS_CLEARED") ||
         (view === "releases" && item.state === "APPROVED")),
@@ -462,8 +466,25 @@ export function ContentLibrary({
       </header>
       <div className={selected || adding ? "page-heading compact-heading" : "visually-hidden"}>
         <h1 ref={heading} tabIndex={-1}>
-          {adding ? "Upload master" : selected ? selected.title : viewLabels[view]}
+          {adding ? "Upload master" : selected ? contentDisplayName(selected) : viewLabels[view]}
         </h1>
+        {selected && capabilities.includes("content.create") && (
+          <WorkspaceName
+            kind="master"
+            id={selected.id}
+            title={contentDisplayName(selected)}
+            name={selected.workspaceName}
+            onSaved={async () => {
+              const response = await fetch(`${API}/${selected.id}/detail`, { cache: "no-store" });
+              if (!response.ok) throw Error("REFRESH_FAILED");
+              const updated = contentMasterSchema.parse((await response.json()).content);
+              setSelected(updated);
+              setItems((previous) =>
+                previous.map((item) => (item.id === updated.id ? updated : item)),
+              );
+            }}
+          />
+        )}
         {(selected || adding) && (
           <button type="button" className="button" onClick={reset}>
             Back to workspace
@@ -723,7 +744,7 @@ export function ContentLibrary({
                       <span className="badge">Master: {t(item.state)}</span>
                     </div>
                     <div className="card-body">
-                      <h2>{item.title}</h2>
+                      <h2>{contentDisplayName(item)}</h2>
                       <p>
                         {DISTRIBUTION_LANGUAGE_NAMES[
                           item.language as keyof typeof DISTRIBUTION_LANGUAGE_NAMES

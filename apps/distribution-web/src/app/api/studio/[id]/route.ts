@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       studioReadiness(auth.context),
     ]);
     return json({
-      package: publicStudioPackage(value),
+      package: publicStudioPackage(value, master.workspaceName ?? undefined),
       publications: publications.map(publicStudioPublication),
       readiness,
       reviewAssignment: auth.capabilities.includes("content.review")

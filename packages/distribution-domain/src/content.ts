@@ -133,6 +133,8 @@ export type ContentApproval = {
   approvedAt: string;
 };
 export type ContentMaster = {
+  /** Workspace label only; does not change source evidence or approved media. */
+  workspaceName?: string | null | undefined;
   sourceUrl?: string | undefined;
   id: string;
   title: string;
@@ -147,6 +149,9 @@ export type ContentMaster = {
   createdAt: string;
   updatedAt: string;
 };
+export function contentDisplayName(content: Pick<ContentMaster, "title" | "workspaceName">) {
+  return content.workspaceName || content.title;
+}
 export function requireContentRevision(actual: number, expected: number): void {
   if (
     !Number.isSafeInteger(actual) ||

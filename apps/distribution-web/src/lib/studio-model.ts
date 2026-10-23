@@ -16,6 +16,8 @@ export type PublicStudioOutput = Omit<StudioOutput, "asset" | "captions" | "thum
   captions: { language: StudioOutput["language"]; asset: PublicStudioAsset; translated: boolean }[];
 };
 export type PublicStudioPackage = Omit<StudioPackage, "outputs"> & {
+  /** Display-only organizing label, outside the immutable source snapshot. */
+  workspaceName?: string | null;
   outputs: PublicStudioOutput[];
 };
 export type PublicStudioPublication = Omit<StudioPublication, "accountId"> & {
@@ -346,4 +348,8 @@ export function studioMessage(code: string): string {
     messages[code] ??
     "This action is unavailable. Refresh the package and check its source and service readiness."
   );
+}
+
+export function studioSourceName(value: PublicStudioPackage) {
+  return value.workspaceName || value.source.title;
 }

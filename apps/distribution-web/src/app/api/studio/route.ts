@@ -19,15 +19,19 @@ export async function GET(request: Request) {
     const packages = (await repo.list(auth.context, query)).filter(
       (item) => !query.status || item.status === query.status,
     );
-    const [publications, readiness] = await Promise.all([
+    const [publications, readiness, names] = await Promise.all([
       repo.listPublicationsForPackages(
         auth.context,
         packages.map((item) => item.id),
       ),
       studioReadiness(auth.context),
+      auth.repo.workspaceNames(
+        auth.context,
+        packages.map((p) => p.source.masterId),
+      ),
     ]);
     return json({
-      packages: packages.map(publicStudioPackage),
+      packages: packages.map((p) => publicStudioPackage(p, names[p.source.masterId])),
       publications: publications.map(publicStudioPublication),
       readiness,
     });

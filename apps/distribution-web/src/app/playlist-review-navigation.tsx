@@ -1,4 +1,5 @@
 "use client";
+import { studioSourceName } from "../lib/studio-model";
 import { type PublicStudioPackage, studioStatusLabel } from "../lib/studio-model";
 import { studioSourceVideo } from "../lib/studio-source-outcome";
 
@@ -55,7 +56,7 @@ export function PlaylistReviewNavigation({
             {index < 0 && <option value="">Choose a recording</option>}
             {packages.map((item, position) => (
               <option key={item.id} value={item.id}>
-                {position + 1}. {item.source.title}
+                {position + 1}. {studioSourceName(item)}
                 {packages.some(
                   (p) =>
                     p.source.title === item.source.title &&

@@ -155,7 +155,7 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
       ok: true,
       context,
       capabilities: ["content.create", "content.review", "content.publish"],
-      repo: { get: m.master },
+      repo: { get: m.master, workspaceNames: vi.fn().mockResolvedValue({}) },
     });
     m.query.mockResolvedValue({ rows: [{ language: "en" }] });
     m.repo.mockReturnValue(m);

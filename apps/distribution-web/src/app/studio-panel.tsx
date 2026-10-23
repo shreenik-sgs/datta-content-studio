@@ -7,6 +7,7 @@ import {
   STUDIO_CHANNELS,
   STUDIO_LANGUAGES,
   type StudioGenerationRequest,
+  contentDisplayName,
   studioAppDestination,
   studioAppLinks,
   studioCanDiscard,
@@ -20,7 +21,7 @@ import {
   studioNeedsSuitabilityReview,
   studioWorkflow,
 } from "@satsang/distribution-domain";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   type PublicStudioOutput,
   type PublicStudioPackage,
@@ -28,6 +29,7 @@ import {
   type StudioDetail,
   type StudioListing,
   studioMessage,
+  studioSourceName,
   studioStatusLabel,
 } from "../lib/studio-model";
 
@@ -49,6 +51,7 @@ import { StudioQualitySelection } from "./studio-quality-selection";
 import { StudioSourceRecovery } from "./studio-source-recovery";
 import { StudioSourceReview } from "./studio-source-review";
 import { StudioWorkflow } from "./studio-workflow";
+import { WorkspaceName } from "./workspace-name";
 
 const API = "/distribution/api/studio";
 const checkStyle = {
@@ -453,6 +456,7 @@ export function StudioPanel({
   excludedMasterIds = [],
   bundle,
   onBackToBundle,
+  onRenameBundle,
 }: {
   scope?: "ongoing" | "complete";
   excludedMasterIds?: readonly string[];
@@ -465,6 +469,7 @@ export function StudioPanel({
     sourceLinks?: Readonly<Record<string, string>>;
   };
   onBackToBundle?: () => void;
+  onRenameBundle?: ReactNode;
   content?: ContentMaster;
   initialPackageId?: string | undefined;
   capabilities: readonly DistributionCapability[];
@@ -712,7 +717,7 @@ export function StudioPanel({
           (filter === "active" ||
             item.status === filter ||
             item.outputs.some((o) => o.workflow && studioFileStatus(item, o) === filter)) &&
-          matchesSearch(item.source.title),
+          matchesSearch(`${studioSourceName(item)} ${item.source.title}`),
       )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) ?? [];
   const visibleUnstarted = unstarted.filter(
@@ -720,7 +725,7 @@ export function StudioPanel({
       !excludedMasterIds.includes(source.id) &&
       !bundle &&
       (filter === "active" || filter === "SETUP") &&
-      matchesSearch(source.title),
+      matchesSearch(`${contentDisplayName(source)} ${source.title}`),
   );
   const masterGroups = [
     ...visible
@@ -775,6 +780,7 @@ export function StudioPanel({
       <section className="panel" aria-label="Intelligent content" style={{ minWidth: 0 }}>
         <div className="actions wrap series-context-heading">
           <strong>{bundle.title}</strong>
+          {onRenameBundle}
           <button className="button" type="button" onClick={onBackToBundle}>
             Back to playlist overview
           </button>
@@ -883,13 +889,22 @@ export function StudioPanel({
         <div style={{ minWidth: 0 }}>
           <h2 className="workspace-title" ref={heading} tabIndex={-1}>
             {value
-              ? value.source.title
+              ? studioSourceName(value)
               : content
                 ? "Channel content from this master"
                 : scope === "complete"
                   ? "Approved channel content"
                   : "Individual masters"}
           </h2>
+          {value && canCreate && (
+            <WorkspaceName
+              kind="master"
+              id={value.source.masterId}
+              title={studioSourceName(value)}
+              name={value.workspaceName}
+              onSaved={() => load(undefined, true)}
+            />
+          )}
         </div>
         {selectedId && !bundle && (
           <button
@@ -1348,7 +1363,7 @@ export function StudioPanel({
                     onClick={() => select(item)}
                   >
                     <div className="card-body">
-                      <h3 style={{ overflowWrap: "anywhere" }}>{item.source.title}</h3>
+                      <h3 style={{ overflowWrap: "anywhere" }}>{studioSourceName(item)}</h3>
                       <span className="badge">{studioStatusLabel(item)}</span>
                       {scope !== "complete" && currentStep && (
                         <p>
@@ -1397,7 +1412,7 @@ export function StudioPanel({
                     onClick={() => onOpenSource?.(source.id)}
                   >
                     <div className="card-body">
-                      <h3 style={{ overflowWrap: "anywhere" }}>{source.title}</h3>
+                      <h3 style={{ overflowWrap: "anywhere" }}>{contentDisplayName(source)}</h3>
                       <span className="badge">
                         {permissions.allowed ? "Ready to generate" : "Permissions needed"}
                       </span>
