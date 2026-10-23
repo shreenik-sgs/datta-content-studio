@@ -1,7 +1,7 @@
 # Datta Media Studio staging
 
 This stack is independent of SGS Datta Sannidhi and production. The application is
-available at https://studio-staging.sgsdattasannidhi.org/distribution.
+available at https://gbadpt.sgsdattasannidhi.org/distribution.
 
 ## Resources and isolation
 
@@ -10,6 +10,11 @@ its own VPC, EC2 host, encrypted retained data volume, private versioned S3 buck
 ECR repository and scoped instance role. PostgreSQL, web and worker listeners bind
 to loopback; only the Caddy HTTPS proxy is public. Access the host using SSM, not SSH.
 Production/Sannidhi ECS services and databases are not deployment targets.
+
+Supply `Ami` as an explicit image ID. For an existing stack, read the running
+instance's ImageId and retain it. Resolving an SSM `latest` image during a DNS or
+branding update can unexpectedly replace the server. Inspect every change set and
+reject host, volume or attachment replacements during a hostname-only cutover.
 
 Runtime secrets are SecureString parameters under `/datta-content-studio/staging/`:
 `runtime`, `postgres`, and `migration`. Never commit their values. Keep
@@ -20,10 +25,12 @@ use the same operator password, rate limit and role authorization.
 
 ## Separate GBADPT and DP installations
 
-The existing single-instance deployment scripts still target `studio-staging`.
-Do not point both proposed subdomains at that one database or run these scripts
-unchanged to create a second installation. Resource names, credentials, storage,
-backup destinations and service identifiers must be isolated per deployment.
+The existing single-instance stack belongs to GBADPT. Its hostname replaces
+`studio-staging.sgsdattasannidhi.org`; the old DNS record is removed, with no
+redirect. Existing database, media, accounts and resource identifiers remain in
+place. The launch script accepts only GBADPT (and the legacy hostname for rollback),
+requires the configured origin to match, and refuses DP. Resource names, credentials,
+storage, backup destinations and service identifiers must be isolated for DP.
 
 - GBADPT: `STUDIO_IDENTITY=gbadpt`, origin `https://gbadpt.sgsdattasannidhi.org`.
   Owns the Vishnu Purana masters and 95 Shorts. The owner currently keeps these

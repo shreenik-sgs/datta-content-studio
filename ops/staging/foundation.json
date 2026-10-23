@@ -3,8 +3,8 @@
   "Description": "Isolated Datta Media Studio staging. Never targets Sannidhi ECS, databases or media. Persistent data retained on deletion.",
   "Parameters": {
     "Ami": {
-      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
-      "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
+      "Type": "AWS::EC2::Image::Id",
+      "Description": "Explicitly pinned ARM64 AMI. For existing stacks, retain the running host's ImageId; never resolve a latest-image alias during an unrelated update."
     },
     "HostedZoneId": {
       "Type": "AWS::Route53::HostedZone::Id"
@@ -12,7 +12,7 @@
     "Hostname": {
       "Type": "String",
       "AllowedPattern": "[a-z0-9.-]+",
-      "Default": "studio-staging.sgsdattasannidhi.org"
+      "Default": "gbadpt.sgsdattasannidhi.org"
     }
   },
   "Resources": {

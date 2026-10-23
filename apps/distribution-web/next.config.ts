@@ -17,6 +17,9 @@ const config: NextConfig = {
     "@satsang/distribution-db",
     "@satsang/distribution-links",
   ],
+  async redirects() {
+    return [{ source: "/", destination: "/distribution", basePath: false, permanent: false }];
+  },
   async headers() {
     return [
       {
