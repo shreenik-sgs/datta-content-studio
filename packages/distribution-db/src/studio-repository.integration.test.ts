@@ -801,6 +801,24 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
   it("generation before approval requires explicit transcript and integrity acknowledgment", async () => {
     const f = await fixture({ approved: false });
     let pkg = await draft(f);
+    const draftOutputs = structuredClone(pkg.outputs);
+    await expect(
+      studio.submit(f.reviewer, pkg.id, { expectedRevision: pkg.revision }),
+    ).rejects.toThrow("FORBIDDEN");
+    await expect(
+      studio.review(f.reviewer, pkg.id, {
+        expectedRevision: pkg.revision,
+        decision: "APPROVED",
+        confirmTranscript: true,
+        confirmTeachingIntegrity: true,
+      }),
+    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
+    expect(await studio.get(f.reviewer, pkg.id)).toMatchObject({
+      status: "DRAFT",
+      revision: pkg.revision,
+      approval: null,
+      outputs: draftOutputs,
+    });
     pkg = await studio.submit(f.ctx, pkg.id, { expectedRevision: pkg.revision });
     await expect(
       studio.review(f.reviewer, pkg.id, {

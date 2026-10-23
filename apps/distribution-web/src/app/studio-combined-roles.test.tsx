@@ -10,6 +10,53 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
+it("explains the Curator handoff to an Approver without offering draft approval or submission", async () => {
+  vi.stubGlobal("React", React);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  Element.prototype.scrollIntoView = vi.fn();
+  const requests = vi.fn(async (url: string, options?: RequestInit) => {
+    expect(options?.method ?? "GET").toBe("GET");
+    if (url.endsWith("/history")) return Response.json({ history: [] });
+    if (url.includes("/series")) return Response.json({ bundles: [] });
+    const readiness = { generation: { available: true, translation: true }, channels: [] };
+    if (url.includes("?")) return Response.json({ packages: [value], readiness });
+    return Response.json({
+      package: value,
+      publications: [],
+      readiness,
+      blockers: ["NOT_APPROVED"],
+    });
+  });
+  vi.stubGlobal("fetch", requests);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <StudioPanel
+          initialPackageId={value.id}
+          capabilities={["content.review", "content.publish"]}
+        />,
+      ),
+    );
+    expect(host.textContent).toContain("Awaiting Curator submission");
+    expect(host.querySelector('[aria-label="Curator handoff"]')?.textContent).toContain(
+      "Submit package for review",
+    );
+    expect(host.textContent).toContain("it does not upload videos to YouTube");
+    const labels = [...host.querySelectorAll("button")].map((button) => button.textContent?.trim());
+    expect(labels).not.toContain("Approve package");
+    expect(labels).not.toContain("Approve master permissions");
+    expect(labels).not.toContain("Submit package for review");
+    expect(labels).not.toContain("Run test publication");
+    expect(labels).not.toContain("Next: check and submit →");
+    expect(host.querySelectorAll("form")).toHaveLength(0);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("shows exactly one stage of actions for a combined operator and preserves the selected package", async () => {
   vi.stubGlobal("React", React);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

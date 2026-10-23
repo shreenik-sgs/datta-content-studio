@@ -758,6 +758,9 @@ export function StudioPanel({
           <PlaylistFiles
             totalRecordings={bundle.totalRecordings}
             packages={bundlePackages}
+            canCurate={canCreate}
+            canReview={canReview}
+            canPublish={canPublish}
             onOpen={select}
             onPreview={(item, outputId) => setBundlePreview({ packageId: item.id, outputId })}
           />
@@ -891,6 +894,7 @@ export function StudioPanel({
         <StudioWorkflow
           value={value}
           combinedRoles={combinedRoles}
+          reviewerOnly={canReview && !canCreate}
           hasMaster={Boolean(content)}
           permissionsReady={sourcePermissions?.allowed}
           publications={detail?.publications ?? []}
@@ -919,7 +923,9 @@ export function StudioPanel({
                         ? studioNeedsSuitabilityReview(value.failure)
                           ? "review source and guidance"
                           : "check generation issue"
-                        : "check and submit"
+                        : canCreate
+                          ? "check and submit"
+                          : "awaiting Curator submission"
           }
           nextDisabled={
             busy ||
@@ -977,6 +983,26 @@ export function StudioPanel({
             target?.focus({ preventScroll: true });
           }}
         />
+      )}
+      {value?.status === "DRAFT" && canReview && !canCreate && (
+        <section className="panel" aria-label="Curator handoff" style={{ marginBlock: 16 }}>
+          <h3>These files have not been submitted for approval</h3>
+          <p>
+            The Curator must open this recording under Continue Existing Curation, check its files,
+            then choose <strong>Submit package for review</strong> in step 3. You can then use
+            <strong> Review &amp; approve</strong> in step 4.
+          </p>
+          <p>
+            Approval covers all included files from this recording. After approval, step 6 lets you
+            choose the target account and post them.
+          </p>
+          {value.isTest && (
+            <p>
+              <strong>This is a test workspace.</strong> Its publication action is a simulation; it
+              does not upload videos to YouTube.
+            </p>
+          )}
+        </section>
       )}
       {detail && value && ["IN_REVIEW", "APPROVED"].includes(value.status) && (
         <StudioPublishing

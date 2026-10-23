@@ -33,6 +33,69 @@ const second = {
   })),
 };
 
+it("separates drafts from submitted work and directs an Approver only to a submitted recording", async () => {
+  const { host, root } = setup();
+  const onOpen = vi.fn();
+  const submitted = { ...second, status: "IN_REVIEW" as const };
+  try {
+    await act(async () =>
+      root.render(
+        <PlaylistFiles
+          packages={[first, submitted]}
+          canReview
+          canPublish
+          onOpen={onOpen}
+          onPreview={vi.fn()}
+        />,
+      ),
+    );
+    expect(host.textContent).toContain(
+      "1 files awaiting Curator submission · 1 files ready for Approver review",
+    );
+    expect(host.textContent).toContain("Approval controls appear after submission");
+    expect(host.textContent).toContain("publication is simulated");
+    expect(
+      host.querySelector('button[aria-label="Open workflow for First recording"]')?.textContent,
+    ).toBe("Preview draft");
+    expect(
+      host.querySelector('button[aria-label="Open workflow for Second recording"]')?.textContent,
+    ).toBe("Review & approve");
+    expect(onOpen).not.toHaveBeenCalled();
+    await act(async () =>
+      [...host.querySelectorAll("button")]
+        .find((b) => b.textContent === "Review next recording")
+        ?.click(),
+    );
+    expect(onOpen).toHaveBeenCalledWith(submitted);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("gives the Curator an explicit check-and-submit entry without approving on navigation", async () => {
+  const { host, root } = setup();
+  const onOpen = vi.fn();
+  try {
+    await act(async () =>
+      root.render(
+        <PlaylistFiles packages={[first]} canCurate onOpen={onOpen} onPreview={vi.fn()} />,
+      ),
+    );
+    expect(
+      host.querySelector('button[aria-label="Open workflow for First recording"]')?.textContent,
+    ).toBe("Check & submit");
+    expect(host.textContent).not.toContain("Approval controls appear after submission");
+    await act(async () =>
+      [...host.querySelectorAll("button")]
+        .find((b) => b.textContent === "Check & submit next recording")
+        ?.click(),
+    );
+    expect(onOpen).toHaveBeenCalledWith(first);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("explains reviewed parts with no suitable excerpt instead of implying they are still generating", async () => {
   const { host, root } = setup();
   const onOpen = vi.fn();

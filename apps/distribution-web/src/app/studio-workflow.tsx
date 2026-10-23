@@ -6,6 +6,7 @@ import "./studio-workflow.css";
 export function StudioWorkflow({
   value,
   combinedRoles = false,
+  reviewerOnly = false,
   hasMaster,
   starting = false,
   permissionsReady,
@@ -17,6 +18,7 @@ export function StudioWorkflow({
 }: {
   value: PublicStudioPackage | undefined;
   combinedRoles?: boolean;
+  reviewerOnly?: boolean;
   hasMaster: boolean;
   starting?: boolean;
   permissionsReady: boolean | undefined;
@@ -50,7 +52,13 @@ export function StudioWorkflow({
                 : "Six steps"}
         </span>
       </div>
-      <p aria-live="polite">{flow.message}</p>
+      <p aria-live="polite">
+        {reviewerOnly && value?.status === "DRAFT"
+          ? "Awaiting Curator submission. You can preview the drafts, but approval becomes available after the Curator submits this recording’s files for review."
+          : reviewerOnly && value?.status === "IN_REVIEW"
+            ? "Review the master permissions and included files, then approve or request changes."
+            : flow.message}
+      </p>
       <ol>
         {flow.steps.map((step) => (
           <li

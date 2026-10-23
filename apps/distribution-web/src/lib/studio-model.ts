@@ -34,7 +34,7 @@ export type StudioListing = {
 export const STUDIO_STATUS_LABELS: Record<StudioPackage["status"], string> = {
   QUEUED: "Queued for generation",
   GENERATING: "Generating content",
-  DRAFT: "Ready for Content Curator check",
+  DRAFT: "Awaiting Curator submission",
   IN_REVIEW: "Awaiting Content Approver review",
   CHANGES_REQUESTED: "Changes requested",
   APPROVED: "Approved",

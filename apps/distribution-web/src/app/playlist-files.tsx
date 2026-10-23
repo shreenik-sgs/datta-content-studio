@@ -13,9 +13,15 @@ export function PlaylistFiles({
   onOpen,
   onPreview,
   totalRecordings,
+  canCurate = false,
+  canReview = false,
+  canPublish = false,
 }: {
   packages: readonly PublicStudioPackage[];
   totalRecordings?: number | undefined;
+  canCurate?: boolean;
+  canReview?: boolean;
+  canPublish?: boolean;
   onOpen: (value: PublicStudioPackage) => void;
   onPreview: (value: PublicStudioPackage, outputId: string) => void;
 }) {
@@ -44,6 +50,22 @@ export function PlaylistFiles({
         (value.status === "FAILED" && studioNeedsSuitabilityReview(value.failure))),
   );
   const waiting = packages.filter((value) => !value.outputs.length && !skipped.includes(value));
+  const includedCount = (value: PublicStudioPackage) =>
+    value.outputs.filter((o) => o.included).length;
+  const drafts = packages.filter((value) => value.status === "DRAFT" && includedCount(value));
+  const submitted = packages.filter(
+    (value) => value.status === "IN_REVIEW" && includedCount(value),
+  );
+  const nextReview = canReview ? submitted[0] : undefined;
+  const nextDraft = canCurate ? drafts[0] : undefined;
+  const actionLabel = (value: PublicStudioPackage) => {
+    if (value.status === "DRAFT")
+      return canCurate ? "Check & submit" : canReview ? "Preview draft" : "Open workflow";
+    if (value.status === "IN_REVIEW" && canReview) return "Review & approve";
+    if (value.status === "APPROVED" && canPublish) return "Open publishing";
+    if (value.status === "CHANGES_REQUESTED" && canCurate) return "Fix & resubmit";
+    return "Open workflow";
+  };
   return (
     <section className="studio-lineage" aria-label="All bundle files">
       <h3>All bundle files</h3>
@@ -56,6 +78,44 @@ export function PlaylistFiles({
           )
           .join("")}
       </p>
+      {(canCurate || canReview) && (drafts.length > 0 || submitted.length > 0) && (
+        <section className="panel" aria-label="Review handoff" style={{ marginBlock: 16 }}>
+          <h4>Next action</h4>
+          <p>
+            {drafts.reduce((count, value) => count + includedCount(value), 0)} files awaiting
+            Curator submission ·{" "}
+            {submitted.reduce((count, value) => count + includedCount(value), 0)} files ready for
+            Approver review.
+          </p>
+          {canReview && !canCurate && drafts.length > 0 && (
+            <p>
+              Drafts must first be checked and submitted by the Curator. Ask the Curator to choose
+              <strong> Check &amp; submit</strong> for each recording, then
+              <strong> Submit package for review</strong>. Approval controls appear after
+              submission.
+            </p>
+          )}
+          <p>
+            Review and approval apply to each recording’s included files. Posting is a separate
+            action after approval.
+          </p>
+          {packages.length > 0 && packages.every((value) => value.isTest) && (
+            <p>
+              <strong>Test workspace:</strong> publication is simulated; no videos are posted to
+              YouTube.
+            </p>
+          )}
+          {nextReview ? (
+            <button type="button" className="button primary" onClick={() => onOpen(nextReview)}>
+              Review next recording
+            </button>
+          ) : nextDraft ? (
+            <button type="button" className="button primary" onClick={() => onOpen(nextDraft)}>
+              Check &amp; submit next recording
+            </button>
+          ) : null}
+        </section>
+      )}
       {totalRecordings !== undefined && totalRecordings > packages.length && (
         <p>
           This bundle contains {totalRecordings} recordings. Another{" "}
@@ -135,7 +195,7 @@ export function PlaylistFiles({
                           onClick={() => onOpen(value)}
                           aria-label={`Open workflow for ${value.source.title}`}
                         >
-                          Open workflow
+                          {actionLabel(value)}
                         </button>
                       </th>
                     )}
