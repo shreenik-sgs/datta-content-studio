@@ -185,6 +185,35 @@ suite("GBADPT isolated TEST-to-live clone promotion", () => {
     await expect(promote()).rejects.toThrow("PROMOTION_UNKNOWN_MODULE_STATE");
     expect((await db.query("SELECT * FROM distribution.module_state")).rowCount).toBe(1);
   });
+  it("preserves removal tombstones and restores erasure guards before releasing the clone", async () => {
+    await db.query("UPDATE distribution.studio_package SET deleted_at=now() WHERE id=$1", [
+      packageId,
+    ]);
+    const removedAt = (
+      await db.query("SELECT deleted_at FROM distribution.studio_package WHERE id=$1", [packageId])
+    ).rows[0].deleted_at;
+    await promote(false);
+    await expect(
+      db.query("UPDATE distribution.studio_package SET deleted_at=NULL WHERE id=$1", [packageId]),
+    ).rejects.toThrow("CONTENT_REMOVED");
+    await promote();
+    const after = (
+      await db.query("SELECT deleted_at,is_test FROM distribution.studio_package WHERE id=$1", [
+        packageId,
+      ])
+    ).rows[0];
+    expect(after).toEqual({ deleted_at: removedAt, is_test: false });
+    await expect(
+      db.query("UPDATE distribution.studio_package SET deleted_at=NULL WHERE id=$1", [packageId]),
+    ).rejects.toThrow("CONTENT_REMOVED");
+    expect(
+      (
+        await db.query(
+          "SELECT DISTINCT tgenabled FROM pg_trigger WHERE tgname='guard_erased_content'",
+        )
+      ).rows,
+    ).toEqual([{ tgenabled: "O" }]);
+  });
   it("rejects outstanding publication records instead of turning a simulation into an upload", async () => {
     await db.query(
       "INSERT INTO distribution.studio_publication_job(package_id,is_test,package_revision,output_id,channel,requested_by,status) VALUES($1,true,1,$2,'youtube','test','SIMULATED')",

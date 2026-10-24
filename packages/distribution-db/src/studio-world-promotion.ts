@@ -131,6 +131,22 @@ export async function promoteGbadptClone(
       FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid
       JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='distribution' AND c.contype='f' AND c.conparentid=0`)
     ).rows;
+    // The clone's erased-content guard also blocks a world-only metadata change.
+    // Suspend only this known guard while every table is exclusively locked;
+    // exact row comparison below preserves tombstones and all original evidence.
+    const erasureGuards = (
+      await client.query(`SELECT t.relname, g.tgenabled FROM pg_trigger g
+      JOIN pg_class t ON t.oid=g.tgrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+      JOIN pg_proc f ON f.oid=g.tgfoid JOIN pg_namespace fn ON fn.oid=f.pronamespace
+      WHERE n.nspname='distribution' AND g.tgname='guard_erased_content'
+      AND fn.nspname='distribution' AND f.proname='guard_erased_content' AND NOT g.tgisinternal`)
+    ).rows;
+    if (erasureGuards.some((guard) => guard.tgenabled !== "O"))
+      throw Error("PROMOTION_ERASURE_GUARD_NOT_ENABLED");
+    for (const guard of erasureGuards)
+      await client.query(
+        `ALTER TABLE distribution.${identifier(guard.relname)} DISABLE TRIGGER guard_erased_content`,
+      );
     for (const c of constraints)
       await client.query(
         `ALTER TABLE distribution.${identifier(c.relname)} ALTER CONSTRAINT ${identifier(c.conname)} DEFERRABLE INITIALLY DEFERRED`,
@@ -175,6 +191,10 @@ export async function promoteGbadptClone(
       worldKey(false, input.key),
     );
     if (digest(verifySettings) !== digest(config)) throw Error("PROMOTION_SETTINGS_CHANGED");
+    for (const guard of erasureGuards)
+      await client.query(
+        `ALTER TABLE distribution.${identifier(guard.relname)} ENABLE TRIGGER guard_erased_content`,
+      );
     const report = {
       applied: input.apply,
       tables: [...before]
