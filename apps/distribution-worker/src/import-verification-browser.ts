@@ -7,7 +7,7 @@ import type {
   ImportVerificationState,
 } from "@satsang/distribution-contracts";
 import type { DistributionContext } from "@satsang/distribution-db";
-import type { OnlineVideoSource } from "@satsang/distribution-domain";
+import { type OnlineVideoSource, verificationSignInBlocked } from "@satsang/distribution-domain";
 import { type Browser, type BrowserContext, type Page, chromium } from "playwright";
 import { type OnlineImportWorkerInput, runOnlineImportOnce } from "./online-import-worker.js";
 import { downloadOnlineVideo } from "./online-video-download.js";
@@ -36,7 +36,11 @@ export function youtubeCookieJar(cookies: Awaited<ReturnType<BrowserContext["coo
   return `# Netscape HTTP Cookie File\n${rows.join("\n")}\n`;
 }
 export type VerificationBrowser = {
-  snapshot: () => Promise<{ image: string; origin: string }>;
+  snapshot: () => Promise<{
+    image?: string;
+    origin: string;
+    error?: "VERIFICATION_SIGN_IN_BLOCKED";
+  }>;
   command: (command: ImportVerificationAction) => Promise<void>;
   credentials: () => Promise<{ cookies: string; userAgent: string }>;
   close: () => Promise<void>;
@@ -93,10 +97,19 @@ export async function openVerificationBrowser(
     });
     await page.goto(source.url, { waitUntil: "domcontentloaded", timeout: 45000 });
     return {
-      snapshot: async () => ({
-        image: `data:image/jpeg;base64,${(await page.screenshot({ type: "jpeg", quality: 70, timeout: 5000 })).toString("base64")}`,
-        origin: new URL(page.url()).origin,
-      }),
+      snapshot: async () => {
+        const origin = new URL(page.url()).origin;
+        // Inspect only the rendered error, never form values, URLs with OAuth tokens or cookies.
+        if (
+          origin === "https://accounts.google.com" &&
+          verificationSignInBlocked(origin, await page.locator("body").innerText({ timeout: 5000 }))
+        )
+          return { origin, error: "VERIFICATION_SIGN_IN_BLOCKED" };
+        return {
+          image: `data:image/jpeg;base64,${(await page.screenshot({ type: "jpeg", quality: 70, timeout: 5000 })).toString("base64")}`,
+          origin,
+        };
+      },
       command: async (command) => {
         switch (command.action) {
           case "click":
@@ -157,13 +170,25 @@ export function createImportVerificationManager(
   const download = dependencies.download ?? downloadOnlineVideo;
   const sessions = new Map<string, Session>();
   let starting = false;
-  const publicState = async (value: Session): Promise<ImportVerificationState> => ({
-    sessionId: value.id,
-    status: value.status,
-    expiresAt: new Date(value.expires).toISOString(),
-    ...(value.browser && value.status === "OPEN" ? await value.browser.snapshot() : {}),
-    ...(value.error ? { error: value.error } : {}),
-  });
+  const publicState = async (value: Session): Promise<ImportVerificationState> => {
+    let snapshot = value.browser && value.status === "OPEN" ? await value.browser.snapshot() : {};
+    if ("error" in snapshot && snapshot.error === "VERIFICATION_SIGN_IN_BLOCKED") {
+      value.status = "FAILED";
+      value.error = snapshot.error;
+      value.credentials = undefined;
+      const browser = value.browser;
+      value.browser = undefined;
+      await browser?.close().catch(() => undefined);
+      snapshot = {};
+    }
+    return {
+      sessionId: value.id,
+      status: value.status,
+      expiresAt: new Date(value.expires).toISOString(),
+      ...snapshot,
+      ...(value.error ? { error: value.error } : {}),
+    };
+  };
   async function dispose(value: Session) {
     value.controller.abort();
     await value.browser?.close();
@@ -333,6 +358,8 @@ export function createImportVerificationManager(
         return publicState(value);
       }
       if (command.action === "check") {
+        // A direct check request must not download using a rejected sign-in either.
+        if (value.status === "OPEN") await publicState(value);
         if (value.status === "OPEN") {
           value.status = "CHECKING";
           value.expires = clock() + 65 * 60 * 1000;

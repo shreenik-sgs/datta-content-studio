@@ -105,6 +105,7 @@ export function ImportRecovery({
   const perform = (command: ImportVerificationAction) => void enqueue(command);
   const sessionId = session?.sessionId;
   const sessionStatus = session?.status;
+  const signInBlocked = session?.error === "VERIFICATION_SIGN_IN_BLOCKED";
   const signingIn = session?.origin === "https://accounts.google.com";
   useEffect(() => {
     if (!sessionId || sessionStatus !== "OPEN") return;
@@ -169,11 +170,13 @@ export function ImportRecovery({
       {session && session.status !== "CLOSED" && (
         <section className="panel verification-window" aria-label="YouTube verification">
           <h3>YouTube access verification</h3>
-          <p>
-            Complete any sign-in or verification YouTube presents here. Studio checks access
-            automatically when Google sign-in returns to YouTube. Otherwise, use Check access and
-            resume playlist after completing the check. This session expires automatically.
-          </p>
+          {session.status === "OPEN" && (
+            <p>
+              Complete any sign-in or verification YouTube presents here. Studio checks access
+              automatically when Google sign-in returns to YouTube. Otherwise, use Check access and
+              resume playlist after completing the check. This session expires automatically.
+            </p>
+          )}
           {error && <p role="alert">{error}</p>}
           {session.status === "OPEN" && image && (
             <>
@@ -304,14 +307,24 @@ export function ImportRecovery({
                 {IMPORT_RECOVERY_ERRORS[session.error ?? ""] ??
                   IMPORT_RECOVERY_ERRORS.VERIFICATION_FAILED}
               </p>
-              <button
-                type="button"
-                className="button"
-                disabled={busy}
-                onClick={() => perform({ action: "start" })}
-              >
-                Open verification again
-              </button>
+              {signInBlocked ? (
+                <a
+                  href="https://support.google.com/accounts/answer/7675428"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Why Google can block this sign-in
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="button"
+                  disabled={busy}
+                  onClick={() => perform({ action: "start" })}
+                >
+                  Open verification again
+                </button>
+              )}
             </>
           )}
           <button
@@ -328,7 +341,7 @@ export function ImportRecovery({
         </section>
       )}
       {!session && error && <p role="alert">{error}</p>}
-      <PlaylistOriginals item={item} items={items} onSaved={onSaved} />
+      <PlaylistOriginals item={item} items={items} onSaved={onSaved} expanded={signInBlocked} />
     </section>
   );
 }

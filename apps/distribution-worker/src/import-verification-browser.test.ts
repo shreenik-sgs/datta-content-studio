@@ -1,7 +1,11 @@
 import type { PrivateAssetStore } from "@satsang/distribution-assets";
 import type { createOnlineImportRepository } from "@satsang/distribution-db";
 import { afterEach, expect, it, vi } from "vitest";
-import { createImportVerificationManager, youtubeCookieJar } from "./import-verification-browser";
+import {
+  type VerificationBrowser,
+  createImportVerificationManager,
+  youtubeCookieJar,
+} from "./import-verification-browser";
 import type { downloadOnlineVideo } from "./online-video-download";
 import {
   allowedVerificationHost,
@@ -46,13 +50,13 @@ function setup(fail = false) {
     retryPlaylist: vi.fn(),
   };
   const browser = {
-    snapshot: vi.fn(async () => ({
+    snapshot: vi.fn<VerificationBrowser["snapshot"]>(async () => ({
       image: "data:image/jpeg;base64,AA==",
       origin: "https://www.youtube.com",
     })),
     command: vi.fn(),
     credentials: vi.fn(async () => ({ cookies: "SECRET_COOKIES", userAgent: "Browser agent" })),
-    close: vi.fn(),
+    close: vi.fn(async () => undefined),
   };
   const download = vi.fn(async (request: Parameters<typeof downloadOnlineVideo>[0]) => {
     if (fail) throw Error("ONLINE_PROVIDER_VERIFICATION_REQUIRED");
@@ -140,6 +144,28 @@ it("failed access never reports verified or resumes the playlist", async () => {
   expect(repo.complete).not.toHaveBeenCalled();
   expect(repo.retryPlaylist).not.toHaveBeenCalled();
 });
+it.each(["status", "check"] as const)(
+  "stops a rejected Google sign-in on %s without reading credentials or attempting a download",
+  async (action) => {
+    const { manager, repo, browser, download } = setup();
+    const opened = await manager.handle(ctx, "import", { action: "start" });
+    browser.snapshot.mockResolvedValue({
+      origin: "https://accounts.google.com",
+      error: "VERIFICATION_SIGN_IN_BLOCKED",
+    });
+    const failed = await manager.handle(ctx, "import", { action, sessionId: opened.sessionId });
+    expect(failed).toMatchObject({ status: "FAILED", error: "VERIFICATION_SIGN_IN_BLOCKED" });
+    expect(failed.image).toBeUndefined();
+    expect(failed.origin).toBeUndefined();
+    expect(browser.close).toHaveBeenCalledOnce();
+    await manager.handle(ctx, "import", { action: "check", sessionId: opened.sessionId });
+    expect(browser.credentials).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+    expect(repo.claimVerification).not.toHaveBeenCalled();
+    expect(repo.retryPlaylist).not.toHaveBeenCalled();
+    expect(manager.paused()).toBe(false);
+  },
+);
 it("isolates operators, imports, worlds, expired sessions and revocation", async () => {
   const { manager, repo, advance } = setup();
   const opened = await manager.handle(ctx, "import", { action: "start" });

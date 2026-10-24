@@ -40,6 +40,18 @@ successful: a recording must be saved. A challenge on YouTube itself still requi
 the user to finish it and select **Check access and resume playlist**. No CAPTCHA is
 automatically solved, dismissed or bypassed.
 
+Google can reject this browser with “This browser or app may not be secure”; see
+[Google's supported-browser guidance](https://support.google.com/accounts/answer/7675428).
+This was observed on GBADPT staging after the browser startup repair. The worker now
+recognizes that explicit rejection on Google's sign-in origin, ends the failed
+session, and never exports its cookies or starts a verification download. The UI
+stops polling, explains the restriction, removes the immediate retry prompt and
+expands original-file upload. Ordinary password prompts and human challenges are
+not treated as this failure. No automation-detection masking or security bypass is
+used. Signing in separately in Chrome does not authenticate the cloud importer.
+The seven-video Bhagavat Kath playlist remains paused until a real authorized
+download succeeds or original recordings are attached to its saved members.
+
 The implementation is opt-in. Set these server variables separately in each environment:
 
 | Variable | Where | Value |

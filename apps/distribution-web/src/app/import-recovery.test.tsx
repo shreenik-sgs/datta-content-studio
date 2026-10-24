@@ -24,14 +24,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
-async function setup() {
+async function setup(source = item) {
   vi.stubGlobal("React", React);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   const onSaved = vi.fn(async () => undefined);
-  await act(async () => root.render(<ImportRecovery item={item} items={[]} onSaved={onSaved} />));
+  await act(async () => root.render(<ImportRecovery item={source} items={[]} onSaved={onSaved} />));
   const button = (text: string) => {
     const found = [...host.querySelectorAll("button")].find((node) => node.textContent === text);
     if (!found) throw Error(`Missing button: ${text}`);
@@ -39,6 +39,40 @@ async function setup() {
   };
   return { host, root, onSaved, button };
 }
+
+it("ends polling after Google blocks sign-in and exposes original upload instead of a retry loop", async () => {
+  vi.useFakeTimers();
+  let state = opened;
+  const fetcher = vi.fn(async () => Response.json(state));
+  vi.stubGlobal("fetch", fetcher);
+  const { host, root, button, onSaved } = await setup({
+    ...item,
+    source: { ...item.source, kind: "video" },
+  });
+  try {
+    await act(async () => button("Verify YouTube access").click());
+    state = {
+      sessionId: opened.sessionId,
+      expiresAt: opened.expiresAt,
+      status: "FAILED",
+      error: "VERIFICATION_SIGN_IN_BLOCKED",
+    };
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
+    expect(host.textContent).toContain("Google blocked sign-in");
+    expect(host.textContent).not.toContain("Finish Google sign-in here");
+    expect(host.textContent).not.toContain("Open verification again");
+    expect(host.querySelector("details[open]")?.textContent).toContain(
+      "Upload original recordings",
+    );
+    expect(host.querySelector('input[type="file"]')).not.toBeNull();
+    expect(host.querySelector(".verification-screen")).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(onSaved).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 
 it("preserves unfinished Google sign-in and explains the unsupported device prompt", async () => {
   vi.useFakeTimers();

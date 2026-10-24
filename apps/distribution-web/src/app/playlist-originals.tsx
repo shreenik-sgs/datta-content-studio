@@ -19,7 +19,13 @@ export function PlaylistOriginals({
   item,
   items,
   onSaved,
-}: { item: OnlineImport; items: OnlineImport[]; onSaved: () => Promise<void> }) {
+  expanded = false,
+}: {
+  item: OnlineImport;
+  items: OnlineImport[];
+  onSaved: () => Promise<void>;
+  expanded?: boolean;
+}) {
   const [selected, setSelected] = useState<Selection[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -101,6 +107,7 @@ export function PlaylistOriginals({
   return (
     <details
       className="panel import-recovery"
+      open={expanded || undefined}
       onToggle={(event) => {
         if (!event.currentTarget.open && busy) event.currentTarget.open = true;
       }}

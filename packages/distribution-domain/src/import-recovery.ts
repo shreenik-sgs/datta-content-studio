@@ -39,6 +39,8 @@ export const IMPORT_RECOVERY_ERRORS: Record<string, string> = {
     "Studio could not reach its YouTube verification service. Try again; if this continues, ask your Studio administrator to check the service. Your playlist is saved.",
   VERIFICATION_BROWSER_START_FAILED:
     "The verification service is running, but its browser could not start. Your Studio administrator needs to check the browser installation and sandbox. Your playlist is saved; uploading originals remains available.",
+  VERIFICATION_SIGN_IN_BLOCKED:
+    "Google blocked sign-in in Studio’s verification browser. Retrying here will not resolve this restriction. Upload the authorized original recordings below to continue with this playlist’s saved permissions and output settings. Signing in separately in Chrome does not give this server access.",
   VERIFICATION_EXPIRED:
     "This verification session has ended. Open Verify YouTube access again; your playlist is saved.",
   VERIFICATION_BUSY:
@@ -48,6 +50,14 @@ export const IMPORT_RECOVERY_ERRORS: Record<string, string> = {
   VERIFICATION_FAILED:
     "YouTube still refused the download. You can return to verification or upload the original recordings below.",
 };
+
+/** Classify only Google's explicit browser rejection; never infer success from page text. */
+export function verificationSignInBlocked(origin: string, visibleText: string) {
+  return (
+    origin === "https://accounts.google.com" &&
+    /this browser or app may not be secure/i.test(visibleText.replace(/\s+/g, " "))
+  );
+}
 
 /** Browser MIME labels vary; bytes are independently signature-checked by private storage. */
 export function originalRecordingMimeType(name: string, mime: string) {

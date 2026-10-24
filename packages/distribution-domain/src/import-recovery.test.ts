@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { matchOriginalRecordings } from "./import-recovery";
+import { matchOriginalRecordings, verificationSignInBlocked } from "./import-recovery";
 import type { OnlineImport } from "./online-video";
 const item = (id: string, title: string | null = null, masterId: string | null = null) =>
   ({
@@ -8,6 +8,20 @@ const item = (id: string, title: string | null = null, masterId: string | null =
     title,
     masterId,
   }) as OnlineImport;
+it("recognizes Google's explicit browser rejection without treating challenges or wrong passwords as one", () => {
+  const rejection = "Couldn’t sign you in\nThis browser or app may not be secure. Learn more";
+  expect(verificationSignInBlocked("https://accounts.google.com", rejection)).toBe(true);
+  expect(verificationSignInBlocked("https://www.youtube.com", rejection)).toBe(false);
+  expect(verificationSignInBlocked("https://accounts.google.com.evil.test", rejection)).toBe(false);
+  for (const prompt of [
+    "Enter your password",
+    "Wrong password. Try again",
+    "Verify it’s you",
+    "Connecting to your device",
+    "Sign in to confirm you’re not a bot",
+  ])
+    expect(verificationSignInBlocked("https://accounts.google.com", prompt)).toBe(false);
+});
 it("matches source IDs and exact normalized titles, never unrelated names or array order", () => {
   const rows = [item("g0zlErdfXlg", "Daily wisdom"), item("ABCDEFGHIJK", "Be kind")];
   expect(
