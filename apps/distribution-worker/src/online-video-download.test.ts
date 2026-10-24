@@ -31,6 +31,14 @@ it("distinguishes server bot verification from source privacy or rights", () => 
     expect(onlineDownloadFailure(message)).toBe("ONLINE_SOURCE_RESTRICTED");
   expect(onlineDownloadFailure("File is larger than max-filesize")).toBe("ONLINE_SOURCE_TOO_LARGE");
   expect(onlineDownloadFailure("Connection timed out")).toBe("ONLINE_SOURCE_UNAVAILABLE");
+  expect(
+    onlineDownloadFailure(
+      "ERROR: [youtube:tab] PLQpnyP5jaBpk: YouTube said: The playlist does not exist.",
+    ),
+  ).toBe("ONLINE_PLAYLIST_NOT_FOUND");
+  expect(onlineDownloadFailure("ERROR: This playlist is private. Sign in")).toBe(
+    "ONLINE_SOURCE_RESTRICTED",
+  );
   expect(onlineDownloadFailure("Requested format is not available. Use --list-formats")).toBe(
     "ONLINE_SOURCE_FORMAT_UNSUPPORTED",
   );

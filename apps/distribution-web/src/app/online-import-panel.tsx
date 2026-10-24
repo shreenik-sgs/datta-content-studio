@@ -21,6 +21,19 @@ import { StorageCleanup } from "./storage-cleanup";
 import { StudioPanel } from "./studio-panel";
 import { WorkspaceName } from "./workspace-name";
 const API = "/distribution/api/content/import";
+function unreadPlaylistStatus(item: OnlineImport) {
+  if (item.serviceIssue) return ONLINE_IMPORT_ERRORS[item.serviceIssue.code];
+  if (item.status === "FAILED" && item.error === "ONLINE_SOURCE_UNAVAILABLE")
+    return "The playlist could not be read. Open the source link and check that the full playlist URL was copied. If it opens correctly on YouTube, retry the import.";
+  if (item.status === "FAILED")
+    return (
+      ONLINE_IMPORT_ERRORS[item.error ?? ""] ??
+      "Unable to read this playlist. Open the source link and check that the full playlist URL was copied."
+    );
+  if (item.status === "QUEUED") return "Waiting to read the playlist.";
+  if (item.status === "DOWNLOADING") return "Reading the playlist’s recordings…";
+  return "No recordings were found in this playlist. Check the source link.";
+}
 export function OnlineImportPanel({
   locale,
   showForm,
@@ -136,7 +149,7 @@ export function OnlineImportPanel({
               : body.item.status === "COMPLETE"
                 ? "This source is already imported. Open its existing master below."
                 : body.item.status === "FAILED"
-                  ? "This source has an earlier failed import. Use Retry below."
+                  ? "This source has an earlier failed import. Review the issue below."
                   : "Import queued. You can leave this page and return under Continue Existing Curation.",
       );
       // A successful mutation must remain successful even if its follow-up read fails.
@@ -550,39 +563,40 @@ export function OnlineImportPanel({
                   !showForm && selectedBundle !== item.id ? (
                     <div>
                       <p>
-                        {item.childIds?.length ?? "Reading"} recordings ·{" "}
-                        {item.serviceIssue
-                          ? "Import service needs attention"
-                          : complete(item)
-                            ? "Approved"
-                            : item.curation
-                              ? "Curation in progress"
-                              : "Ready for shared setup"}
+                        {!item.childIds?.length
+                          ? unreadPlaylistStatus(item)
+                          : `${item.childIds.length} recordings · ${
+                              item.serviceIssue
+                                ? "Import service needs attention"
+                                : complete(item)
+                                  ? "Approved"
+                                  : item.curation
+                                    ? "Curation in progress"
+                                    : "Ready for shared setup"
+                            }`}
                       </p>
                       <button
                         type="button"
                         className="button primary"
                         onClick={() => setSelectedBundle(item.id)}
                       >
-                        {item.source.kind === "bundle" ? "Continue series" : "Continue playlist"}
+                        {item.status === "FAILED" && !item.childIds?.length
+                          ? "Review import issue"
+                          : item.source.kind === "bundle"
+                            ? "Continue series"
+                            : "Continue playlist"}
                       </button>
                     </div>
                   ) : !item.childIds?.length ? (
                     <div aria-live="polite">
-                      <p>
-                        {item.serviceIssue
-                          ? ONLINE_IMPORT_ERRORS[item.serviceIssue.code]
-                          : item.status === "FAILED"
-                            ? (ONLINE_IMPORT_ERRORS[item.error ?? ""] ??
-                              "Unable to read this playlist.")
-                            : "Reading the playlist. Shared setup will appear here once its recordings are found."}
-                      </p>
+                      <p>{unreadPlaylistStatus(item)}</p>
                       {canCurate && (
                         <ImportRecovery key={item.id} item={item} items={items} onSaved={load} />
                       )}
                       {canCurate &&
                         item.serviceIssue?.code !== "ONLINE_PROVIDER_VERIFICATION_REQUIRED" &&
                         item.error !== "ONLINE_PROVIDER_VERIFICATION_REQUIRED" &&
+                        item.error !== "ONLINE_PLAYLIST_NOT_FOUND" &&
                         (item.status === "FAILED" || item.serviceIssue) && (
                           <button
                             type="button"

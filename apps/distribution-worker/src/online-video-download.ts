@@ -26,6 +26,8 @@ export function onlineDownloadFailure(stderr: string) {
     return "ONLINE_PROVIDER_VERIFICATION_REQUIRED";
   if (/HTTP (?:Error )?429|too many requests|rate.limit/i.test(stderr))
     return "ONLINE_PROVIDER_RATE_LIMITED";
+  if (/playlist (?:does not exist|doesn't exist|not found|has been deleted)/i.test(stderr))
+    return "ONLINE_PLAYLIST_NOT_FOUND";
   if (
     /private video|members.only|sign.in|login|not available in your country|age.restrict|confirm your age/i.test(
       stderr,

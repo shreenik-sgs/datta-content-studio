@@ -390,6 +390,37 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
       "FAILED",
     );
   });
+  it("stops a nonexistent playlist immediately without blocking other provider imports", async () => {
+    const imports = createOnlineImportRepository(runtime, async () => true);
+    const parent = await imports.enqueue(ctx, {
+      url: "https://youtube.com/playlist?list=PLmissing_playlist_source",
+      includePlaylist: true,
+      language: "te",
+      category: "pravachanams",
+    });
+    const claim = await imports.claim(true);
+    if (!claim) throw Error("missing claim");
+    expect(claim.id).toBe(parent.id);
+    await imports.fail(claim, "ONLINE_PLAYLIST_NOT_FOUND");
+    const failed = (await imports.list(ctx)).find((item) => item.id === parent.id);
+    expect(failed).toMatchObject({
+      status: "FAILED",
+      error: "ONLINE_PLAYLIST_NOT_FOUND",
+      childIds: null,
+      masterId: null,
+    });
+    expect(failed?.serviceIssue).toBeUndefined();
+    expect(await imports.claim(true)).toBeNull();
+    const next = await imports.enqueue(ctx, {
+      url: "https://youtube.com/playlist?list=PLnext_playlist_source",
+      includePlaylist: true,
+      language: "te",
+      category: "pravachanams",
+    });
+    const nextClaim = await imports.claim(true);
+    expect(nextClaim?.id).toBe(next.id);
+    if (nextClaim) await imports.fail(nextClaim, "ONLINE_PLAYLIST_NOT_FOUND");
+  });
   it.each([
     [false, false],
     [true, false],

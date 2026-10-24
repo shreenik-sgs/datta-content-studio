@@ -142,6 +142,8 @@ export const ONLINE_IMPORT_ERRORS: Record<string, string> = {
     "Paste a full YouTube or Facebook video link. For a YouTube playlist, select Import playlist.",
   ONLINE_SOURCE_RESTRICTED:
     "This video requires a login, membership or other access. Upload an authorized copy instead.",
+  ONLINE_PLAYLIST_NOT_FOUND:
+    "YouTube says this playlist does not exist. Open the intended playlist on YouTube and copy its full Share link, then import that link. Retrying this link will not download any recordings.",
   ONLINE_SOURCE_UNAVAILABLE:
     "The source video could not be downloaded. Check the original link or upload the recording.",
   ONLINE_SOURCE_FORMAT_UNSUPPORTED:

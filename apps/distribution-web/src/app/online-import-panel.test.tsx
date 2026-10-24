@@ -11,6 +11,59 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+it.each([
+  ["QUEUED", null, "Waiting to read the playlist."],
+  ["DOWNLOADING", null, "Reading the playlist’s recordings…"],
+  ["FAILED", "ONLINE_SOURCE_UNAVAILABLE", "The playlist could not be read."],
+  ["FAILED", "ONLINE_PLAYLIST_NOT_FOUND", "YouTube says this playlist does not exist."],
+])("shows an undiscovered playlist's actual state: %s %s", async (status, error, message) => {
+  vi.stubGlobal("React", React);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const item = {
+    id: "missing-playlist",
+    source: {
+      kind: "playlist",
+      provider: "youtube",
+      id: "PLQpnyP5jaBpk",
+      url: "https://www.youtube.com/playlist?list=PLQpnyP5jaBpk",
+    },
+    status,
+    error,
+    childIds: null,
+    title: "My playlist",
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ items: [item], available: true })),
+  );
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(<OnlineImportPanel locale="en" showForm={false} onOpen={vi.fn()} />),
+    );
+    expect(host.textContent).toContain(message);
+    expect(host.textContent).not.toContain("Ready for shared setup");
+    if (status === "FAILED") {
+      expect(host.textContent).not.toContain("Reading recordings");
+      const review = Array.from(host.querySelectorAll("button")).find(
+        (button) => button.textContent === "Review import issue",
+      );
+      expect(review).toBeDefined();
+      await act(async () => review?.click());
+      expect(host.textContent).toContain(message);
+      if (error === "ONLINE_PLAYLIST_NOT_FOUND") {
+        expect(host.textContent).toContain("copy its full Share link");
+        expect(host.textContent).not.toContain("Resume playlist");
+        expect(host.textContent).not.toContain("Verify YouTube access");
+      }
+    }
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("opens a bookmarked series directly at all files, including recordings beyond the first page", async () => {
   vi.stubGlobal("React", React);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -331,7 +384,7 @@ it.each([false, true])(
       );
       await act(async () =>
         [...host.querySelectorAll("button")]
-          .find((b) => b.textContent === "Continue playlist")
+          .find((b) => b.textContent === "Review import issue")
           ?.click(),
       );
       expect(host.textContent).toContain(
