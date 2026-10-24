@@ -15,7 +15,11 @@ import { studioReadiness } from "./studio-runtime";
 
 describe("Studio readiness matches publication requirements", () => {
   beforeEach(() => {
-    m.config.mockResolvedValue({ version: 1, accounts: [] });
+    m.config.mockResolvedValue({
+      version: 1,
+      accounts: [],
+      trustedMediaOrigins: ["https://ashrama.example"],
+    });
     m.readiness.mockReturnValue(
       ["instagram", "telegram", "reddit"].map((channel) => ({
         channel,
@@ -24,6 +28,7 @@ describe("Studio readiness matches publication requirements", () => {
         reason: null,
         accountId: "configured-account",
         transport: channel,
+        accounts: [{ accountId: "configured-account", ready: true, reason: null }],
       })),
     );
     vi.stubEnv("STUDIO_PUBLISHING_ENABLED", "true");
@@ -59,6 +64,35 @@ describe("Studio readiness matches publication requirements", () => {
         (channel) => !channel.ready && channel.reason === "TEST_NETWORK_DISABLED",
       ),
     ).toBe(true);
+  });
+  it.each([[], ["https://another.example"], ["https://ashrama.example/files"]])(
+    "blocks media posting until the exact public origin is allowed: %j",
+    async (...origins) => {
+      m.config.mockResolvedValue({ version: 1, accounts: [], trustedMediaOrigins: origins });
+      const result = await studioReadiness({ isTest: false });
+      for (const name of ["instagram", "telegram"]) {
+        const channel = result.channels.find((item) => item.channel === name);
+        expect(channel?.ready).toBe(false);
+        expect(channel?.reason).toBe("APPROVED_MEDIA_URL_REQUIRED");
+        expect(channel?.accounts?.[0]).toMatchObject({
+          ready: false,
+          reason: "APPROVED_MEDIA_URL_REQUIRED",
+        });
+      }
+      expect(result.channels.find((item) => item.channel === "reddit")?.ready).toBe(true);
+      expect(result.channels.find((item) => item.channel === "website")?.ready).toBe(true);
+    },
+  );
+  it("retains configuration and connection errors ahead of a media-origin warning", async () => {
+    m.config.mockRejectedValue(new Error("CONFIG_INVALID"));
+    const result = await studioReadiness({ isTest: false });
+    expect(result.channels.find((item) => item.channel === "youtube")?.reason).toBe(
+      "STUDIO_PROVIDER_CONFIG_INVALID",
+    );
+  });
+  it("explains where an Admin can resolve blocked media delivery", () => {
+    expect(studioMessage("APPROVED_MEDIA_URL_REQUIRED")).toContain("Media delivery settings");
+    expect(studioMessage("APPROVED_MEDIA_URL_REQUIRED")).toContain("did not upload");
   });
   it("gives an actionable recovery for a source without configured transcription", () => {
     expect(studioMessage("TRANSCRIPTION_NOT_CONFIGURED")).toContain("Editorial review");

@@ -303,6 +303,8 @@ const messages: Record<string, string> = {
     "Live publication is disabled. An Admin must enable the publishing service after channel setup.",
   STUDIO_PUBLIC_MEDIA_NOT_CONFIGURED:
     "Secure media delivery needs configuration before this channel can receive videos or images.",
+  APPROVED_MEDIA_URL_REQUIRED:
+    "The approved media cannot be delivered to this channel. An Admin should check Settings → Media delivery settings and allow this Studio's HTTPS address. Then retry posting; this check did not upload the file.",
   CHANNEL_DISABLED: "This channel connection is disabled.",
   ACCOUNT_ELIGIBILITY_REQUIRED: "An Admin must verify this account's publishing eligibility.",
   INVALID_ACCOUNT: "The channel account configuration is incomplete.",

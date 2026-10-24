@@ -86,9 +86,11 @@ export function publicStudioPublication(value: StudioPublication): PublicStudioP
 
 export async function studioReadiness(context: { isTest: boolean }): Promise<StudioReadiness> {
   let channels: StudioReadiness["channels"];
+  let trustedMediaOrigins: string[] = [];
   try {
     const config = await loadStudioProviderConfig(studioSettingsPath(process.env, context.isTest));
     channels = studioProviderReadiness(config, context.isTest);
+    trustedMediaOrigins = config.trustedMediaOrigins;
   } catch {
     channels = STUDIO_CHANNELS.filter((channel) => channel !== "website").map((channel) => ({
       channel,
@@ -115,15 +117,18 @@ export async function studioReadiness(context: { isTest: boolean }): Promise<Stu
   }
   const publishing = process.env.STUDIO_PUBLISHING_ENABLED === "true";
   const mediaReady = publicOrigin && (process.env.STUDIO_MEDIA_SIGNING_SECRET?.length ?? 0) >= 32;
+  // Match the publisher's exact-origin allowlist before offering a Post action.
+  const mediaReason = !mediaReady
+    ? "STUDIO_PUBLIC_MEDIA_NOT_CONFIGURED"
+    : !trustedMediaOrigins.includes(process.env.STUDIO_PUBLIC_ORIGIN ?? "")
+      ? "APPROVED_MEDIA_URL_REQUIRED"
+      : null;
   channels = channels.map((channel) => {
     const reason = context.isTest
       ? "TEST_NETWORK_DISABLED"
       : !publishing
         ? "STUDIO_PUBLISHING_DISABLED"
-        : (channel.reason ??
-          (!mediaReady && channel.channel !== "reddit"
-            ? "STUDIO_PUBLIC_MEDIA_NOT_CONFIGURED"
-            : null));
+        : (channel.reason ?? (channel.channel !== "reddit" ? mediaReason : null));
     return {
       ...channel,
       ready: reason === null,
@@ -133,10 +138,7 @@ export async function studioReadiness(context: { isTest: boolean }): Promise<Stu
           ? "TEST_NETWORK_DISABLED"
           : !publishing
             ? "STUDIO_PUBLISHING_DISABLED"
-            : (account.reason ??
-              (!mediaReady && channel.channel !== "reddit"
-                ? "STUDIO_PUBLIC_MEDIA_NOT_CONFIGURED"
-                : null));
+            : (account.reason ?? (channel.channel !== "reddit" ? mediaReason : null));
         return { ...account, ready: reason === null, reason };
       }),
     };
