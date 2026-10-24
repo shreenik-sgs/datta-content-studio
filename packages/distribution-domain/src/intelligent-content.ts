@@ -34,6 +34,8 @@ export type StudioStatus =
   | "DISCARDED"
   | "FAILED";
 export type StudioAsset = {
+  /** Logical channel/output binding when several outputs share immutable stored bytes. */
+  identityKey?: string;
   storageKey: string;
   sha256: string;
   byteSize: number;

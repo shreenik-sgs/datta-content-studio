@@ -68,7 +68,7 @@ it("accepts and canonicalizes a package-specific YouTube closing target", () => 
     );
 });
 
-it("requires an explicit channel target and YouTube-only scope for alternate source attribution", () => {
+it("requires an explicit closing destination without restricting target channels by speaker", () => {
   const request = {
     languages: ["en"],
     channels: ["youtube"],
@@ -78,11 +78,13 @@ it("requires an explicit channel target and YouTube-only scope for alternate sou
     youtubeClosing: { label: "Gurubhavana ADPT", url: "https://www.youtube.com/@gurubhavanaadpt" },
   };
   expect(studioGenerationRequestSchema.safeParse(request).success).toBe(true);
-  for (const change of [
-    { youtubeClosing: undefined },
-    { channels: ["facebook"] },
-    { sourceBranding: "injected-teacher" },
-  ])
+  expect(
+    studioGenerationRequestSchema.safeParse({
+      ...request,
+      channels: ["youtube", "facebook", "website"],
+    }).success,
+  ).toBe(true);
+  for (const change of [{ youtubeClosing: undefined }, { sourceBranding: "injected-teacher" }])
     expect(studioGenerationRequestSchema.safeParse({ ...request, ...change }).success).toBe(false);
 });
 

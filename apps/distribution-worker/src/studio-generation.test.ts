@@ -12,7 +12,7 @@ import {
   STUDIO_MEDIA_DEFAULTS,
   type StudioPackage,
   createLocalStudioPlan,
-  parseStudioAssetKey,
+  parseStudioAssetDescriptor,
 } from "@satsang/distribution-domain";
 import { STUDIO_PICTURE } from "@satsang/distribution-domain";
 import sharp from "sharp";
@@ -22,6 +22,7 @@ import * as quality from "./studio-content-review";
 import * as contextualImages from "./studio-context-images";
 import { generateStudioPackage } from "./studio-generation";
 import * as intelligence from "./studio-intelligence";
+import * as mediaRenderer from "./studio-media";
 import { studioCaptionPages, studioVtt } from "./studio-media";
 import * as presentation from "./studio-presentation-review";
 import * as studioProcess from "./studio-process";
@@ -657,8 +658,14 @@ describe("automatic Studio generation with real media", () => {
   }, 30000);
 
   it("creates verifiable branded short/reel/post/blog files, visible captions and source-bound names", async () => {
+    const render = vi.spyOn(mediaRenderer, "renderStudioVideo");
     const result = await generateStudioPackage({ claim, store, env });
     expect(result.outputs).toHaveLength(12);
+    const videos = result.outputs.filter((o) => ["short", "reel"].includes(o.format));
+    expect(videos).toHaveLength(4);
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(new Set(videos.map((o) => o.asset?.storageKey)).size).toBe(1);
+    expect(new Set(videos.map((o) => o.asset?.filename)).size).toBe(4);
     expect(result.outputs.find((output) => output.channel === "whatsapp")).toMatchObject({
       format: "post",
       asset: { mimeType: "image/png" },
@@ -673,7 +680,7 @@ describe("automatic Studio generation with real media", () => {
       if (!output.asset) throw new Error("Missing generated asset");
       const data = await store.readDerivedDescriptor(output.asset);
       expect(createHash("sha256").update(data).digest("hex")).toBe(output.asset.sha256);
-      const name = parseStudioAssetKey(output.asset.storageKey);
+      const name = parseStudioAssetDescriptor(output.asset);
       expect(name?.identity.masterId).toBe(claim.source.masterId);
       expect(name?.identity.sourceVersionId).toBe(claim.source.versionId);
       expect(name?.identity.channel).toBe(output.channel);
@@ -1349,7 +1356,7 @@ describe("automatic Studio generation with real media", () => {
         included: true,
       });
       expect(output.warnings).toContain("Machine transcript requires correction and human review.");
-      expect(parseStudioAssetKey(output.asset.storageKey)?.identity).toMatchObject({
+      expect(parseStudioAssetDescriptor(output.asset)?.identity).toMatchObject({
         masterId: claim.source.masterId,
         sourceVersionId: claim.source.versionId,
         channel: "website",
@@ -1556,6 +1563,7 @@ it("retains transcription and finished files after a later rendering failure wit
     externalProcessing: { allowed: true, reason: null },
     package: {
       ...claim.package,
+      id: randomUUID(),
       request: { ...claim.package.request, channels: ["x", "website"] as const },
     },
   };
@@ -1594,3 +1602,45 @@ it("retains transcription and finished files after a later rendering failure wit
   expect(result.outputs.every((output) => output.fileVersion === 1)).toBe(true);
   expect(studioFingerprint(result.outputs[0])).toBe(studioFingerprint(first));
 });
+
+it("supports Bala Swamiji video, image and blog destinations with independent copy and shared portrait media", async () => {
+  const artwork = vi.spyOn(mediaRenderer, "studioArtwork");
+  const render = vi.spyOn(mediaRenderer, "renderStudioVideo");
+  const result = await generateStudioPackage({
+    claim: {
+      ...claim,
+      package: {
+        ...claim.package,
+        id: randomUUID(),
+        request: {
+          ...claim.package.request,
+          channels: ["youtube", "facebook", "x", "website"],
+          sourceBranding: "bala-swamiji",
+          youtubeClosing: {
+            label: "Gurubhavana ADPT",
+            url: "https://www.youtube.com/@gurubhavanaadpt",
+          },
+        },
+      },
+    },
+    store,
+    env,
+  });
+  expect(result.outputs).toHaveLength(4);
+  expect(
+    result.outputs.every(
+      (o) => o.body.includes("@gurubhavanaadpt") && !o.body.includes("@sgsswamiji"),
+    ),
+  ).toBe(true);
+  expect(render).toHaveBeenCalledTimes(1);
+  const videos = result.outputs.filter((o) => ["short", "reel"].includes(o.format));
+  expect(videos[0]?.asset?.storageKey).toBe(videos[1]?.asset?.storageKey);
+  expect(artwork.mock.calls.find(([i]) => i.format === "post")?.[0].sourceBranding).toBe(
+    "bala-swamiji",
+  );
+  const blog = result.outputs.find((o) => o.channel === "website");
+  if (!blog?.asset) throw Error("missing blog");
+  const text = (await store.readDerivedDescriptor(blog.asset)).toString();
+  expect(text).toContain("Sri Datta Vijayananda Teertha Swamiji");
+  expect(text).not.toContain("Sri Ganapathy Sachchidananda Swamiji");
+}, 30000);

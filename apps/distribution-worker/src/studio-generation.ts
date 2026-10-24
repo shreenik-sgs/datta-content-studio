@@ -14,7 +14,6 @@ import {
   STUDIO_AUDIO_POLICY,
   STUDIO_BOUNDARY_EVIDENCE_POLICY,
   STUDIO_BOUNDARY_REVIEW_POLICY,
-  STUDIO_BRAND_NAME,
   STUDIO_CLOSING_CARD_POLICY,
   STUDIO_ICONOGRAPHY_POLICY,
   STUDIO_OPENING_CARD_POLICY,
@@ -105,6 +104,7 @@ import {
   studioReviewProxy,
 } from "./studio-presentation-review.js";
 import { executeStudioSource, validateStudioSourceDimensions } from "./studio-process.js";
+import { saveSharedStudioAsset } from "./studio-shared-assets.js";
 
 const run = promisify(execFile);
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -578,6 +578,10 @@ export async function generateStudioPackage(input: {
     if (sourceBrand.portrait && (!logoPath || !isAbsolute(logoPath)))
       throw new Error("BRAND_NOT_CONFIGURED");
     const logo = sourceBrand.portrait && logoPath ? await readFile(logoPath) : Buffer.alloc(0);
+    const postLogo =
+      claim.package.request.sourceBranding === "bala-swamiji"
+        ? await readFile(new URL("../assets/sri-bala-swamiji-portrait.jpg", import.meta.url))
+        : logo;
     const appLogo = await readFile(new URL("../assets/sannidhi-app-icon.png", import.meta.url));
     if (logo.length > 5 * 1024 * 1024) throw new Error("BRAND_NOT_CONFIGURED");
     let analyzedAudio = false;
@@ -1017,6 +1021,7 @@ export async function generateStudioPackage(input: {
       visualPreference,
       imageModel,
       storyboard: "context-rich-v2",
+      sharedMediaPolicy: "immutable-shared-media-v1",
       storyboardContinuity: STUDIO_STORYBOARD_CONTINUITY_POLICY,
       illustrationSelection: STUDIO_VIDEO_ILLUSTRATION_POLICY,
       iconography: STUDIO_ICONOGRAPHY_POLICY,
@@ -1135,8 +1140,7 @@ export async function generateStudioPackage(input: {
       ): Promise<StudioAsset> => {
         const name = studioAssetName(identity, extension, captionLanguage);
         const asset = { ...name, sha256: sha(data), byteSize: data.length, mimeType };
-        await store.writeDerivedDescriptor(asset, data);
-        return asset;
+        return saveSharedStudioAsset(store, asset, data);
       };
       if (video) {
         const translations = new Map(
@@ -1168,9 +1172,19 @@ export async function generateStudioPackage(input: {
           // Only the selected output language is exported. The native transcript remains
           // in source provenance for review; it is not an unrequested caption track.
         }
+        const screened = hasVideo && provider !== "local" ? await screenSource(planned) : undefined;
+        const priorPresentation = input.closingOnly ? prior?.presentationReview : undefined;
+        const wantsOpening =
+          sourceBrand.portrait &&
+          (input.steadyOpening ||
+            priorPresentation?.openingCard ||
+            (!input.closingOnly && screened?.screen.openingCardRecommended));
         const key = JSON.stringify({
           mediaEdits: prior?.mediaEdits,
-          title: planned.title,
+          title: wantsOpening ? planned.title : undefined,
+          // A closing-only repair preserves this exact file's framing/artwork.
+          preservedPresentation: input.closingOnly ? priorPresentation : undefined,
+          screen: screened?.screen,
           youtubeClosing: claim.package.request.youtubeClosing,
           closingDestination:
             (claim.package.request.youtubeClosing ? "youtube" : undefined) ??
@@ -1218,9 +1232,6 @@ export async function generateStudioPackage(input: {
           throw Error("STUDIO_CLIP_TOO_LONG");
         let mediaRender = rendered.get(key);
         if (!mediaRender) {
-          const screened =
-            hasVideo && provider !== "local" ? await screenSource(planned) : undefined;
-          const priorPresentation = input.closingOnly ? prior?.presentationReview : undefined;
           if (input.closingOnly) {
             if (!priorPresentation || !prior?.asset)
               throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
@@ -1299,11 +1310,6 @@ export async function generateStudioPackage(input: {
           // insert is omitted, use a consistent uncropped picture throughout;
           // otherwise that gap would briefly shrink and enlarge the speaker.
           if (rejectedIllustration || prior?.mediaEdits?.framing === "full-picture") scenes = [];
-          const wantsOpening =
-            sourceBrand.portrait &&
-            (input.steadyOpening ||
-              priorPresentation?.openingCard ||
-              (!input.closingOnly && screened?.screen.openingCardRecommended));
           for (let attempt = 0; attempt < 2; attempt++) {
             const openingPlan = wantsOpening
               ? studioOpeningCardPlan(range.endMs - range.startMs, scenes)
@@ -1568,7 +1574,8 @@ export async function generateStudioPackage(input: {
           sourceSha256: claim.source.sha256,
           segments: range.segments,
           identity,
-          logo,
+          logo: postLogo,
+          sourceBranding: claim.package.request.sourceBranding,
           store,
           visualPreference,
           ...(checkpoints ? { checkpoints } : {}),
@@ -1584,7 +1591,8 @@ export async function generateStudioPackage(input: {
         const frame = await sourceFrame(range.segments);
         output.asset = await save(
           await studioArtwork({
-            logo,
+            logo: postLogo,
+            sourceBranding: claim.package.request.sourceBranding,
             title: planned.title,
             body: planned.body,
             format: "post",
@@ -1597,7 +1605,7 @@ export async function generateStudioPackage(input: {
       } else {
         output.asset = await save(
           Buffer.from(
-            `# ${planned.title}\n\n${STUDIO_BRAND_NAME}\n\n${planned.body}\n\n---\nMaster: ${claim.package.source.masterId}\nSource language: ${transcript.language}\n`,
+            `# ${planned.title}\n\n${sourceBrand.name}\n\n${planned.body}\n\n---\nMaster: ${claim.package.source.masterId}\nSource language: ${transcript.language}\n`,
           ),
           "md",
           "text/markdown",

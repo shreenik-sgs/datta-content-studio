@@ -34,6 +34,7 @@ import {
 } from "./studio-planner";
 import { validateStudioPostArt } from "./studio-post-art";
 import { validateStudioPresentationReview } from "./studio-presentation";
+import { parseStudioAssetDescriptor } from "./studio-shared-assets";
 import { studioSourceBranding } from "./studio-source-branding";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const validId = (value: unknown): value is string => typeof value === "string" && uuid.test(value);
@@ -93,18 +94,14 @@ export function validateStudioGenerationRequest(input: StudioGenerationRequest):
     throw new Error("INVALID_STUDIO_REQUEST");
   if (input.youtubeClosing !== undefined) studioYoutubeClosing(input.youtubeClosing);
   studioSourceBranding(input.sourceBranding);
-  if (
-    input.sourceBranding &&
-    (input.channels.length !== 1 || input.channels[0] !== "youtube" || !input.youtubeClosing)
-  )
-    throw Error("INVALID_STUDIO_REQUEST");
+  if (input.sourceBranding && !input.youtubeClosing) throw Error("INVALID_STUDIO_REQUEST");
 }
 export function validateStudioAsset(
   asset: StudioAsset,
   binding?: { masterId: string; versionId: string; packageId: string; outputId: string },
 ): void {
-  const parts = asset?.storageKey?.split("/");
-  const parsed = asset && parseStudioAssetKey(asset.storageKey);
+  const parts = (asset?.identityKey ?? asset?.storageKey)?.split("/");
+  const parsed = asset && parseStudioAssetDescriptor(asset);
   const types = {
     "video/mp4": ["mp4", MAX_STUDIO_VIDEO_BYTES],
     "image/png": ["png", 10 * 1024 * 1024],
@@ -378,7 +375,7 @@ export function validateStudioOutputs(
     };
     if (output.asset) {
       validateStudioAsset(output.asset, binding);
-      const identity = parseStudioAssetKey(output.asset.storageKey)?.identity;
+      const identity = parseStudioAssetDescriptor(output.asset)?.identity;
       if (
         identity?.channel !== output.channel ||
         identity.format !== output.format ||
@@ -397,7 +394,7 @@ export function validateStudioOutputs(
     }
     if (output.thumbnail) {
       validateStudioAsset(output.thumbnail, binding);
-      const identity = parseStudioAssetKey(output.thumbnail.storageKey)?.identity;
+      const identity = parseStudioAssetDescriptor(output.thumbnail)?.identity;
       if (
         !video ||
         !output.asset ||
@@ -419,7 +416,7 @@ export function validateStudioOutputs(
       )
         throw new Error("INVALID_STUDIO_CAPTION");
       validateStudioAsset(caption.asset, binding);
-      const parsed = parseStudioAssetKey(caption.asset.storageKey);
+      const parsed = parseStudioAssetDescriptor(caption.asset);
       if (
         parsed?.identity.channel !== output.channel ||
         parsed.identity.format !== output.format ||

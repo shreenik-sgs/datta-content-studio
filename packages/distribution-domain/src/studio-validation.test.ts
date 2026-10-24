@@ -566,8 +566,11 @@ it("binds alternate speaker identity and subscription target to request, provena
     }),
   ).toThrow();
   expect(() =>
-    validateStudioGenerationRequest({ ...pkg.request, channels: ["facebook"] }),
-  ).toThrow();
+    validateStudioGenerationRequest({
+      ...pkg.request,
+      channels: ["facebook", "youtube", "website"],
+    }),
+  ).not.toThrow();
   const originalCard = output.presentationReview.closingCard;
   if (!originalCard) throw Error("MISSING_CLOSING");
   output.presentationReview.closingCard = studioClosingCardPlan(2000, { destination: "youtube" });

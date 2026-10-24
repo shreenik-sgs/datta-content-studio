@@ -6,7 +6,11 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { buildDerivedAssetNames } from "@satsang/distribution-domain";
+import {
+  buildDerivedAssetNames,
+  studioAssetName,
+  studioSharedAssetKey,
+} from "@satsang/distribution-domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAssetStore, parseAssetStoreConfig } from "./index";
 import {
@@ -458,4 +462,38 @@ describe("actual AWS SDK request serialization through an in-memory handler", ()
       client.destroy();
     }
   });
+});
+
+it("reads and removes an immutable shared media object with checksum and package binding", async () => {
+  const transport = new MemoryS3();
+  const store = createS3AssetStore(config, transport);
+  const bytes = Buffer.from("0000ftyp0000shared-video");
+  const name = studioAssetName(
+    {
+      masterId: randomUUID(),
+      sourceVersionId: randomUUID(),
+      packageId: randomUUID(),
+      outputId: randomUUID(),
+      channel: "youtube",
+      format: "short",
+      language: "en",
+      aspect: "9:16",
+    },
+    "mp4",
+  );
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const asset = {
+    storageKey: studioSharedAssetKey(name.storageKey, hash),
+    sha256: hash,
+    byteSize: bytes.length,
+    mimeType: "video/mp4",
+  };
+  await store.writeDerivedDescriptor(asset, bytes);
+  expect(await store.readDerivedDescriptor(asset)).toEqual(bytes);
+  await expect(store.readDerivedDescriptor({ ...asset, sha256: "b".repeat(64) })).rejects.toThrow(
+    "INVALID_DERIVED_ASSET",
+  );
+  expect(transport.objects.size).toBe(1);
+  await store.removeDerivedUnreferenced(asset);
+  expect(transport.objects.size).toBe(0);
 });

@@ -32,17 +32,10 @@ export const studioGenerationRequestSchema = z
     sourceBranding: z.literal("bala-swamiji").optional(),
   })
   .strict()
-  .refine(
-    (value) =>
-      !value.sourceBranding ||
-      (value.channels.length === 1 &&
-        value.channels[0] === "youtube" &&
-        Boolean(value.youtubeClosing)),
-    {
-      message: "Alternate source branding requires YouTube Shorts and a subscription destination",
-      path: ["sourceBranding"],
-    },
-  );
+  .refine((value) => !value.sourceBranding || Boolean(value.youtubeClosing), {
+    message: "Alternate source branding requires a subscription destination",
+    path: ["sourceBranding"],
+  });
 export const studioCreateSchema = z
   .object({
     masterId: z.string().uuid(),

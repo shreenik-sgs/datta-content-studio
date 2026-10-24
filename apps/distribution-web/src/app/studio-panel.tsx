@@ -78,7 +78,7 @@ export function studioGenerationDefaults(
 function generationFields(form: FormData): StudioGenerationRequest {
   return {
     languages: form.getAll("language") as StudioGenerationRequest["languages"],
-    channels: (form.has("channel")
+    channels: (form.has("channel") || form.has("selectChannels")
       ? form.getAll("channel")
       : [...STUDIO_CHANNELS]) as StudioGenerationRequest["channels"],
     instructions: String(form.get("instructions") ?? ""),
@@ -90,7 +90,13 @@ export function GenerationFields({
   request,
   translation,
   localDrafting,
-}: { request: StudioGenerationRequest; translation: boolean; localDrafting: boolean }) {
+  showChannels = false,
+}: {
+  request: StudioGenerationRequest;
+  translation: boolean;
+  localDrafting: boolean;
+  showChannels?: boolean;
+}) {
   return (
     <>
       <input
@@ -98,6 +104,30 @@ export function GenerationFields({
         name="allCompleteMessages"
         value={String(request.allCompleteMessages ?? false)}
       />
+      {showChannels && (
+        <fieldset>
+          <legend>Channels to generate for</legend>
+          <input type="hidden" name="selectChannels" value="true" />
+          <p className="muted">
+            Choose the destinations you want. Matching media is reused; each channel keeps its own
+            posting text and status.
+          </p>
+          <div className="fields">
+            {request.channels.map((channel) => (
+              <label key={channel} style={checkStyle}>
+                <input
+                  name="channel"
+                  type="checkbox"
+                  value={channel}
+                  defaultChecked
+                  style={boxStyle}
+                />
+                {studioChannelLabel(channel)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <fieldset>
         <legend>Output languages</legend>
         <p className="muted">
@@ -1240,7 +1270,12 @@ export function StudioPanel({
               onSubmit={(event: FormEvent<HTMLFormElement>) => {
                 event.preventDefault();
                 if (busy || !sourcePermissions?.allowed || !readiness?.generation.available) return;
-                if (!new FormData(event.currentTarget).getAll("language").length) {
+                const fields = new FormData(event.currentTarget);
+                if (!fields.getAll("channel").length) {
+                  setError("Choose at least one target channel.");
+                  return;
+                }
+                if (!fields.getAll("language").length) {
                   setError("Choose at least one output language.");
                   return;
                 }
@@ -1249,10 +1284,7 @@ export function StudioPanel({
                   {
                     masterId: content.id,
                     expectedSourceRevision: content.revision,
-                    request: {
-                      ...generationFields(new FormData(event.currentTarget)),
-                      channels: newRequest.channels,
-                    },
+                    request: generationFields(fields),
                   },
                   null,
                 );
@@ -1260,6 +1292,7 @@ export function StudioPanel({
             >
               <fieldset disabled={busy}>
                 <GenerationFields
+                  showChannels
                   request={newRequest}
                   translation={readiness?.generation.translation ?? false}
                   localDrafting={

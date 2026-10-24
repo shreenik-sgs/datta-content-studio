@@ -81,7 +81,7 @@ export function PlaylistCuration({
   function start(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const channels = sourceBranding === "bala-swamiji" ? ["youtube"] : form.getAll("channel");
+    const channels = form.getAll("channel");
     const rights = contentRightsSchema.safeParse({
       owner: form.get("owner"),
       authorizationBasis: form.get("authorization"),
@@ -263,10 +263,8 @@ export function PlaylistCuration({
             const form = new FormData(event.currentTarget);
             setSelection(
               `${
-                (form.get("sourceBranding") === "bala-swamiji"
-                  ? ["youtube"]
-                  : form.getAll("channel")
-                )
+                form
+                  .getAll("channel")
                   .map((channel) => studioChannelLabel(channel as (typeof STUDIO_CHANNELS)[number]))
                   .join(", ") || "No channel selected"
               } · ${
@@ -296,23 +294,18 @@ export function PlaylistCuration({
                 value={sourceBranding}
                 onChange={(event) => {
                   setSourceBranding(event.target.value);
-                  setSelection(
-                    event.target.value === "bala-swamiji"
-                      ? "YouTube Shorts · English"
-                      : "YouTube Shorts, Facebook · English",
-                  );
                 }}
               >
                 <option value="">Sri Ganapathy Sachchidananda Swamiji · @sgsswamiji</option>
                 <option value="bala-swamiji">
-                  Sri Datta Vijayananda Teertha Swamiji · YouTube Shorts
+                  Sri Datta Vijayananda Teertha Swamiji · @gurubhavanaadpt
                 </option>
               </select>
             </label>
             {sourceBranding === "bala-swamiji" && (
               <p>
-                Every Short credits Sri Datta Vijayananda Teertha Swamiji. The green closing card
-                and subscription description point to @SriDattaVijayanandaTeertha.
+                Every output credits Sri Datta Vijayananda Teertha Swamiji. The green video closing
+                card points to @gurubhavanaadpt. Choose your target channels below.
               </p>
             )}
             <details className="playlist-options">
@@ -343,10 +336,15 @@ export function PlaylistCuration({
                 </label>
               </div>
             </details>
-            <details className="playlist-options">
+            <details className="playlist-options" open>
               <summary>Outputs: {selection} · Change</summary>
-              <fieldset disabled={sourceBranding === "bala-swamiji"}>
-                <legend>Channels</legend>
+              <fieldset>
+                <legend>Channels to generate for</legend>
+                <p className="muted">
+                  Matching videos share one media file across channels. Each channel keeps its own
+                  posting text, review and publishing status. Facebook Reels through Buffer must fit
+                  within 90 seconds, including the closing card.
+                </p>
                 <div className="fields">
                   {STUDIO_CHANNELS.map((channel) => (
                     <label className="online-import-checkbox" key={channel}>
@@ -354,12 +352,7 @@ export function PlaylistCuration({
                         name="channel"
                         value={channel}
                         type="checkbox"
-                        key={`${sourceBranding}-${channel}`}
-                        defaultChecked={
-                          sourceBranding === "bala-swamiji"
-                            ? channel === "youtube"
-                            : ["youtube", "facebook"].includes(channel)
-                        }
+                        defaultChecked={["youtube", "facebook"].includes(channel)}
                       />
                       {studioChannelLabel(channel)}
                     </label>
@@ -420,7 +413,7 @@ export function PlaylistCuration({
           </fieldset>
         </form>
       ) : plan ? (
-        <details className="playlist-options">
+        <details className="playlist-options" open>
           <summary>Shared permissions and output settings</summary>
           <p>
             Shared settings saved:{" "}
@@ -429,7 +422,9 @@ export function PlaylistCuration({
               .join(", ")}{" "}
             · {plan.request.channels.map(studioChannelLabel).join(", ")} ·{" "}
             {plan.request.captions ? "Subtitles on" : "Subtitles off"}. Each downloaded recording
-            enters curation automatically. Existing packages keep their original settings.
+            enters curation automatically. These settings were saved when generation started; they
+            are not a limit on the channels Studio supports. Existing packages keep their original
+            settings and edits.
           </p>
         </details>
       ) : (

@@ -395,3 +395,20 @@ it("offers a real app link separately from exported pixels while leaving it off 
     renderToStaticMarkup(<StudioOutputPreview value={value} output={output} canDownload={false} />),
   ).not.toContain("App download:");
 });
+
+it("shows selectable destinations for an individual master without including unauthorized channels", () => {
+  const html = renderToStaticMarkup(
+    <GenerationFields
+      request={{ ...value.request, channels: ["youtube", "facebook"] }}
+      translation
+      localDrafting={false}
+      showChannels
+    />,
+  );
+  const host = document.createElement("div");
+  host.innerHTML = html;
+  expect(
+    [...host.querySelectorAll<HTMLInputElement>('input[name="channel"]')].map((i) => i.value),
+  ).toEqual(["youtube", "facebook"]);
+  expect(host.querySelector('input[name="selectChannels"]')).not.toBeNull();
+});

@@ -5,6 +5,7 @@ import {
   MAX_STUDIO_VIDEO_BYTES,
   parseDerivedAssetKey,
   parseStudioAssetKey,
+  parseStudioSharedAssetKey,
 } from "@satsang/distribution-domain";
 export type StoredPrivateAsset = {
   storageKey: string;
@@ -24,7 +25,10 @@ export function validateDerived(asset: DerivedPrivateAsset): number {
     throw new Error("INVALID_DERIVED_ASSET");
   }
   const parsed = parseDerivedAssetKey(asset.storageKey);
-  const studio = parseStudioAssetKey(asset.storageKey);
+  const studio =
+    parseStudioAssetKey(asset.storageKey) ?? parseStudioSharedAssetKey(asset.storageKey);
+  const shared = parseStudioSharedAssetKey(asset.storageKey);
+  if (shared && shared.sha256 !== asset.sha256) throw Error("INVALID_DERIVED_ASSET");
   const studioSpecs = {
     mp4: { mime: "video/mp4", maximum: MAX_STUDIO_VIDEO_BYTES },
     png: { mime: "image/png", maximum: 10 * 1024 * 1024 },

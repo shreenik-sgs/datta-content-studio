@@ -18,6 +18,7 @@ import { createPrivateRenderScratch } from "./renderer.js";
 import { type StudioCheckpoints, studioFingerprint } from "./studio-checkpoints.js";
 import { studioClosingCard } from "./studio-ending.js";
 import { executeStudioSource } from "./studio-process.js";
+import { saveSharedStudioAsset } from "./studio-shared-assets.js";
 
 const sha = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 
@@ -299,19 +300,30 @@ export async function refreshStudioClosingCards(input: {
         aspect: prior.aspect,
       };
       const name = studioAssetName(identity, "mp4");
-      const asset = {
-        ...name,
-        sha256: sha(rendered),
-        byteSize: rendered.length,
-        mimeType: "video/mp4",
-      };
-      await store.writeDerivedDescriptor(asset, rendered);
+      const asset = await saveSharedStudioAsset(
+        store,
+        {
+          ...name,
+          sha256: sha(rendered),
+          byteSize: rendered.length,
+          mimeType: "video/mp4",
+        },
+        rendered,
+      );
       let thumbnail = prior.thumbnail;
       if (thumbnail) {
         const bytes = await store.readDerivedDescriptor(thumbnail);
         if (sha(bytes) !== thumbnail.sha256) throw Error("INVALID_STUDIO_ASSET");
-        thumbnail = { ...thumbnail, ...studioAssetName(identity, "png") };
-        await store.writeDerivedDescriptor(thumbnail, bytes);
+        thumbnail = await saveSharedStudioAsset(
+          store,
+          {
+            ...studioAssetName(identity, "png"),
+            sha256: thumbnail.sha256,
+            byteSize: thumbnail.byteSize,
+            mimeType: thumbnail.mimeType,
+          },
+          bytes,
+        );
       }
       const verifiedAt = new Date().toISOString();
       const closingRefresh: NonNullable<StudioPresentationReview["closingRefresh"]> = {

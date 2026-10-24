@@ -1,8 +1,6 @@
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  STUDIO_BRAND_NAME,
-  STUDIO_BRAND_SIGNATURE,
   STUDIO_PICTURE,
   STUDIO_SUBTITLE_TOP,
   type StudioClosingCard,
@@ -10,6 +8,8 @@ import {
   type StudioOpeningCard,
   type StudioPortraitScene,
   type StudioSegment,
+  type StudioSourceBranding,
+  studioSourceBranding,
   studioSpeechTarget,
   studioSubtitleSize,
   validateStudioAudioLevel,
@@ -85,6 +85,7 @@ export const STUDIO_CAPTION_TOP = STUDIO_SUBTITLE_TOP;
 
 /** Fixed Ashrama artwork. Source/AI strings never become markup. */
 export async function studioArtwork(input: {
+  sourceBranding?: StudioSourceBranding | undefined;
   logo: Uint8Array;
   title: string;
   body: string;
@@ -92,6 +93,7 @@ export async function studioArtwork(input: {
   sourceFrame?: Uint8Array;
   language: string;
 }): Promise<Buffer> {
+  const brand = studioSourceBranding(input.sourceBranding);
   const width = 1080;
   const height = input.format === "video" ? 1920 : 1350;
   const body = input.body.replace(/\n\n(?:@sgsswamiji|SGS Datta Sannidhi)\s*$/u, "");
@@ -111,12 +113,12 @@ export async function studioArtwork(input: {
     .toBuffer();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="1080" height="${height}" fill="#fffaf2"/><rect width="1080" height="14" fill="#481b2b"/>
     <image href="${image(logo)}" x="48" y="46" width="120" height="120"/>
-    ${lines(STUDIO_BRAND_NAME, 196, 94, 27, 52, 2)}${lines(STUDIO_BRAND_SIGNATURE, 196, 157, 23, 58, 1, "#a12b58")}
+    ${lines(brand.name, 196, 94, 27, 52, 2)}${lines(brand.signature, 196, 157, 23, 58, 1, "#a12b58")}
     <path d="M48 204H1032" stroke="#e1d3bd"/>
     ${lines(input.title, 48, 284, 43, 41, 3)}
     <rect x="0" y="520" width="1080" height="608" fill="${quoteCard ? "#f2e8da" : "#21171d"}"/>
     ${picture ? `<image href="${image(picture)}" x="0" y="520" width="1080" height="608" preserveAspectRatio="xMidYMid meet"/>` : quoteCard ? `${lines("SOURCE-BASED REFLECTION", 48, 588, 21, 70, 1, "#a12b58")}${lines(body, 48, 674, 36, 48, 8)}` : ""}
-    <path d="M48 ${height - 75}H1032" stroke="#e1d3bd"/>${lines(STUDIO_BRAND_SIGNATURE, 48, height - 35, 23, 70, 1, "#a12b58")}
+    <path d="M48 ${height - 75}H1032" stroke="#e1d3bd"/>${lines(brand.signature, 48, height - 35, 23, 70, 1, "#a12b58")}
   </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }

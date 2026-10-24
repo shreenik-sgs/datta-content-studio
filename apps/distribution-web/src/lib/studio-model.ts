@@ -9,7 +9,7 @@ import type {
 import { studioNeedsSuitabilityReview } from "@satsang/distribution-domain";
 
 /** The operator client receives a filename and authenticated URL, never a storage address. */
-export type PublicStudioAsset = Omit<StudioAsset, "storageKey">;
+export type PublicStudioAsset = Omit<StudioAsset, "storageKey" | "identityKey">;
 export type PublicStudioOutput = Omit<StudioOutput, "asset" | "captions" | "thumbnail"> & {
   asset: PublicStudioAsset | null;
   thumbnail?: PublicStudioAsset;

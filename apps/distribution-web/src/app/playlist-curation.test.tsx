@@ -213,6 +213,10 @@ it("keeps source ownership and uses the confirmed subscription channel for every
     select.value = "bala-swamiji";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  const facebook = host.querySelector<HTMLInputElement>('input[name="channel"][value="facebook"]');
+  expect(facebook?.matches(":disabled")).toBe(false);
+  expect(facebook?.checked).toBe(true);
+  expect(facebook?.closest("details")?.open).toBe(true);
   const form = host.querySelector("form");
   if (!form) throw Error("missing form");
   (form.elements.namedItem("confirmed") as HTMLInputElement).checked = true;
@@ -223,7 +227,7 @@ it("keeps source ownership and uses the confirmed subscription channel for every
   expect(send).toHaveBeenCalledWith(
     expect.objectContaining({
       request: expect.objectContaining({
-        channels: ["youtube"],
+        channels: ["youtube", "facebook"],
         languages: ["en"],
         allCompleteMessages: true,
         sourceBranding: "bala-swamiji",
@@ -233,7 +237,7 @@ it("keeps source ownership and uses the confirmed subscription channel for every
         },
       }),
       rights: expect.objectContaining({
-        channels: ["youtube"],
+        channels: ["youtube", "facebook"],
         owner: "Gurubhavana ADPT / Avadhoota Datta Peetham",
       }),
     }),
@@ -327,4 +331,36 @@ it("queues one section-discovery command for the whole bundle only for its curat
   );
   expect(viewFiles?.disabled).toBe(false);
   await act(async () => updating.root.unmount());
+});
+
+it("retains the curator's channel selections when the speaker changes and rejects an empty channel selection", async () => {
+  const { host, root, send } = await mount();
+  const facebook = host.querySelector<HTMLInputElement>('input[name="channel"][value="facebook"]');
+  const instagram = host.querySelector<HTMLInputElement>(
+    'input[name="channel"][value="instagram"]',
+  );
+  await act(async () => {
+    facebook?.click();
+    instagram?.click();
+  });
+  const select = host.querySelector<HTMLSelectElement>('select[name="sourceBranding"]');
+  if (!select) throw Error("missing speaker");
+  await act(async () => {
+    select.value = "bala-swamiji";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(facebook?.checked).toBe(false);
+  expect(instagram?.checked).toBe(true);
+  for (const input of host.querySelectorAll<HTMLInputElement>('input[name="channel"]'))
+    input.checked = false;
+  await act(async () =>
+    host
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(send).not.toHaveBeenCalled();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+    "Select at least one channel",
+  );
+  await act(async () => root.unmount());
 });
