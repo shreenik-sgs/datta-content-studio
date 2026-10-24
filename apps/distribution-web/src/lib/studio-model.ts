@@ -100,7 +100,7 @@ const messages: Record<string, string> = {
   STUDIO_ACTION_UNCONFIRMED:
     "The Hub could not confirm this action. It may already have been saved. Refresh the package and check its current status before retrying. Existing sources, drafts and approvals are retained.",
   STUDIO_CLOSING_CHANNEL_REQUIRED:
-    "The closing card names a new channel whose destination is not configured. Connect that channel and update its subscription description before publishing.",
+    "The closing card needs a valid YouTube destination. Ask the Curator to set its channel link and ensure it matches the subscription description before publishing.",
   ACCOUNT_NOT_FOUND: "This saved account is no longer available. Refresh and choose an account.",
   ACCOUNT_DESTINATION_IMMUTABLE:
     "Add a new account for a different channel ID. Existing publishing requests must keep their original destination.",

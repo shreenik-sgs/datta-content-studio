@@ -366,9 +366,9 @@ it("offers a real app link separately from exported pixels while leaving it off 
       canDownload={false}
     />,
   );
-  expect(custom).not.toContain(`href="${target.url}"`);
+  expect(custom).toContain(`href="${target.url}"`);
   expect(custom).toContain("Sri Datta Vijayananda Teertha Swamiji");
-  expect(custom).toContain("has not been configured yet");
+  expect(custom).not.toContain("has not been configured yet");
   const legacy = renderToStaticMarkup(
     <StudioOutputPreview
       value={value}

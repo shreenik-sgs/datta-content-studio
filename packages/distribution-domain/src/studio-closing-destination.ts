@@ -59,3 +59,32 @@ export function retargetStudioYoutubeClosing(
   });
   return { ...pkg, request: { ...pkg.request, youtubeClosing: target }, outputs };
 }
+
+/** Explicit operator maintenance: append a new draft, never change the reviewed snapshot. */
+export function reviseStudioYoutubeClosing(
+  pkg: StudioPackage,
+  target: StudioYoutubeClosing,
+  actor: { userId: string; at: string },
+): StudioPackage {
+  if (
+    !["DRAFT", "CHANGES_REQUESTED", "FAILED", "IN_REVIEW", "APPROVED"].includes(pkg.status) ||
+    !actor.userId ||
+    !Number.isFinite(Date.parse(actor.at))
+  )
+    throw Error("INVALID_STUDIO_TRANSITION");
+  const editable = { ...pkg, status: "DRAFT" as const, approval: null };
+  const revised = retargetStudioYoutubeClosing(editable, target);
+  if (revised === editable) return pkg;
+  return {
+    ...revised,
+    status: pkg.outputs.some((output) => output.included) ? "DRAFT" : pkg.status,
+    outputs: revised.outputs.map((output) =>
+      output.included
+        ? {
+            ...output,
+            workflow: { status: "DRAFT" as const, actorId: actor.userId, updatedAt: actor.at },
+          }
+        : output,
+    ),
+  };
+}

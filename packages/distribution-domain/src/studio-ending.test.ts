@@ -6,7 +6,7 @@ import {
   validateStudioClosingCard,
 } from "./studio-ending";
 import { safeStudioPortraitScenes } from "./studio-presentation";
-it("does not map a source channel or parent account to an uncreated destination", () => {
+it("resolves an explicit destination independently of the speaker branding", () => {
   for (const target of [
     { label: "Gurubhavana ADPT", url: "https://www.youtube.com/@gurubhavanaadpt" },
     { label: "AvadhootaDattaPeetham", url: "https://www.youtube.com/@AvadhootaDattaPeetham" },
@@ -15,7 +15,10 @@ it("does not map a source channel or parent account to an uncreated destination"
       sourceBranding: "bala-swamiji",
       youtubeClosing: target,
     });
-    expect(studioClosingChannel(card)).toEqual({ name: "Sri Datta Vijayananda Teertha Swamiji" });
+    expect(studioClosingChannel(card)).toEqual({
+      name: "Sri Datta Vijayananda Teertha Swamiji",
+      url: target.url,
+    });
     expect(studioClosingChannel({ ...card, policy: "clean-hold-closing-card-v2" })).toEqual({
       name: target.label,
       url: target.url,
@@ -267,7 +270,43 @@ it("preserves historical green-card evidence without treating its source as a ne
     policy: "green-subscribe-closing-card-v3" as const,
   };
   expect(() => validateStudioClosingCard(card, 60000)).not.toThrow();
-  expect(studioClosingChannel(card)).toEqual({ name: "SriBalaSwamiji" });
+  expect(studioClosingChannel(card)).toEqual({
+    name: "SriBalaSwamiji",
+    url: "https://www.youtube.com/@gurubhavanaadpt",
+  });
+});
+
+it.each([
+  "green-subscribe-closing-card-v4",
+  "green-watch-subscribe-closing-card-v5",
+  "green-channel-watch-subscribe-closing-card-v6",
+  "green-plain-text-closing-card-v7",
+] as const)("accepts a configured channel label different from the speaker on %s", (policy) => {
+  const card = {
+    ...studioClosingCardPlan(60000, {
+      sourceBranding: "bala-swamiji",
+      youtubeClosing: {
+        label: "Gurubhavana ADPT",
+        url: "https://www.youtube.com/@gurubhavanaadpt",
+      },
+    }),
+    policy,
+  };
+  const before = structuredClone(card);
+  expect(
+    unconfiguredStudioClosingChannels([
+      { included: true, presentationReview: { closingCard: card } },
+    ]),
+  ).toEqual([]);
+  expect(card).toEqual(before);
+  const wrong = { ...card, channelUrl: "https://www.youtube.com/@anotherchannel" };
+  expect(studioClosingChannel(wrong).url).toBeUndefined();
+  const unsafe = {
+    ...card,
+    channelUrl: "https://untrusted.invalid/",
+    youtubeClosing: { label: "Gurubhavana ADPT", url: "https://untrusted.invalid/" },
+  };
+  expect(studioClosingChannel(unsafe).url).toBeUndefined();
 });
 
 it("retains reviewed v4/v5 cards while new cards display the destination channel", () => {

@@ -3,17 +3,24 @@ import { Pool } from "pg";
 import {
   type StudioPackage,
   retargetStudioYoutubeClosing,
+  reviseStudioYoutubeClosing,
   studioYoutubeClosing,
   validateStudioOutputs,
 } from "../packages/distribution-domain/src/index.ts";
 
-// Explicit, audited TEST-bundle maintenance. Never rewrites an approved file or video asset.
+// Explicit, audited TEST-bundle maintenance. Reviewed snapshots and media stay immutable.
 const url = new URL(
   process.env.DISTRIBUTION_MIGRATION_DATABASE_URL ?? process.env.DISTRIBUTION_DATABASE_URL ?? "",
 );
+const isolatedLiveClone =
+  url.pathname === "/datta_content_studio_gbadpt_live" &&
+  process.env.STUDIO_IDENTITY === "gbadpt" &&
+  process.env.DISTRIBUTION_HUB_STAGE === "TEST" &&
+  process.env.STUDIO_PUBLISHING_ENABLED === "false";
 if (
   !["localhost", "127.0.0.1"].includes(url.hostname) ||
-  !["/datta_content_studio_local", "/datta_content_studio_staging"].includes(url.pathname)
+  (!isolatedLiveClone &&
+    !["/datta_content_studio_local", "/datta_content_studio_staging"].includes(url.pathname))
 )
   throw Error("WRONG_TARGET");
 const bundle = process.env.STUDIO_BUNDLE_ID ?? "";
@@ -23,6 +30,8 @@ const target = studioYoutubeClosing({
   url: process.env.STUDIO_CLOSING_URL ?? "",
 });
 const apply = process.argv.includes("--apply");
+// Use only after explicit owner authorization to invalidate reviewed copies.
+const reviseReviewed = process.argv.includes("--revise-reviewed");
 const pool = new Pool({ connectionString: url.toString(), max: 1 });
 const c = await pool.connect();
 try {
@@ -67,7 +76,9 @@ try {
   if (!actor) throw Error("CURATOR_REQUIRED");
   const changes = rows.map((row) => {
     const pkg = row.snapshot as StudioPackage;
-    const next = retargetStudioYoutubeClosing(pkg, target);
+    const next = reviseReviewed
+      ? reviseStudioYoutubeClosing(pkg, target, { userId: actor.id, at: new Date().toISOString() })
+      : retargetStudioYoutubeClosing(pkg, target);
     validateStudioOutputs(next.outputs, {
       packageId: next.id,
       source: next.source,
@@ -135,6 +146,7 @@ try {
       outputs: outputs.length,
       target,
       videoFilesRebuilt: 0,
+      revisedDrafts: changed.filter((x) => x.next.status === "DRAFT").length,
     }),
   );
 } catch (error) {

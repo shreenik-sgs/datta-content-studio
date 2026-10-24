@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 import type { StudioPackage, StudioStatus } from "./intelligent-content";
-import { retargetStudioYoutubeClosing } from "./studio-closing-destination";
+import {
+  retargetStudioYoutubeClosing,
+  reviseStudioYoutubeClosing,
+} from "./studio-closing-destination";
 import {
   STUDIO_BALA_YOUTUBE_CLOSING,
   studioClosingCardPlan,
@@ -114,3 +117,69 @@ it("sets the destination on a failed no-excerpt package without generating or ap
   expect(next.outputs).toEqual([]);
   expect(next.approval).toBeNull();
 });
+
+it("creates a fresh draft for an authorized link change without changing approved media or history", () => {
+  const pkg = fixture();
+  pkg.status = "APPROVED";
+  pkg.approval = {
+    reviewerId: "reviewer",
+    revision: 8,
+    sourceRevision: 2,
+    approvedAt: "2026-10-24T00:00:00Z",
+  };
+  const output = pkg.outputs[0];
+  if (!output) throw Error("Missing output");
+  output.included = true;
+  output.workflow = {
+    status: "APPROVED",
+    actorId: "reviewer",
+    updatedAt: "2026-10-24T00:00:00Z",
+    approval: { ...pkg.approval, fingerprint: "reviewed-fingerprint" },
+  };
+  output.mediaEdits = {
+    framing: "auto",
+    portraitFocus: 0.6,
+    captions: "on",
+    subtitleSize: "small",
+    speechLevel: "standard",
+    reduceNoise: true,
+  };
+  const before = structuredClone(pkg);
+  const target = { ...STUDIO_BALA_YOUTUBE_CLOSING, url: "https://www.youtube.com/@gurubhavana" };
+  const next = reviseStudioYoutubeClosing(pkg, target, {
+    userId: "curator",
+    at: "2026-10-24T01:00:00Z",
+  });
+  expect(pkg).toEqual(before);
+  expect(next.status).toBe("DRAFT");
+  expect(next.approval).toBeNull();
+  expect(next.outputs[0]?.workflow).toEqual({
+    status: "DRAFT",
+    actorId: "curator",
+    updatedAt: "2026-10-24T01:00:00Z",
+  });
+  expect(next.outputs[0]?.asset).toBe(output.asset);
+  expect(next.outputs[0]?.captions).toBe(output.captions);
+  expect(next.outputs[0]?.mediaEdits).toBe(output.mediaEdits);
+  expect(next.outputs[0]?.body).toContain(target.url);
+  expect(next.outputs[0]?.fileVersion).toBe(output.fileVersion);
+  const approvedAgain = { ...next, status: "APPROVED" as const, approval: pkg.approval };
+  expect(
+    reviseStudioYoutubeClosing(approvedAgain, target, {
+      userId: "curator",
+      at: "2026-10-24T02:00:00Z",
+    }),
+  ).toBe(approvedAgain);
+});
+
+it.each<StudioStatus>(["QUEUED", "GENERATING", "DISCARDED"])(
+  "cannot revise closing links during %s",
+  (status) => {
+    expect(() =>
+      reviseStudioYoutubeClosing({ ...fixture(), status }, STUDIO_BALA_YOUTUBE_CLOSING, {
+        userId: "curator",
+        at: "2026-10-24T01:00:00Z",
+      }),
+    ).toThrow("INVALID_STUDIO_TRANSITION");
+  },
+);

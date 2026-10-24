@@ -171,7 +171,7 @@ export type StudioClosingCard = {
 export function studioClosingDisplayName(sourceBranding?: StudioSourceBranding): string {
   return sourceBranding === "bala-swamiji" ? "Sri Datta Vijayananda Teertha Swamiji" : "SriSwamiji";
 }
-/** A legacy source destination must not masquerade as either newly planned channel. */
+/** Speaker branding and a curator's explicit subscription destination are separate identities. */
 export function studioClosingChannel(value: StudioClosingCard): { name: string; url?: string } {
   if (
     value.policy !== STUDIO_CLOSING_CARD_POLICY &&
@@ -190,10 +190,15 @@ export function studioClosingChannel(value: StudioClosingCard): { name: string; 
       ? oldName
       : studioClosingDisplayName(value.sourceBranding);
   const target = value.youtubeClosing;
-  return {
-    name,
-    ...(target?.label === name && target.url === value.channelUrl ? { url: target.url } : {}),
-  };
+  if (target) {
+    try {
+      const configured = studioYoutubeClosing(target);
+      if (configured.url === value.channelUrl) return { name, url: configured.url };
+    } catch {
+      // A malformed or contradictory link still needs correction before publishing.
+    }
+  }
+  return { name };
 }
 export function unconfiguredStudioClosingChannels(
   outputs: { included: boolean; presentationReview?: { closingCard?: StudioClosingCard } | null }[],
