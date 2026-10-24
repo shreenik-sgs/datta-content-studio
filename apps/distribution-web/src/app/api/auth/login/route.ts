@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 import {
   STUDIO_SESSION_COOKIE,
   distributionHubPolicyEnabled,
+  studioLoginAliases,
   studioLoginIdentifier,
   studioLoginReturnPath,
-  studioTestLoginAliases,
   trustedDistributionOrigin,
   validStudioMutationOrigin,
 } from "../../../../lib/auth";
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     if (body.length > 4096) return new Response("Invalid request", { status: 413 });
     const data = new URLSearchParams(body);
     const token = await loginStudioOperator(
-      studioLoginIdentifier(data.get("email") ?? "", studioTestLoginAliases()),
+      studioLoginIdentifier(data.get("email") ?? "", studioLoginAliases()),
       data.get("password") ?? "",
       process.env.DISTRIBUTION_HUB_STAGE === "TEST",
     );

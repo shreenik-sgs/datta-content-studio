@@ -28,17 +28,23 @@ export function studioLoginReturnPath(value: unknown) {
     ? value
     : "/distribution";
 }
-/** Explicit TEST usernames share the underlying email's password and rate limit. */
-export function studioTestLoginAliases(
+/** Explicit usernames share the underlying email's password and rate limit. */
+export function studioLoginAliases(
   env: Record<string, string | undefined> = process.env,
 ): Record<string, string> {
   const origin = trustedDistributionOrigin(env.DISTRIBUTION_APP_ORIGIN);
-  if (env.DISTRIBUTION_HUB_STAGE !== "TEST" || !origin) return {};
+  const stage = normalizeDistributionStage(env.DISTRIBUTION_HUB_STAGE);
+  if (stage === "OFF" || !origin) return {};
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname);
   try {
-    // Hosted staging must opt in separately; localhost aliases never leak into a deployment.
+    // TEST aliases never implicitly become live credentials. A live deployment must
+    // explicitly opt in, using its own operators and their existing password checks.
     const parsed: unknown = JSON.parse(
-      (local ? env.STUDIO_LOCAL_LOGIN_ALIASES_JSON : env.STUDIO_TEST_LOGIN_ALIASES_JSON) ?? "{}",
+      (stage === "TEST"
+        ? local
+          ? env.STUDIO_LOCAL_LOGIN_ALIASES_JSON
+          : env.STUDIO_TEST_LOGIN_ALIASES_JSON
+        : env.STUDIO_LIVE_LOGIN_ALIASES_JSON) ?? "{}",
     );
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return Object.fromEntries(

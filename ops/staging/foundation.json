@@ -337,15 +337,23 @@
                     },
                     {
                       "Fn::Sub": "${Assets.Arn}/backups/*"
+                    },
+                    {
+                      "Fn::Sub": "${Assets.Arn}/production/*"
                     }
                   ]
                 },
                 {
                   "Effect": "Allow",
                   "Action": ["s3:DeleteObject"],
-                  "Resource": {
-                    "Fn::Sub": "${Assets.Arn}/test/*"
-                  }
+                  "Resource": [
+                    {
+                      "Fn::Sub": "${Assets.Arn}/test/*"
+                    },
+                    {
+                      "Fn::Sub": "${Assets.Arn}/production/*"
+                    }
+                  ]
                 },
                 {
                   "Effect": "Allow",

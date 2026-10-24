@@ -10,8 +10,7 @@ case "$STUDIO_IMAGE_REPOSITORY" in */datta-content-studio-staging) ;; *) exit 1 
 case "$STUDIO_HOSTNAME" in gbadpt.sgsdattasannidhi.org|studio-staging.sgsdattasannidhi.org) ;; *) exit 1 ;; esac
 config=/srv/content-studio/config
 test -s "$config/runtime.env"
-grep -qx 'DISTRIBUTION_HUB_STAGE=TEST' "$config/runtime.env"
-grep -qx 'STUDIO_PUBLISHING_ENABLED=false' "$config/runtime.env"
+python3 "$(dirname "$0")/runtime-database.py" "$config/runtime.env" > /dev/null
 grep -qx "DISTRIBUTION_APP_ORIGIN=https://$STUDIO_HOSTNAME" "$config/runtime.env"
 if [ "$STUDIO_HOSTNAME" = gbadpt.sgsdattasannidhi.org ]; then
   grep -qx 'STUDIO_IDENTITY=gbadpt' "$config/runtime.env"

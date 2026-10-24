@@ -1,11 +1,11 @@
-import { studioLoginReturnPath, studioTestLoginAliases } from "../../lib/auth";
+import { studioLoginAliases, studioLoginReturnPath } from "../../lib/auth";
 import { STUDIO_PRODUCT_NAME, studioIdentity } from "../../lib/studio-identity";
 
 export default async function Login({
   searchParams,
 }: { searchParams: Promise<{ error?: string; returnTo?: string }> }) {
   const { error, returnTo } = await searchParams;
-  const aliasesEnabled = Object.keys(studioTestLoginAliases()).length > 0;
+  const aliasesEnabled = Object.keys(studioLoginAliases()).length > 0;
   const identity = studioIdentity();
   return (
     <main className="shell studio-login">
