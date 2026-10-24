@@ -43,8 +43,12 @@ export function PlaylistCuration({
 }) {
   const [recordingPage, setRecordingPage] = useState(0);
   const [error, setError] = useState("");
-  const [sourceBranding, setSourceBranding] = useState("");
-  const [selection, setSelection] = useState("YouTube Shorts, Facebook · English");
+  const [sourceBranding, setSourceBranding] = useState(item.curation?.request.sourceBranding ?? "");
+  const [selection, setSelection] = useState(
+    item.curation
+      ? `${item.curation.request.channels.map(studioChannelLabel).join(", ")} · ${item.curation.request.languages.map((l) => DISTRIBUTION_LANGUAGE_NAMES[l]).join(", ")}`
+      : "YouTube Shorts, Facebook · English",
+  );
   const children = (item.childIds ?? []).flatMap((id) => {
     const child = items.find((value) => value.id === id);
     return child ? [child] : [];
@@ -88,19 +92,19 @@ export function PlaylistCuration({
       territories: ["WORLDWIDE"],
       privacyClass: "PUBLIC",
       channels,
-      releaseAt: null,
-      expiresAt: null,
+      releaseAt: plan?.rights.releaseAt ?? null,
+      expiresAt: plan?.rights.expiresAt ?? null,
     });
     const request = studioGenerationRequestSchema.safeParse({
       languages: form.getAll("language"),
       channels,
       instructions: form.get("instructions"),
       captions: form.get("captions") === "on",
-      allCompleteMessages: true,
+      allCompleteMessages: plan?.request.allCompleteMessages ?? true,
       ...(sourceBranding === "bala-swamiji"
         ? {
             sourceBranding,
-            youtubeClosing: STUDIO_BALA_YOUTUBE_CLOSING,
+            youtubeClosing: plan?.request.youtubeClosing ?? STUDIO_BALA_YOUTUBE_CLOSING,
           }
         : {}),
     });
@@ -207,13 +211,15 @@ export function PlaylistCuration({
             )}
           </dl>
           <p>
-            {removedContent
-              ? "Generated files were removed to free storage. Your masters and shared settings are retained. Generate again only when you need a fresh curation."
-              : reviewable
-                ? "Open the generated content below. Review each recording in this playlist without returning to the master library."
-                : service
-                  ? "Downloads are paused. Your playlist permissions and output settings are saved."
-                  : "Generation runs automatically for every video using your shared settings. You can leave this page and return to this playlist later."}
+            {plan?.pausedForSettings
+              ? "Generation is paused for this playlist. Choose your channels below, then save and resume all recordings. Downloaded masters and saved analysis are retained."
+              : removedContent
+                ? "Generated files were removed to free storage. Your masters and shared settings are retained. Generate again only when you need a fresh curation."
+                : reviewable
+                  ? "Open the generated content below. Review each recording in this playlist without returning to the master library."
+                  : service
+                    ? "Downloads are paused. Your playlist permissions and output settings are saved."
+                    : "Generation runs automatically for every video using your shared settings. You can leave this page and return to this playlist later."}
           </p>
           {refreshing && (
             <p>
@@ -252,7 +258,7 @@ export function PlaylistCuration({
         </div>
       )}
       {canCurate && onReload && <ImportRecovery item={item} items={items} onSaved={onReload} />}
-      {!plan && canCurate ? (
+      {(!plan || plan.pausedForSettings) && canCurate ? (
         <form
           onSubmit={start}
           onInvalidCapture={(event) => {
@@ -281,7 +287,11 @@ export function PlaylistCuration({
             );
           }}
         >
-          <h3>One setup for the whole bundle</h3>
+          <h3>
+            {plan?.pausedForSettings
+              ? "Change channels and resume this playlist"
+              : "One setup for the whole bundle"}
+          </h3>
           <p>
             Confirm the shared owner and permissions, then choose the outputs for all {total}{" "}
             videos. Downloads and generation continue automatically, even if you leave this page.
@@ -319,9 +329,10 @@ export function PlaylistCuration({
                     maxLength={200}
                     key={sourceBranding}
                     defaultValue={
-                      sourceBranding === "bala-swamiji"
+                      plan?.rights.owner ??
+                      (sourceBranding === "bala-swamiji"
                         ? "Gurubhavana ADPT / Avadhoota Datta Peetham"
-                        : "Sri Ganapathy Sachchidananda Swamiji / Avadhoota Datta Peetham"
+                        : "Sri Ganapathy Sachchidananda Swamiji / Avadhoota Datta Peetham")
                     }
                   />
                 </label>
@@ -331,7 +342,10 @@ export function PlaylistCuration({
                     name="authorization"
                     required
                     maxLength={2000}
-                    defaultValue="Authorized by the content owner to curate and publish this playlist."
+                    defaultValue={
+                      plan?.rights.authorizationBasis ??
+                      "Authorized by the content owner to curate and publish this playlist."
+                    }
                   />
                 </label>
               </div>
@@ -352,7 +366,11 @@ export function PlaylistCuration({
                         name="channel"
                         value={channel}
                         type="checkbox"
-                        defaultChecked={["youtube", "facebook"].includes(channel)}
+                        defaultChecked={
+                          plan
+                            ? plan.request.channels.includes(channel)
+                            : ["youtube", "facebook"].includes(channel)
+                        }
                       />
                       {studioChannelLabel(channel)}
                     </label>
@@ -368,7 +386,9 @@ export function PlaylistCuration({
                         name="language"
                         value={language}
                         type="checkbox"
-                        defaultChecked={language === "en"}
+                        defaultChecked={
+                          plan ? plan.request.languages.includes(language) : language === "en"
+                        }
                       />
                       {DISTRIBUTION_LANGUAGE_NAMES[language]}
                     </label>
@@ -378,7 +398,11 @@ export function PlaylistCuration({
             </details>
 
             <label className="online-import-checkbox">
-              <input name="captions" type="checkbox" defaultChecked />
+              <input
+                name="captions"
+                type="checkbox"
+                defaultChecked={plan?.request.captions ?? true}
+              />
               Embed subtitles in the selected languages
             </label>
             <p className="muted">
@@ -393,7 +417,10 @@ export function PlaylistCuration({
                   name="instructions"
                   rows={3}
                   maxLength={4000}
-                  defaultValue="Find every distinct self-contained, actionable teaching suitable for newcomers. Include the necessary spoken setup and conclusion; do not cut a teaching mid-thought or invent a moral. Preserve the speaker's original continuous voice. Translate faithfully into the selected languages. Use portrait framing while preserving the full head and meaningful gestures. Use source-grounded artwork only when it helps explain the actual passage, and retain source footage when artwork is unnecessary or fails review."
+                  defaultValue={
+                    plan?.request.instructions ??
+                    "Find every distinct self-contained, actionable teaching suitable for newcomers. Include the necessary spoken setup and conclusion; do not cut a teaching mid-thought or invent a moral. Preserve the speaker's original continuous voice. Translate faithfully into the selected languages. Use portrait framing while preserving the full head and meaningful gestures. Use source-grounded artwork only when it helps explain the actual passage, and retain source footage when artwork is unnecessary or fails review."
+                  }
                 />
               </label>
             </details>
@@ -408,7 +435,11 @@ export function PlaylistCuration({
             </p>
             {error && <p role="alert">{error}</p>}
             <button type="submit" className="button primary">
-              {busy ? "Starting generation…" : `Generate curated content for all ${total} videos`}
+              {busy
+                ? "Saving…"
+                : plan?.pausedForSettings
+                  ? `Save channels and resume all ${total} recordings`
+                  : `Generate curated content for all ${total} videos`}
             </button>
           </fieldset>
         </form>
@@ -426,6 +457,23 @@ export function PlaylistCuration({
             are not a limit on the channels Studio supports. Existing packages keep their original
             settings and edits.
           </p>
+          {canCurate &&
+            !completeOnly &&
+            members.every(
+              (m) =>
+                !m.existing &&
+                (m.outputCount ?? 0) === 0 &&
+                ["QUEUED", "GENERATING", "FAILED", "DRAFT"].includes(m.status ?? "QUEUED"),
+            ) && (
+              <button
+                type="button"
+                className="button"
+                disabled={busy}
+                onClick={() => void send({ action: "pause-playlist-settings", id: item.id })}
+              >
+                Pause and change channels
+              </button>
+            )}
         </details>
       ) : (
         <p>The Content Curator will set up this playlist once before generation.</p>
@@ -437,6 +485,7 @@ export function PlaylistCuration({
       )}
       {canCurate &&
         !completeOnly &&
+        !plan?.pausedForSettings &&
         planned > 0 &&
         plan?.request.allCompleteMessages &&
         members.some((m) => ["DRAFT", "FAILED", "CHANGES_REQUESTED"].includes(m.status ?? "")) &&
@@ -477,6 +526,7 @@ export function PlaylistCuration({
       )}
       {canCurate &&
         plan &&
+        !plan.pausedForSettings &&
         service?.code !== "ONLINE_PROVIDER_VERIFICATION_REQUIRED" &&
         (service || needsRecovery) && (
           <button
@@ -498,24 +548,26 @@ export function PlaylistCuration({
           {children.slice(recordingPage * 20, (recordingPage + 1) * 20).map((child) => {
             const progress = plan?.items[child.id];
             const status = progress?.status;
-            const label = child.serviceIssue
-              ? "Waiting for import service"
-              : child.status === "FAILED"
-                ? "Download needs attention"
-                : child.status === "DOWNLOADING"
-                  ? "Downloading"
-                  : child.status === "QUEUED"
-                    ? "Waiting to download"
-                    : studioNeedsSuitabilityReview(progress?.error)
-                      ? "No suitable excerpt found"
-                      : progress?.error
-                        ? "Curation needs attention"
-                        : status
-                          ? (STUDIO_STATUS_LABELS[status as keyof typeof STUDIO_STATUS_LABELS] ??
-                            status)
-                          : plan
-                            ? "Waiting for curation"
-                            : "Ready for playlist setup";
+            const label = plan?.pausedForSettings
+              ? "Paused — choose channels above"
+              : child.serviceIssue
+                ? "Waiting for import service"
+                : child.status === "FAILED"
+                  ? "Download needs attention"
+                  : child.status === "DOWNLOADING"
+                    ? "Downloading"
+                    : child.status === "QUEUED"
+                      ? "Waiting to download"
+                      : studioNeedsSuitabilityReview(progress?.error)
+                        ? "No suitable excerpt found"
+                        : progress?.error
+                          ? "Curation needs attention"
+                          : status
+                            ? (STUDIO_STATUS_LABELS[status as keyof typeof STUDIO_STATUS_LABELS] ??
+                              status)
+                            : plan
+                              ? "Waiting for curation"
+                              : "Ready for playlist setup";
             return (
               <li key={child.id}>
                 <strong>{child.title ?? child.source.id}</strong>
@@ -529,7 +581,7 @@ export function PlaylistCuration({
                       "Download failed. Use Retry unfinished videos to retry unfinished recordings."}
                   </p>
                 )}
-                {progress?.error && (
+                {progress?.error && !plan?.pausedForSettings && (
                   <p role={studioNeedsSuitabilityReview(progress.error) ? undefined : "alert"}>
                     {ONLINE_IMPORT_ERRORS[progress.error] ??
                       (progress.error === "PLAYLIST_QUEUE_FAILED"

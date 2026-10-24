@@ -364,3 +364,86 @@ it("retains the curator's channel selections when the speaker changes and reject
   );
   await act(async () => root.unmount());
 });
+it("lets the curator pause an unfinished bundle and resume selected channels with its saved settings", async () => {
+  const item: OnlineImport = {
+    ...parent,
+    curation: {
+      requestedBy: "curator",
+      confirmedAt: parent.createdAt,
+      rights: {
+        owner: "Saved owner",
+        authorizationBasis: "Saved permission",
+        privacyClass: "PUBLIC",
+        territories: ["WORLDWIDE"],
+        channels: ["youtube"],
+        releaseAt: null,
+        expiresAt: null,
+      },
+      request: {
+        languages: ["en"],
+        channels: ["youtube"],
+        captions: true,
+        instructions: "Saved guidance",
+        sourceBranding: "bala-swamiji",
+        youtubeClosing: {
+          label: "Gurubhavana ADPT",
+          url: "https://www.youtube.com/@gurubhavanaadpt",
+        },
+      },
+      items: {
+        "child-0": { packageId: "pending", status: "GENERATING", outputCount: 0, existing: false },
+      },
+    },
+  };
+  if (!item.curation) throw Error("missing curation");
+  const active = await mount(item);
+  const pause = [...active.host.querySelectorAll("button")].find(
+    (b) => b.textContent === "Pause and change channels",
+  );
+  expect(pause).toBeTruthy();
+  await act(async () => pause?.click());
+  expect(active.send).toHaveBeenCalledWith({ action: "pause-playlist-settings", id: parent.id });
+  await act(async () => active.root.unmount());
+  const paused = await mount({ ...item, curation: { ...item.curation, pausedForSettings: true } });
+  const form = paused.host.querySelector("form");
+  if (!form) throw Error("missing form");
+  expect(paused.host.textContent).toContain("Save channels and resume all 16 recordings");
+  expect(paused.host.textContent).not.toContain("Retry unfinished videos");
+  expect((form.elements.namedItem("sourceBranding") as HTMLSelectElement).value).toBe(
+    "bala-swamiji",
+  );
+  expect((form.elements.namedItem("owner") as HTMLInputElement).value).toBe("Saved owner");
+  const fb = form.querySelector<HTMLInputElement>('input[name="channel"][value="facebook"]');
+  if (!fb) throw Error("missing Facebook choice");
+  expect(fb.disabled).toBe(false);
+  expect(fb.checked).toBe(false);
+  fb.checked = true;
+  (form.elements.namedItem("confirmed") as HTMLInputElement).checked = true;
+  await act(async () =>
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(paused.send).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: "curate-playlist",
+      request: expect.objectContaining({
+        channels: ["youtube", "facebook"],
+        sourceBranding: "bala-swamiji",
+        instructions: "Saved guidance",
+      }),
+      rights: expect.objectContaining({
+        owner: "Saved owner",
+        authorizationBasis: "Saved permission",
+      }),
+    }),
+  );
+  await act(async () => paused.root.unmount());
+  const locked = await mount({
+    ...item,
+    curation: {
+      ...item.curation,
+      items: { "child-0": { packageId: "done", status: "IN_REVIEW", outputCount: 1 } },
+    },
+  });
+  expect(locked.host.textContent).not.toContain("Pause and change channels");
+  await act(async () => locked.root.unmount());
+});

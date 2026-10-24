@@ -533,6 +533,7 @@ export function createOnlineImportRepository(
           [id, isTest],
         );
         const row = result.rows[0];
+        if (row?.curation?.pausedForSettings) throw Error("PLAYLIST_SETTINGS_PAUSED");
         if (!row || !isOnlineBundle(row.source)) throw Error("NOT_FOUND");
         // One explicit recovery action for the bundle, never touching completed downloads or packages.
         await client.query(

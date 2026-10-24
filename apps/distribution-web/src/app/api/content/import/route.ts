@@ -42,6 +42,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("discover-playlist"), id: z.string().uuid() }).strict(),
   z.object({ action: z.literal("retry"), id: z.string().uuid() }).strict(),
   z.object({ action: z.literal("resume-playlist"), id: z.string().uuid() }).strict(),
+  z.object({ action: z.literal("pause-playlist-settings"), id: z.string().uuid() }).strict(),
   z
     .object({
       action: z.literal("curate-playlist"),
@@ -99,6 +100,16 @@ export async function POST(request: Request) {
     const repo = repository();
     if (data.action === "rename")
       return json({ item: await repo.rename(auth.context, data.id, data) });
+    if (data.action === "pause-playlist-settings") {
+      await createIntelligentContentRepository(distributionPool(), {
+        authorize: createStudioRoleAuthority(process.env),
+      }).pausePlaylistSettings(auth.context, data.id);
+      return json({
+        item: (await repo.list(auth.context, { rootId: data.id })).find(
+          (item) => item.id === data.id,
+        ),
+      });
+    }
     if (!(await repo.ready(auth.context.isTest))) throw Error("ONLINE_IMPORT_DISABLED");
     if (data.action === "discover-playlist") {
       const result = await createIntelligentContentRepository(distributionPool(), {

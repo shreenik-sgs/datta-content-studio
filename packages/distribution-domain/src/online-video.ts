@@ -1,8 +1,9 @@
 import type { ContentRights } from "./content";
-import type { StudioGenerationRequest } from "./intelligent-content";
+import type { StudioGenerationRequest, StudioPackage } from "./intelligent-content";
 
 export type PlaylistCuration = {
   pausedForCleanup?: boolean;
+  pausedForSettings?: boolean;
   rights: ContentRights;
   request: StudioGenerationRequest;
   requestedBy: string;
@@ -18,6 +19,17 @@ export type PlaylistCuration = {
     }
   >;
 };
+
+/** Changing a bundle's plan must never replace a generated or reviewed file. */
+export function requirePlaylistSettingsEditable(pkg: StudioPackage, existing = false): void {
+  if (
+    existing ||
+    pkg.outputs.length ||
+    pkg.approval ||
+    !["QUEUED", "GENERATING", "DRAFT", "FAILED"].includes(pkg.status)
+  )
+    throw Error("PLAYLIST_SETTINGS_LOCKED");
+}
 
 /** Supported source links only. A source URL is provenance, never permission to publish. */
 export type OnlineVideoSource = {
@@ -152,6 +164,12 @@ export const ONLINE_IMPORT_ERRORS: Record<string, string> = {
     "This recording exceeds the 20 GB online download limit. Upload a smaller complete recording or split it into complete teachings.",
   PLAYLIST_ALREADY_STARTED:
     "This playlist already has saved settings. Open its progress below; existing curation has been preserved.",
+  PLAYLIST_SETTINGS_LOCKED:
+    "This playlist already contains generated, reviewed or reused files. Their settings and edits are protected; the existing files were not changed.",
+  PLAYLIST_SETTINGS_PAUSED:
+    "Generation is paused. Choose channels in this playlist's shared settings, then save and resume.",
+  PLAYLIST_PAUSE_WAIT:
+    "A recording is still being transcribed. Let that transcription finish, then pause to change channels. The saved recording will be reused.",
   PLAYLIST_NOT_READY:
     "The playlist is still being read. Wait for its video list, then start curation.",
   PLAYLIST_PERMISSIONS_INVALID:

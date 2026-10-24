@@ -2,6 +2,8 @@
 
 Curators select destinations independently of speaker branding. The playlist setup shows its channel choices by default, and individual-master generation offers the permitted channels as checkboxes. Existing started playlists show their saved settings; changing a speaker no longer clears or forces channel selections. The Bhagavat Katha staging batch was started with YouTube/English and must not be silently restarted or broadened.
 
+Before any files have been generated, the Curator can choose **Pause and change channels**. This atomically fences the playlist's old generation jobs and pauses its unstarted members. Saved masters and analysis checkpoints remain intact. **Save channels and resume** applies the confirmed permissions and destinations to the same unfinished packages and remaining recordings. Generated, reviewed, approved or reused packages are protected from this settings change. An active transcription must reach its saved checkpoint before pausing; ordinary retry actions cannot silently resume a paused plan.
+
 ## Reuse rules
 
 The generator shares one render for matching source ranges, language/cues, media edits, screen/framing/art decisions and closing destination. A title distinguishes renders only when an opening card actually embeds it. Posting text and thumbnail titles remain independent. Every destination still receives its own output ID, source evidence, human workflow and publication record. Different excerpts, captions, audio/framing edits or embedded cards create different media.

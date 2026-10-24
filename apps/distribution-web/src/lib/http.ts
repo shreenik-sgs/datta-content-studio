@@ -212,6 +212,7 @@ const statuses: Record<string, number> = {
   DUPLICATE_MASTER: 409,
   NOT_READY_FOR_REVIEW: 409,
   INVALID_REQUEST: 400,
+  PLAYLIST_SETTINGS_PAUSED: 409,
 };
 export function json(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });

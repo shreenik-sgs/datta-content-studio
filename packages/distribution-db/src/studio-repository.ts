@@ -24,6 +24,7 @@ import {
   postingCheckBlock,
   requireContentRevision,
   requireIndependentContentReview,
+  requirePlaylistSettingsEditable,
   studioAggregateFileStatus,
   studioCanDiscard,
   studioCanEdit,
@@ -861,6 +862,15 @@ export function createIntelligentContentRepository(
     await access(client, ctx, "content.create");
     const pkg = await load(client, ctx.isTest, id, true);
     requireContentRevision(pkg.revision, input.expectedRevision);
+    if (
+      (
+        await client.query(
+          "SELECT 1 FROM distribution.online_import WHERE is_test=$1 AND deleted_at IS NULL AND curation->>'pausedForSettings'='true' AND EXISTS (SELECT 1 FROM jsonb_each(curation->'items') member WHERE member.value->>'packageId'=$2)",
+          [ctx.isTest, id],
+        )
+      ).rowCount
+    )
+      throw Error("PLAYLIST_SETTINGS_PAUSED");
     active(pkg);
     if (pkg.outputs.some((o) => o.workflow)) {
       if (["QUEUED", "GENERATING", "DISCARDED"].includes(pkg.status))
@@ -1024,6 +1034,59 @@ export function createIntelligentContentRepository(
         );
         return { queued };
       }),
+    pausePlaylistSettings: (ctx: DistributionContext, id: string) =>
+      transaction(async (client) => {
+        await access(client, ctx, "content.create");
+        if (!(await fresh(ctx.userId, ctx.isTest, "content.create")))
+          throw Error("ONLINE_IMPORT_FORBIDDEN");
+        const row = (
+          await client.query(
+            "SELECT * FROM distribution.online_import WHERE id=$1 AND is_test=$2 AND deleted_at IS NULL FOR UPDATE",
+            [id, ctx.isTest],
+          )
+        ).rows[0];
+        if (!row || !isOnlineBundle(row.source) || !row.curation) throw Error("PLAYLIST_NOT_READY");
+        const plan = row.curation as PlaylistCuration;
+        if (plan.pausedForSettings) return;
+        for (const member of Object.values(plan.items).sort((a, b) =>
+          (a.packageId ?? "").localeCompare(b.packageId ?? ""),
+        )) {
+          if (!member.packageId) continue;
+          const pkg = await load(client, ctx.isTest, member.packageId, true);
+          requirePlaylistSettingsEditable(pkg, member.existing);
+          const jobs = await client.query(
+            "SELECT * FROM distribution.studio_generation_job WHERE package_id=$1 AND is_test=$2 AND status IN ('QUEUED','RUNNING') FOR UPDATE",
+            [pkg.id, ctx.isTest],
+          );
+          if (
+            jobs.rows.some(
+              (j) =>
+                j.status === "RUNNING" &&
+                !["drafting", "reviewing", "rendering"].includes(j.progress?.phase),
+            )
+          )
+            throw Error("PLAYLIST_PAUSE_WAIT");
+          for (const job of jobs.rows)
+            await generationState(client, job.id, ctx.isTest, "STALE", "PLAYLIST_SETTINGS_PAUSED");
+          await save(client, pkg, ctx.userId, "PLAYLIST_SETTINGS_PAUSED", {
+            status: "DRAFT",
+            failure: null,
+          });
+          member.status = "DRAFT";
+          Reflect.deleteProperty(member, "error");
+        }
+        plan.pausedForSettings = true;
+        // Also reserve unstarted members so an older draining worker cannot enqueue
+        // them during a rolling upgrade. These markers are removed only on resume.
+        for (const childId of row.child_ids) {
+          if (!plan.items[childId]?.packageId)
+            plan.items[childId] = { error: "PLAYLIST_SETTINGS_PAUSED" };
+        }
+        await client.query(
+          "UPDATE distribution.online_import SET curation=$3,updated_at=now() WHERE id=$1 AND is_test=$2",
+          [id, ctx.isTest, plan],
+        );
+      }),
     configurePlaylist: (
       ctx: DistributionContext,
       id: string,
@@ -1048,8 +1111,52 @@ export function createIntelligentContentRepository(
           [id, ctx.isTest],
         );
         const row = result.rows[0];
-        if (!row || !isOnlineBundle(row.source) || !row.child_ids?.length)
+        if (!row || row.deleted_at || !isOnlineBundle(row.source) || !row.child_ids?.length)
           throw Error("PLAYLIST_NOT_READY");
+        if (row.curation?.pausedForSettings) {
+          const plan = row.curation as PlaylistCuration;
+          for (const member of Object.values(plan.items).sort((a, b) =>
+            (a.packageId ?? "").localeCompare(b.packageId ?? ""),
+          )) {
+            if (!member.packageId) continue;
+            const pkg = await load(client, ctx.isTest, member.packageId, true);
+            requirePlaylistSettingsEditable(pkg, member.existing);
+            const { master } = await loadStudioSource(
+              client,
+              ctx.isTest,
+              pkg.source.masterId,
+              true,
+            );
+            if (!same(master.rights, plan.rights)) throw Error("PLAYLIST_SETTINGS_LOCKED");
+            if (!same(master.rights, input.rights))
+              await recordContentRights(client, ctx, master, input.rights);
+            await sourceCurrent(client, pkg);
+            const next = await save(client, pkg, ctx.userId, "PLAYLIST_SETTINGS_RESUMED", {
+              status: "QUEUED",
+              request: input.request,
+              generation: null,
+              approval: null,
+              failure: null,
+              contributorIds: [...new Set([...pkg.contributorIds, ctx.userId])],
+            });
+            await enqueue(client, next, ctx.userId);
+            member.status = "QUEUED";
+            Reflect.deleteProperty(member, "error");
+          }
+          Reflect.deleteProperty(plan, "pausedForSettings");
+          for (const [childId, member] of Object.entries(plan.items)) {
+            if (!member.packageId) delete plan.items[childId];
+          }
+          plan.rights = input.rights;
+          plan.request = input.request;
+          plan.requestedBy = ctx.userId;
+          plan.confirmedAt = new Date().toISOString();
+          await client.query(
+            "UPDATE distribution.online_import SET curation=$3,updated_at=now() WHERE id=$1 AND is_test=$2",
+            [id, ctx.isTest, plan],
+          );
+          return;
+        }
         if (row.curation) {
           if (same(row.curation.rights, input.rights) && same(row.curation.request, input.request))
             return;
@@ -1080,6 +1187,7 @@ export function createIntelligentContentRepository(
         if (!row || !isOnlineBundle(row.source)) throw Error("NOT_FOUND");
         const plan = row.curation as PlaylistCuration | null;
         if (!plan) return;
+        if (plan.pausedForSettings) throw Error("PLAYLIST_SETTINGS_PAUSED");
         // Only failed jobs resume. Drafts, human review, approved and active work are untouched.
         for (const member of Object.values(plan.items).sort((a, b) =>
           (a.packageId ?? "").localeCompare(b.packageId ?? ""),
@@ -1123,6 +1231,7 @@ export function createIntelligentContentRepository(
           [id, ctx.isTest],
         );
         const plan = result.rows[0]?.curation as PlaylistCuration | undefined;
+        if (plan?.pausedForSettings) throw Error("PLAYLIST_SETTINGS_PAUSED");
         if (!plan?.items[childId]?.error) throw Error("NOT_FOUND");
         // Retry only the failed handoff. Existing generated or approved packages are immutable here.
         delete plan.items[childId];
@@ -1150,7 +1259,7 @@ export function createIntelligentContentRepository(
         // Parent locking plus one DB transaction makes rights, package creation and progress atomic.
         // Membership uses child_ids, including recordings imported before the playlist was added.
         const result = await client.query(
-          `SELECT p.* FROM distribution.online_import p WHERE p.is_test=$1 AND p.deleted_at IS NULL AND p.curation IS NOT NULL AND p.curation->>'pausedForCleanup' IS DISTINCT FROM 'true' AND EXISTS (
+          `SELECT p.* FROM distribution.online_import p WHERE p.is_test=$1 AND p.deleted_at IS NULL AND p.curation IS NOT NULL AND p.curation->>'pausedForCleanup' IS DISTINCT FROM 'true' AND p.curation->>'pausedForSettings' IS DISTINCT FROM 'true' AND EXISTS (
         SELECT 1 FROM distribution.online_import i WHERE i.is_test=p.is_test AND i.id::text IN (SELECT jsonb_array_elements_text(p.child_ids)) AND i.deleted_at IS NULL AND i.status='COMPLETE' AND i.master_id IS NOT NULL AND NOT (p.curation->'items' ? i.id::text)
       ) ORDER BY p.created_at,p.id LIMIT 1 FOR UPDATE OF p SKIP LOCKED`,
           [isTest],

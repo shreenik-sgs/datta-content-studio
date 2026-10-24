@@ -74,6 +74,8 @@ export const STUDIO_PUBLICATION_LABELS: Record<StudioPublication["status"], stri
 };
 
 const messages: Record<string, string> = {
+  PLAYLIST_SETTINGS_PAUSED:
+    "Generation is paused. Open the playlist, choose channels in shared settings, then save and resume.",
   STUDIO_FILE_LOCKED:
     "This file is submitted or approved and cannot be edited. Select a draft or a file returned for changes.",
   INVALID_STUDIO_OUTPUT_SELECTION:
