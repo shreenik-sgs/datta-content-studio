@@ -130,6 +130,7 @@ export * from "./studio-visual-preferences";
 
 export * from "./online-video";
 export * from "./import-recovery";
+export * from "./computer-recovery";
 
 export * from "./studio-post-art";
 export * from "./studio-audio-analysis";

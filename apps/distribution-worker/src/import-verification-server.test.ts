@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { expect, it, vi } from "vitest";
+import type { createComputerRecoveryManager } from "./computer-recovery-manager";
 import type { createImportVerificationManager } from "./import-verification-browser";
 import { startImportVerificationServer } from "./import-verification-server";
 it("authenticates the private control plane, refuses replays and never trusts an unsigned actor", async () => {
@@ -69,4 +70,47 @@ it("refuses a remotely reachable listener without TLS", async () => {
       STUDIO_IMPORT_VERIFICATION_HOST: "0.0.0.0",
     }),
   ).rejects.toThrow("VERIFICATION_UNAVAILABLE");
+});
+
+it("separately authenticates recovery commands and refuses cross-endpoint signature reuse", async () => {
+  const probe = createServer();
+  await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const address = probe.address();
+  if (!address || typeof address === "string") throw Error("NO_PORT");
+  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  const handle = vi.fn(async () => ({ status: "IDLE", recordings: 0, completed: 0 }));
+  const verification = vi.fn();
+  const key = "b".repeat(64);
+  const server = await startImportVerificationServer(
+    { handle: verification } as unknown as ReturnType<typeof createImportVerificationManager>,
+    { STUDIO_IMPORT_VERIFICATION_KEY: key, STUDIO_IMPORT_VERIFICATION_PORT: String(address.port) },
+    { handle } as unknown as ReturnType<typeof createComputerRecoveryManager>,
+  );
+  try {
+    const raw = JSON.stringify({
+      version: 1,
+      userId: "curator",
+      roles: ["CONTENT_COORDINATOR"],
+      isTest: true,
+      importId: randomUUID(),
+      requestedAt: Date.now(),
+      requestId: randomUUID(),
+      command: { action: "start", username: "Curator", password: "secret" },
+    });
+    const signature = (prefix: string) =>
+      createHmac("sha256", key).update(prefix).update(raw).digest("hex");
+    const post = (path: string, prefix: string) =>
+      fetch(`http://127.0.0.1:${address.port}/${path}`, {
+        method: "POST",
+        headers: { "X-Import-Signature": signature(prefix) },
+        body: raw,
+      });
+    expect((await post("computer-recovery", "import-verification:v1\n")).status).toBe(403);
+    expect((await post("computer-recovery", "computer-recovery:v1\n")).status).toBe(200);
+    expect((await post("computer-recovery", "computer-recovery:v1\n")).status).toBe(403);
+    expect(handle).toHaveBeenCalledOnce();
+    expect(verification).not.toHaveBeenCalled();
+  } finally {
+    await server.close();
+  }
 });

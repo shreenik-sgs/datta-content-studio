@@ -795,3 +795,43 @@ body .file-list-controls {
   border-radius: 12px;
   list-style: none;
 }
+.computer-recovery-page {
+  max-width: 880px;
+  padding-block: 32px;
+}
+.computer-recovery-panel {
+  display: grid;
+  gap: 20px;
+}
+.computer-recovery-panel p,
+.computer-recovery-panel h2,
+.computer-recovery-panel h3 {
+  margin: 0;
+}
+.computer-recovery-panel details form {
+  margin-top: 16px;
+}
+.computer-recovery-progress {
+  display: grid;
+  gap: 12px;
+}
+.computer-recovery-panel form {
+  display: grid;
+  gap: 16px;
+}
+.computer-recovery-panel .button {
+  justify-self: start;
+}
+.computer-recovery-progress {
+  padding: 20px;
+  border: 1px solid #d2dfd9;
+  border-radius: 12px;
+  background: #f5f8f6;
+}
+.computer-recovery-progress progress {
+  width: 100%;
+  accent-color: #155c4d;
+}
+.computer-recovery-offer {
+  margin-bottom: 20px;
+}

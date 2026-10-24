@@ -1,5 +1,6 @@
 import { setTimeout as pause } from "node:timers/promises";
 import type { Pool } from "pg";
+import { createComputerRecoveryManager } from "./computer-recovery-manager.js";
 import { createImportVerificationManager } from "./import-verification-browser.js";
 import { startImportVerificationServer } from "./import-verification-server.js";
 import { type OnlineImportWorkerInput, runOnlineImportLoop } from "./online-import-worker.js";
@@ -15,6 +16,7 @@ export async function runVerifiedOnlineImports(pool: Pool, input: OnlineImportWo
     let locked = false;
     let manager: ReturnType<typeof createImportVerificationManager> | undefined;
     let server: Awaited<ReturnType<typeof startImportVerificationServer>> | undefined;
+    let recovery: ReturnType<typeof createComputerRecoveryManager> | undefined;
     try {
       locked = Boolean(
         (
@@ -27,12 +29,18 @@ export async function runVerifiedOnlineImports(pool: Pool, input: OnlineImportWo
         const signal = AbortSignal.any([input.signal, stopped.signal]);
         if (input.env.STUDIO_IMPORT_VERIFICATION_ENABLED === "true") {
           manager = createImportVerificationManager({ ...input, signal });
-          server = await startImportVerificationServer(manager, input.env);
+          recovery = createComputerRecoveryManager({ env: input.env, signal });
+          server = await startImportVerificationServer(manager, input.env, recovery);
         }
         await runOnlineImportLoop({
           ...input,
           signal,
-          ...(manager ? { download: manager.download, paused: manager.paused } : {}),
+          ...(manager
+            ? {
+                download: manager.download,
+                paused: () => !!recovery?.active() || !!manager?.paused(),
+              }
+            : {}),
         });
         // A failed runtime preflight is an operator problem, not a reason to
         // relaunch Chromium every two seconds. Repair dependencies and restart.
@@ -42,6 +50,7 @@ export async function runVerifiedOnlineImports(pool: Pool, input: OnlineImportWo
     } finally {
       stopped.abort();
       await server?.close();
+      await recovery?.close();
       await manager?.close();
       if (locked)
         await client

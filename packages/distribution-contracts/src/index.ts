@@ -48,5 +48,6 @@ export * from "./intelligent-content";
 export * from "./studio-authority";
 
 export * from "./import-verification";
+export * from "./computer-recovery";
 
 export * from "./live-curation";

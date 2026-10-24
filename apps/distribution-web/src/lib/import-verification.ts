@@ -1,7 +1,11 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { request as httpsRequest } from "node:https";
-import type { ImportVerificationAction } from "@satsang/distribution-contracts";
+import type {
+  ComputerRecoveryAction,
+  ImportVerificationAction,
+} from "@satsang/distribution-contracts";
 import type { DistributionContext } from "@satsang/distribution-db";
+import { COMPUTER_RECOVERY_ERRORS } from "@satsang/distribution-domain";
 function importVerificationConfig(env = process.env) {
   const key = env.STUDIO_IMPORT_VERIFICATION_KEY;
   try {
@@ -28,6 +32,21 @@ export async function importVerificationRequest(
   importId: string,
   command: ImportVerificationAction,
 ) {
+  return importControlRequest(context, importId, command, false);
+}
+export async function computerRecoveryRequest(
+  context: DistributionContext,
+  importId: string,
+  command: ComputerRecoveryAction,
+) {
+  return importControlRequest(context, importId, command, true);
+}
+async function importControlRequest(
+  context: DistributionContext,
+  importId: string,
+  command: ImportVerificationAction | ComputerRecoveryAction,
+  recovery: boolean,
+) {
   const config = importVerificationConfig();
   if (!config) throw Error("VERIFICATION_NOT_CONFIGURED");
   const body = JSON.stringify({
@@ -41,29 +60,34 @@ export async function importVerificationRequest(
     requestedAt: Date.now(),
   });
   const signature = createHmac("sha256", config.key)
-    .update("import-verification:v1\n")
+    .update(recovery ? "computer-recovery:v1\n" : "import-verification:v1\n")
     .update(body)
     .digest("hex");
   try {
-    const response = await verificationTransport(`${config.origin}/verification`, config.ca, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Import-Signature": signature },
-      body,
-      cache: "no-store",
-      redirect: "error",
-      signal: AbortSignal.timeout(command.action === "start" ? 60000 : 15000),
-    });
+    const response = await verificationTransport(
+      `${config.origin}/${recovery ? "computer-recovery" : "verification"}`,
+      config.ca,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Import-Signature": signature },
+        body,
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(command.action === "start" ? 60000 : 15000),
+      },
+    );
     const data = await response.json();
     if (!response.ok)
       throw Error(
-        [
-          "VERIFICATION_EXPIRED",
-          "VERIFICATION_BUSY",
-          "VERIFICATION_NOT_NEEDED",
-          "VERIFICATION_FAILED",
-          "VERIFICATION_BROWSER_START_FAILED",
-          "FORBIDDEN",
-        ].includes(data.error)
+        (recovery && Object.hasOwn(COMPUTER_RECOVERY_ERRORS, data.error)) ||
+          [
+            "VERIFICATION_EXPIRED",
+            "VERIFICATION_BUSY",
+            "VERIFICATION_NOT_NEEDED",
+            "VERIFICATION_FAILED",
+            "VERIFICATION_BROWSER_START_FAILED",
+            "FORBIDDEN",
+          ].includes(data.error)
           ? data.error
           : "VERIFICATION_UNAVAILABLE",
       );
@@ -71,7 +95,9 @@ export async function importVerificationRequest(
   } catch (error) {
     if (
       error instanceof Error &&
-      (error.message.startsWith("VERIFICATION_") || error.message === "FORBIDDEN")
+      (error.message.startsWith("VERIFICATION_") ||
+        error.message === "FORBIDDEN" ||
+        (recovery && Object.hasOwn(COMPUTER_RECOVERY_ERRORS, error.message)))
     )
       throw error;
     throw Error("VERIFICATION_CONNECTION_FAILED");

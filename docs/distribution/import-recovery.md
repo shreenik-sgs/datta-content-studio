@@ -4,6 +4,41 @@ Implemented locally and provisioned on private AWS hosts. Cloud rollout evidence
 
 ## Curator experience
 
+### Recover a blocked staging playlist using this computer
+
+In a GBADPT staging playlist with a YouTube access block, choose **Open local
+recovery**. This opens `http://localhost:3070/distribution/recover` with only the
+playlist ID. Local Studio must already be running; a webpage cannot install or
+start a local downloader. Sign in to local Studio as a Curator, then enter your
+**staging Studio Curator** username/password and choose **Start recovery**. This
+is not a Google sign-in. The page shows recording counts and the current download
+or transfer. **Stop recovery** interrupts unfinished work; sign in again to resume.
+The local navigation also provides **Recover staging playlist**, where a curator
+can paste the staging playlist workspace link. Keep the computer awake.
+
+One-time local setup: both local web and worker need
+`STUDIO_COMPUTER_RECOVERY_ENABLED=true`. The worker also needs an absolute,
+private `STUDIO_COMPUTER_RECOVERY_DIRECTORY` and the existing signed import-control
+service. Execution is restricted to a local port-3070 GBADPT TEST installation;
+the destination is fixed to GBADPT staging. Never enable this on cloud hosts or
+DP. There is no browser-to-loopback API request, CORS bypass, downloaded browser
+extension, cookie export or arbitrary remote URL. The link opens a separate local
+page; each environment authenticates its own Curator independently.
+
+The worker uses the same recovery engine as `ops/recover-online-playlist.mts`.
+Passwords and the dedicated staging session stay in process memory; credentials
+are never written into checkpoints or returned in status. The session is logged
+out on finish/stop. Local authority is checked throughout, staging authority before
+each recording and again during attachment. One local recovery runs at a time.
+Completed downloads are retained privately with SHA-256 manifests and validated
+before reuse. A worker restart requires signing in again; it preserves downloaded
+files. Repeated runs skip staging members that already have masters. Saved shared
+settings drive the normal bounded curation queue; recovery never approves or posts.
+
+Local access can also be refused by YouTube. The UI reports that restriction and
+retains progress instead of claiming successful verification. This is a conditional
+local download path, not a permanent guarantee of YouTube access from AWS.
+
 Continue Existing Curation → Open playlist. When YouTube blocks import, choose **Verify YouTube access**. The page shows an isolated browser running in the importer process. Complete any challenge YouTube offers, then choose **Check access and resume playlist**. A playlist listing alone cannot mark the session verified: the importer must save an actual pending video. Completed masters and existing packages remain unchanged.
 
 Alternatively expand **Upload original recordings**, select the files together, check the suggested recording matches, and choose **Upload originals and continue**. The playlist must have loaded its recording list before original files can be assigned. Only unambiguous video IDs and exact titles are automatically matched. Duplicate/ambiguous assignments require a selection. The browser uploads sequentially; a failed file can be retried without re-uploading successes. Supported recordings are MP4, MP3, WAV and M4A, at most 20 GB each (the online-master ceiling). Private storage checks the media signature and checksum. Requests stream to private temporary disk rather than buffering a whole playlist. Existing shared permissions/generation settings drive the existing generation queue after attachment. Human approvals are never bypassed.

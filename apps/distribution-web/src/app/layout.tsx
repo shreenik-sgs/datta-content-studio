@@ -1,3 +1,4 @@
+import { computerRecoveryEnabled } from "@satsang/distribution-domain";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
@@ -56,6 +57,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 <a className="button quiet" href="/distribution">
                   Workspace
                 </a>
+                {auth.capabilities.includes("content.create") &&
+                  computerRecoveryEnabled(process.env) && (
+                    <a className="button quiet" href="/distribution/recover">
+                      Recover staging playlist
+                    </a>
+                  )}
                 {auth.capabilities.includes("operations.manage") && (
                   <a className="button quiet" href="/distribution/settings">
                     Settings

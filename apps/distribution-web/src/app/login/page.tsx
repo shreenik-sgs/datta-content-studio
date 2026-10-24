@@ -1,10 +1,10 @@
-import { studioTestLoginAliases } from "../../lib/auth";
+import { studioLoginReturnPath, studioTestLoginAliases } from "../../lib/auth";
 import { STUDIO_PRODUCT_NAME, studioIdentity } from "../../lib/studio-identity";
 
 export default async function Login({
   searchParams,
-}: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+}: { searchParams: Promise<{ error?: string; returnTo?: string }> }) {
+  const { error, returnTo } = await searchParams;
   const aliasesEnabled = Object.keys(studioTestLoginAliases()).length > 0;
   const identity = studioIdentity();
   return (
@@ -22,6 +22,7 @@ export default async function Login({
           </p>
         )}
         <form className="card" method="post" action="/distribution/api/auth/login">
+          <input type="hidden" name="returnTo" value={studioLoginReturnPath(returnTo)} />
           <label>
             {aliasesEnabled ? "Username or email" : "Email"}
             <input

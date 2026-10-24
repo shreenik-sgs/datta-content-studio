@@ -22,6 +22,12 @@ export function trustedDistributionOrigin(value: string | undefined): string | n
   }
 }
 export const STUDIO_SESSION_COOKIE = "dcs_session";
+export function studioLoginReturnPath(value: unknown) {
+  return typeof value === "string" &&
+    /^\/distribution\/recover(?:\?bundle=[0-9a-f-]{36})?$/.test(value)
+    ? value
+    : "/distribution";
+}
 /** Explicit TEST usernames share the underlying email's password and rate limit. */
 export function studioTestLoginAliases(
   env: Record<string, string | undefined> = process.env,

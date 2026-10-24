@@ -1,13 +1,19 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { type RequestListener, createServer } from "node:http";
 import { createServer as createTlsServer } from "node:https";
-import { importVerificationEnvelopeSchema } from "@satsang/distribution-contracts";
+import {
+  computerRecoveryEnvelopeSchema,
+  importVerificationEnvelopeSchema,
+} from "@satsang/distribution-contracts";
+import { COMPUTER_RECOVERY_ERRORS } from "@satsang/distribution-domain";
+import type { createComputerRecoveryManager } from "./computer-recovery-manager.js";
 import type { createImportVerificationManager } from "./import-verification-browser.js";
 
 /** Private, authenticated control plane. Browsers only call the signed-in Hub proxy. */
 export async function startImportVerificationServer(
   manager: ReturnType<typeof createImportVerificationManager>,
   env: NodeJS.ProcessEnv,
+  recovery?: ReturnType<typeof createComputerRecoveryManager>,
 ) {
   const key = env.STUDIO_IMPORT_VERIFICATION_KEY;
   const port = Number(env.STUDIO_IMPORT_VERIFICATION_PORT);
@@ -31,7 +37,12 @@ export async function startImportVerificationServer(
       response.end(JSON.stringify(data));
     };
     try {
-      if (request.method !== "POST" || request.url !== "/verification" || request.headers.origin) {
+      const isRecovery = request.url === "/computer-recovery" && !!recovery;
+      if (
+        request.method !== "POST" ||
+        (request.url !== "/verification" && !isRecovery) ||
+        request.headers.origin
+      ) {
         finish(403, { error: "FORBIDDEN" });
         return;
       }
@@ -45,7 +56,7 @@ export async function startImportVerificationServer(
       const raw = Buffer.concat(chunks).toString("utf8");
       const signature = request.headers["x-import-signature"];
       const expected = createHmac("sha256", key)
-        .update("import-verification:v1\n")
+        .update(isRecovery ? "computer-recovery:v1\n" : "import-verification:v1\n")
         .update(raw)
         .digest();
       if (
@@ -56,7 +67,9 @@ export async function startImportVerificationServer(
         finish(403, { error: "FORBIDDEN" });
         return;
       }
-      const data = importVerificationEnvelopeSchema.parse(JSON.parse(raw));
+      const data = (
+        isRecovery ? computerRecoveryEnvelopeSchema : importVerificationEnvelopeSchema
+      ).parse(JSON.parse(raw));
       const now = Date.now();
       for (const [id, time] of seen) if (now - time > 20000) seen.delete(id);
       if (
@@ -68,27 +81,42 @@ export async function startImportVerificationServer(
         return;
       }
       seen.set(data.requestId, now);
+      if (isRecovery && recovery) {
+        const value = computerRecoveryEnvelopeSchema.parse(data);
+        finish(
+          200,
+          await recovery.handle(
+            { userId: value.userId, isTest: value.isTest, roles: value.roles },
+            value.importId,
+            value.command,
+          ),
+        );
+        return;
+      }
+      const verification = importVerificationEnvelopeSchema.parse(data);
       finish(
         200,
         await manager.handle(
           { userId: data.userId, isTest: data.isTest, roles: data.roles },
           data.importId,
-          data.command,
+          verification.command,
         ),
       );
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       finish(code === "FORBIDDEN" ? 403 : 409, {
-        error: [
-          "VERIFICATION_EXPIRED",
-          "VERIFICATION_BUSY",
-          "VERIFICATION_NOT_NEEDED",
-          "VERIFICATION_FAILED",
-          "VERIFICATION_BROWSER_START_FAILED",
-          "FORBIDDEN",
-        ].includes(code)
+        error: Object.hasOwn(COMPUTER_RECOVERY_ERRORS, code)
           ? code
-          : "VERIFICATION_UNAVAILABLE",
+          : [
+                "VERIFICATION_EXPIRED",
+                "VERIFICATION_BUSY",
+                "VERIFICATION_NOT_NEEDED",
+                "VERIFICATION_FAILED",
+                "VERIFICATION_BROWSER_START_FAILED",
+                "FORBIDDEN",
+              ].includes(code)
+            ? code
+            : "VERIFICATION_UNAVAILABLE",
       });
     }
   };

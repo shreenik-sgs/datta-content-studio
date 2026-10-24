@@ -4,6 +4,7 @@ import {
   STUDIO_SESSION_COOKIE,
   distributionHubPolicyEnabled,
   studioLoginIdentifier,
+  studioLoginReturnPath,
   studioTestLoginAliases,
   trustedDistributionOrigin,
   validStudioMutationOrigin,
@@ -24,7 +25,12 @@ export async function POST(request: Request) {
       process.env.DISTRIBUTION_HUB_STAGE === "TEST",
     );
     const response = NextResponse.redirect(
-      new URL(token ? "/distribution" : "/distribution/login?error=1", origin),
+      new URL(
+        token
+          ? studioLoginReturnPath(data.get("returnTo"))
+          : `/distribution/login?error=1&returnTo=${encodeURIComponent(studioLoginReturnPath(data.get("returnTo")))}`,
+        origin,
+      ),
       303,
     );
     response.headers.set("Cache-Control", "no-store");

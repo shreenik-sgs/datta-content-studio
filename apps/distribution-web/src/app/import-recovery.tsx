@@ -3,7 +3,11 @@ import type {
   ImportVerificationAction,
   ImportVerificationState,
 } from "@satsang/distribution-contracts";
-import { IMPORT_RECOVERY_ERRORS, type OnlineImport } from "@satsang/distribution-domain";
+import {
+  COMPUTER_RECOVERY_ORIGIN,
+  IMPORT_RECOVERY_ERRORS,
+  type OnlineImport,
+} from "@satsang/distribution-domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PlaylistOriginals } from "./playlist-originals";
 export function ImportRecovery({
@@ -15,6 +19,10 @@ export function ImportRecovery({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [image, setImage] = useState("");
+  const [onStaging, setOnStaging] = useState(false);
+  useEffect(() => {
+    setOnStaging(window.location.origin === COMPUTER_RECOVERY_ORIGIN);
+  }, []);
   const delivered = useRef<string | null>(null);
   const signInSeen = useRef<string | null>(null);
   const automaticCheck = useRef<string | null>(null);
@@ -147,6 +155,28 @@ export function ImportRecovery({
       ));
   return (
     <section className="import-recovery" aria-label="Recover source imports">
+      {onStaging && item.childIds?.length && (verificationNeeded || signInBlocked) ? (
+        <section className="panel computer-recovery-offer" aria-label="Recover using this computer">
+          <h3>Recover using this computer</h3>
+          <p>
+            Use local Studio to download missing recordings and transfer them back to this playlist.
+            Completed recordings and shared settings are preserved.
+          </p>
+          <a
+            className="button primary"
+            href={`http://localhost:3070/distribution/recover?bundle=${item.id}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open local recovery
+          </a>
+          <p className="muted">
+            Requires Studio running on this computer at localhost:3070 and your staging Curator
+            sign-in. If the page does not open, start local Studio first. YouTube may still refuse
+            local access.
+          </p>
+        </section>
+      ) : null}
       {verificationNeeded && !session && (
         <>
           <p>
