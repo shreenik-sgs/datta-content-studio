@@ -56,6 +56,15 @@ it("preserves unfinished Google sign-in and explains the unsupported device prom
     state = { ...opened, origin: "https://www.youtube.com" };
     await act(async () => vi.advanceTimersByTimeAsync(2000));
     expect(button("Check access and resume playlist").disabled).toBe(false);
+    const checks = () =>
+      fetcher.mock.calls.filter(
+        (call) =>
+          JSON.parse((call as unknown as [string, RequestInit])[1].body as string).action ===
+          "check",
+      );
+    expect(checks()).toHaveLength(1);
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
+    expect(checks()).toHaveLength(1);
     // Navigating back to YouTube is not proof of download access.
     expect(onSaved).not.toHaveBeenCalled();
     state = { ...state, status: "CHECKING" };
@@ -65,6 +74,26 @@ it("preserves unfinished Google sign-in and explains the unsupported device prom
     state = { ...state, status: "VERIFIED" };
     await act(async () => vi.advanceTimersByTimeAsync(2000));
     expect(onSaved).toHaveBeenCalledOnce();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("does not automatically dismiss or solve a YouTube challenge", async () => {
+  vi.useFakeTimers();
+  const fetcher = vi.fn(async () =>
+    Response.json({ ...opened, origin: "https://www.youtube.com" }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const { root, button, onSaved } = await setup();
+  try {
+    await act(async () => button("Verify YouTube access").click());
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
+    const actions = fetcher.mock.calls.map(
+      (call) => JSON.parse((call as unknown as [string, RequestInit])[1].body as string).action,
+    );
+    expect(actions).toEqual(["start", "status", "status"]);
+    expect(onSaved).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
   }

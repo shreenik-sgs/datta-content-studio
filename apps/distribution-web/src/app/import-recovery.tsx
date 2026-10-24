@@ -16,6 +16,8 @@ export function ImportRecovery({
   const [error, setError] = useState("");
   const [image, setImage] = useState("");
   const delivered = useRef<string | null>(null);
+  const signInSeen = useRef<string | null>(null);
+  const automaticCheck = useRef<string | null>(null);
   const commandQueue = useRef(Promise.resolve());
   const requests = useRef(new Set<AbortController>());
   const mounted = useRef(true);
@@ -105,6 +107,20 @@ export function ImportRecovery({
   const sessionStatus = session?.status;
   const signingIn = session?.origin === "https://accounts.google.com";
   useEffect(() => {
+    if (!sessionId || sessionStatus !== "OPEN") return;
+    if (signingIn) signInSeen.current = sessionId;
+    if (
+      signInSeen.current === sessionId &&
+      session?.origin === "https://www.youtube.com" &&
+      automaticCheck.current !== sessionId
+    ) {
+      // Returning from Google allows one ordinary access attempt, not an assumption
+      // that verification succeeded. Only a saved recording marks it verified.
+      automaticCheck.current = sessionId;
+      void enqueue({ action: "check", sessionId });
+    }
+  }, [sessionId, sessionStatus, signingIn, session?.origin, enqueue]);
+  useEffect(() => {
     if (!sessionId || !sessionStatus || !["OPEN", "CHECKING"].includes(sessionStatus)) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -133,7 +149,8 @@ export function ImportRecovery({
       {verificationNeeded && !session && (
         <>
           <p>
-            Complete YouTube’s verification in the importer’s browser. Your playlist and shared
+            Studio already tried downloading automatically. YouTube requires an access check.
+            Complete any sign-in or verification in the browser below. Your playlist and shared
             settings stay in place.
             {item.source.kind === "video" || item.childIds?.length
               ? " You can also upload the original recordings below."
@@ -153,8 +170,9 @@ export function ImportRecovery({
         <section className="panel verification-window" aria-label="YouTube verification">
           <h3>YouTube access verification</h3>
           <p>
-            This is the import service’s browser. Complete any verification YouTube presents here,
-            then check access. This session expires automatically.
+            Complete any sign-in or verification YouTube presents here. Studio checks access
+            automatically when Google sign-in returns to YouTube. Otherwise, use Check access and
+            resume playlist after completing the check. This session expires automatically.
           </p>
           {error && <p role="alert">{error}</p>}
           {session.status === "OPEN" && image && (

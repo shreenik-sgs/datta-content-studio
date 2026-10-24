@@ -12,6 +12,34 @@ The Approver has no import, upload or browser-control permission unless also a C
 
 ## Service configuration
 
+### Standalone Studio repair — 24 October 2026
+
+The independent GBADPT deployment drops all container capabilities. The upstream
+Playwright profile made `chroot` conditional on `CAP_SYS_CHROOT`, so Chromium failed
+while creating its own user-namespace sandbox even though the worker health endpoint
+was healthy. The profile now permits that syscall without granting a host capability;
+the kernel's namespace/capability checks, default-deny seccomp, non-root user,
+`--cap-drop ALL`, `no-new-privileges` and Chromium sandbox all remain enabled.
+Chromium's [sandbox implementation](https://chromium.googlesource.com/chromium/src/sandbox/+/refs/heads/main/linux/services/credentials.cc)
+uses this operation to enter an empty root inside its namespace.
+
+`ops/staging/start-services.sh` now starts and checks an actual sandboxed browser in
+a temporary container with no network, credentials or mounts before replacing the
+running service. A passing database health check alone is insufficient.
+
+The standalone local runtime must also supply the verification variables below to
+both web and worker, with its own key and an unused loopback port. Configuration is
+retained across code releases; do not copy another environment's verification key.
+Missing configuration, connection failures and browser startup failures now have
+distinct operator-facing errors. Worker logs contain only the safe failure code.
+
+The importer already attempts downloads automatically before requesting human input.
+After a user completes Google sign-in and returns to YouTube, the recovery panel now
+requests one automatic media access check. Navigation alone never marks verification
+successful: a recording must be saved. A challenge on YouTube itself still requires
+the user to finish it and select **Check access and resume playlist**. No CAPTCHA is
+automatically solved, dismissed or bypassed.
+
 The implementation is opt-in. Set these server variables separately in each environment:
 
 | Variable | Where | Value |

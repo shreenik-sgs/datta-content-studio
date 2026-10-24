@@ -33,6 +33,12 @@ export const IMPORT_RECOVERY_ERRORS: Record<string, string> = {
   ORIGINAL_NOT_IN_PLAYLIST: "Choose an unfinished recording in this playlist for each file.",
   VERIFICATION_UNAVAILABLE:
     "The verification browser is unavailable. You can upload the original recordings into this playlist below.",
+  VERIFICATION_NOT_CONFIGURED:
+    "YouTube verification is not configured for this workspace. Ask your Studio administrator to enable the verification service. Your playlist is saved.",
+  VERIFICATION_CONNECTION_FAILED:
+    "Studio could not reach its YouTube verification service. Try again; if this continues, ask your Studio administrator to check the service. Your playlist is saved.",
+  VERIFICATION_BROWSER_START_FAILED:
+    "The verification service is running, but its browser could not start. Your Studio administrator needs to check the browser installation and sandbox. Your playlist is saved; uploading originals remains available.",
   VERIFICATION_EXPIRED:
     "This verification session has ended. Open Verify YouTube access again; your playlist is saved.",
   VERIFICATION_BUSY:

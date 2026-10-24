@@ -84,6 +84,7 @@ export async function startImportVerificationServer(
           "VERIFICATION_BUSY",
           "VERIFICATION_NOT_NEEDED",
           "VERIFICATION_FAILED",
+          "VERIFICATION_BROWSER_START_FAILED",
           "FORBIDDEN",
         ].includes(code)
           ? code

@@ -20,6 +20,22 @@ curl --fail --silent http://127.0.0.1:3070/distribution/api/healthz > /dev/null 
 # A retained pre-release database backup is required before replacing the web.
 if $old_web; then /opt/content-studio/backup.sh; fi
 for component in web verification; do docker pull "$STUDIO_IMAGE_REPOSITORY:$STUDIO_RELEASE-$component"; done
+# Exercise the actual sandbox before replacing a working service. A database health
+# response cannot prove Chromium can start. No secrets, mounts or network are needed.
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  --security-opt seccomp=/opt/content-studio/releases/$STUDIO_RELEASE/ops/import-verification-seccomp.json \
+  --shm-size 512m --memory 768m --pids-limit 256 \
+  "$STUDIO_IMAGE_REPOSITORY:$STUDIO_RELEASE-verification" \
+  studio-verification-entrypoint node --input-type=module -e '
+    import {chromium} from "playwright";
+    const browser = await chromium.launch({headless:false,chromiumSandbox:true});
+    try {
+      const page = await browser.newPage();
+      await page.setContent("<title>Studio verification ready</title>");
+      if (await page.title() !== "Studio verification ready") throw Error("VERIFICATION_SMOKE_FAILED");
+      console.log("Sandboxed verification browser passed startup check.");
+    } finally { await browser.close(); }
+  '
 docker rm -f dcs-staging-worker dcs-staging-web 2>/dev/null || true
 common=(--detach --restart unless-stopped --network host --cap-drop ALL --security-opt no-new-privileges --log-opt max-size=20m --log-opt max-file=3)
 docker run "${common[@]}" --name dcs-staging-web --memory 1g --pids-limit 256 \

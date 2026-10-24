@@ -311,7 +311,8 @@ export function createImportVerificationManager(
             await dispose(session);
             sessions.delete(session.id);
           }
-          throw Error("VERIFICATION_UNAVAILABLE");
+          input.onError?.("VERIFICATION_BROWSER_START_FAILED");
+          throw Error("VERIFICATION_BROWSER_START_FAILED");
         } finally {
           starting = false;
         }

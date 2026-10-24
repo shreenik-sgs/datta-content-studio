@@ -29,7 +29,7 @@ export async function importVerificationRequest(
   command: ImportVerificationAction,
 ) {
   const config = importVerificationConfig();
-  if (!config) throw Error("VERIFICATION_UNAVAILABLE");
+  if (!config) throw Error("VERIFICATION_NOT_CONFIGURED");
   const body = JSON.stringify({
     version: 1,
     userId: context.userId,
@@ -61,6 +61,7 @@ export async function importVerificationRequest(
           "VERIFICATION_BUSY",
           "VERIFICATION_NOT_NEEDED",
           "VERIFICATION_FAILED",
+          "VERIFICATION_BROWSER_START_FAILED",
           "FORBIDDEN",
         ].includes(data.error)
           ? data.error
@@ -73,7 +74,7 @@ export async function importVerificationRequest(
       (error.message.startsWith("VERIFICATION_") || error.message === "FORBIDDEN")
     )
       throw error;
-    throw Error("VERIFICATION_UNAVAILABLE");
+    throw Error("VERIFICATION_CONNECTION_FAILED");
   }
 }
 

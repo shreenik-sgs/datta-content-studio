@@ -3,8 +3,40 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
-import { verificationTransport } from "./import-verification";
+import { afterEach, expect, it, vi } from "vitest";
+import { importVerificationRequest, verificationTransport } from "./import-verification";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+it("distinguishes missing configuration, disconnected service and failed browser startup", async () => {
+  const context = { userId: "curator", isTest: true, roles: ["CONTENT_COORDINATOR"] };
+  const command = { action: "start" as const };
+  vi.stubEnv("STUDIO_IMPORT_VERIFICATION_KEY", "");
+  await expect(importVerificationRequest(context, "import", command)).rejects.toThrow(
+    "VERIFICATION_NOT_CONFIGURED",
+  );
+  vi.stubEnv("STUDIO_IMPORT_VERIFICATION_KEY", "a".repeat(64));
+  vi.stubEnv("STUDIO_IMPORT_VERIFICATION_ORIGIN", "http://127.0.0.1:3073");
+  vi.stubEnv("STUDIO_IMPORT_VERIFICATION_CA", "");
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(Error("private connection detail")));
+  await expect(importVerificationRequest(context, "import", command)).rejects.toThrow(
+    "VERIFICATION_CONNECTION_FAILED",
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ error: "VERIFICATION_BROWSER_START_FAILED" }, { status: 409 }),
+      ),
+  );
+  await expect(importVerificationRequest(context, "import", command)).rejects.toThrow(
+    "VERIFICATION_BROWSER_START_FAILED",
+  );
+});
 
 it("pins the environment certificate, rejects other trust roots, and never follows redirects", async () => {
   const directory = await mkdtemp(join(tmpdir(), "hub-tls-test-"));
