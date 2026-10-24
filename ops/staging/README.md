@@ -99,6 +99,12 @@ Approver posting action. Preserve the configured YouTube visibility separately.
    Preserve the current AMI, host, volume and all stack parameter values.
 3. Copy `test/` media into the separate `production/` prefix, retaining metadata,
    sizes and content checksums. Never move or delete the original TEST assets.
+   Run `copy-gbadpt-live-assets.py` as a rehearsal, then `--apply`. It verifies each
+   immutable asset's identity and explicitly requests SHA256 for multipart copies.
+   A generic `s3 sync` can change the checksum algorithm on larger objects; a later
+   sync skips those same-size objects and does not repair their metadata. The tool
+   repairs missing SHA256 checksums without weakening the application's validation.
+   Re-run it to require zero pending copies, then test authenticated playback.
 4. Gracefully stop the worker and verify no generation/import jobs remain running.
    Stop the web briefly to freeze edits, take a database backup, and restore it into
    the NEW `datta_content_studio_gbadpt_live` database. Retain the TEST database.
