@@ -35,5 +35,6 @@ jobs:
           path: ${{ runner.temp }}/sgs-ffmpeg/install
           key: renderer-ubuntu24-x64-ffmpeg-7.1.1-v2
       - run: bash ops/ci-renderer-tools.sh
+      - run: bash ops/ci-importer-tools.sh
       - run: pnpm check
       - run: pnpm build

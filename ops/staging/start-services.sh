@@ -20,6 +20,12 @@ curl --fail --silent http://127.0.0.1:3070/distribution/api/healthz > /dev/null 
 # A retained pre-release database backup is required before replacing the web.
 if $old_web; then /opt/content-studio/backup.sh; fi
 for component in web verification; do docker pull "$STUDIO_IMAGE_REPOSITORY:$STUDIO_RELEASE-$component"; done
+# The downloader, bundled JS scripts, Node and FFmpeg must pass without internet
+# access before a working service is replaced.
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  --memory 512m --pids-limit 128 \
+  "$STUDIO_IMAGE_REPOSITORY:$STUDIO_RELEASE-verification" \
+  ./node_modules/.bin/tsx /repo/ops/check-online-import-runtime.mts
 # Exercise the actual sandbox before replacing a working service. A database health
 # response cannot prove Chromium can start. No secrets, mounts or network are needed.
 docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \

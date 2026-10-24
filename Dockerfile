@@ -89,12 +89,14 @@ CMD ["./node_modules/.bin/tsx", "src/index.ts"]
 
 # Staging Studio renderer: Debian 13 supplies FFmpeg with the seekable fd: protocol.
 FROM node:${NODE_VERSION}-trixie-slim AS distribution-studio
+COPY apps/distribution-worker/src/online-import-runtime.json /opt/video-import-runtime.json
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-noto-core ca-certificates python3 python3-venv \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/video-import \
-    && /opt/video-import/bin/pip install --no-cache-dir "yt-dlp[default]==2026.8.19" \
+    && python3 -c 'import json, subprocess; r=json.load(open("/opt/video-import-runtime.json")); subprocess.check_call(["/opt/video-import/bin/pip", "install", "--no-cache-dir", "yt-dlp[default]=="+r["ytDlpVersion"], "yt-dlp-ejs=="+r["ejsVersion"]])' \
     && ffmpeg -hide_banner -protocols 2>&1 | grep -q ' fd'
 COPY --from=distribution-worker --chown=node:node /repo /repo
+COPY --chown=node:node ops/check-online-import-runtime.mts /repo/ops/check-online-import-runtime.mts
 COPY --chown=node:node apps/distribution-worker/assets/sgsswamiji-channel-avatar.jpg /opt/brand/sgsswamiji.jpg
 ADD --chmod=0644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 ENV NODE_ENV=production DISTRIBUTION_HUB_ENABLED=false DISTRIBUTION_HUB_STAGE=OFF \
@@ -104,6 +106,7 @@ ENV NODE_ENV=production DISTRIBUTION_HUB_ENABLED=false DISTRIBUTION_HUB_STAGE=OF
     DISTRIBUTION_FFMPEG_PATH=/usr/bin/ffmpeg DISTRIBUTION_FFPROBE_PATH=/usr/bin/ffprobe
 USER node
 WORKDIR /repo/apps/distribution-worker
+RUN ./node_modules/.bin/tsx /repo/ops/check-online-import-runtime.mts
 CMD ["./node_modules/.bin/tsx", "src/studio-index.ts"]
 
 # Opt-in verification browser lives beside the downloader, with the same network egress.

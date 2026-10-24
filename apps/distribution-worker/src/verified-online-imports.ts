@@ -34,6 +34,10 @@ export async function runVerifiedOnlineImports(pool: Pool, input: OnlineImportWo
           signal,
           ...(manager ? { download: manager.download, paused: manager.paused } : {}),
         });
+        // A failed runtime preflight is an operator problem, not a reason to
+        // relaunch Chromium every two seconds. Repair dependencies and restart.
+        // A lost leader connection still needs the normal reacquisition path.
+        if (!stopped.signal.aborted || input.signal.aborted) break;
       }
     } finally {
       stopped.abort();

@@ -1,9 +1,8 @@
-import { execFile } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
-import { promisify } from "node:util";
 import type { PrivateAssetStore, StoredPrivateAsset } from "@satsang/distribution-assets";
 import type { OnlineImportClaim, createOnlineImportRepository } from "@satsang/distribution-db";
 import { MAX_ONLINE_MASTER_BYTES } from "@satsang/distribution-domain";
+import { checkOnlineImportRuntime } from "./online-import-runtime.js";
 import { downloadOnlineVideo } from "./online-video-download.js";
 
 export type OnlineImportWorkerInput = {
@@ -91,13 +90,13 @@ export async function runOnlineImportOnce(
 }
 export async function runOnlineImportLoop(input: OnlineImportWorkerInput) {
   try {
-    await promisify(execFile)(
-      input.env.STUDIO_YTDLP_PATH ?? "yt-dlp",
-      ["--ignore-config", "--version"],
-      { timeout: 10000 },
+    await checkOnlineImportRuntime(input.env.STUDIO_YTDLP_PATH);
+  } catch (error) {
+    input.onError?.(
+      error instanceof Error && error.message === "ONLINE_IMPORT_RUNTIME_OUTDATED"
+        ? "ONLINE_IMPORT_RUNTIME_OUTDATED"
+        : "ONLINE_IMPORT_RUNTIME_INCOMPLETE",
     );
-  } catch {
-    input.onError?.("ONLINE_IMPORT_DISABLED");
     return;
   }
   await input.repository.heartbeat(input.isTest);

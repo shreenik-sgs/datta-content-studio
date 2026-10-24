@@ -6,7 +6,7 @@ Implemented locally and provisioned on private AWS hosts. Cloud rollout evidence
 
 Continue Existing Curation → Open playlist. When YouTube blocks import, choose **Verify YouTube access**. The page shows an isolated browser running in the importer process. Complete any challenge YouTube offers, then choose **Check access and resume playlist**. A playlist listing alone cannot mark the session verified: the importer must save an actual pending video. Completed masters and existing packages remain unchanged.
 
-Alternatively expand **Upload original recordings**, select the files together, check the suggested recording matches, and choose **Upload originals and continue**. The playlist must have loaded its recording list before original files can be assigned. Only unambiguous video IDs and exact titles are automatically matched. Duplicate/ambiguous assignments require a selection. The browser uploads sequentially; a failed file can be retried without re-uploading successes. Supported recordings are MP4, MP3, WAV and M4A, at most 2 GB each. Private storage checks the media signature and checksum. Requests stream to private temporary disk rather than buffering a whole playlist. Existing shared permissions/generation settings drive the existing generation queue after attachment. Human approvals are never bypassed.
+Alternatively expand **Upload original recordings**, select the files together, check the suggested recording matches, and choose **Upload originals and continue**. The playlist must have loaded its recording list before original files can be assigned. Only unambiguous video IDs and exact titles are automatically matched. Duplicate/ambiguous assignments require a selection. The browser uploads sequentially; a failed file can be retried without re-uploading successes. Supported recordings are MP4, MP3, WAV and M4A, at most 20 GB each (the online-master ceiling). Private storage checks the media signature and checksum. Requests stream to private temporary disk rather than buffering a whole playlist. Existing shared permissions/generation settings drive the existing generation queue after attachment. Human approvals are never bypassed.
 
 The Approver has no import, upload or browser-control permission unless also a Curator. Every browser action and attachment rechecks Curator authority and environment. Sessions are bound to the initiating user and import. Google credentials are entered directly into the isolated browser, never into an app settings form. No provider account is automatically signed in or CAPTCHA solved by the app.
 
@@ -51,6 +51,72 @@ not treated as this failure. No automation-detection masking or security bypass 
 used. Signing in separately in Chrome does not authenticate the cloud importer.
 The seven-video Bhagavat Kath playlist remains paused until a real authorized
 download succeeds or original recordings are attached to its saved members.
+
+### Downloader maintenance and provider restrictions — 24 October 2026
+
+These are separate failures and must not be conflated:
+
+1. Chromium could not start under the deployed sandbox. The earlier startup repair
+   and sandbox pre-deployment check address that infrastructure failure.
+2. Google can reject sign-in in a working automated/embedded browser. The account
+   can still be valid. [Google explicitly documents this restriction](https://support.google.com/accounts/answer/7675428?hl=en).
+   Google does not disclose the precise risk signal behind each rejection. Do not
+   label an account invalid, weaken the sandbox, mask automation, repeatedly ask
+   for passwords, or claim that changing the AWS instance will permanently fix it.
+3. The downloader was pinned to 2026.8.19, and readiness checked only `--version`.
+   The tested manifest now pins yt-dlp 2026.10.21 and yt-dlp-ejs 0.8.0. The
+   [release notes](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.21) contain
+   YouTube fixes. [EJS documentation](https://github.com/yt-dlp/yt-dlp/wiki/EJS)
+   explains the separately required JavaScript runtime and bundled scripts.
+
+`apps/distribution-worker/src/online-import-runtime.json` is the single version
+manifest for Docker and CI. Startup validates the downloader release, EJS, Node 22+
+and FFmpeg using an offline extraction fixture. A failed preflight neither claims
+jobs nor writes a readiness heartbeat. It does not loop through browser restarts.
+Docker build and staging activation run this gate; the activation check has no
+network access. CI installs the same versions and exercises real offline downloader
+fixtures instead of silently skipping them. The weekly `Check video importer
+dependencies` workflow reads official PyPI metadata and fails when newer versions
+need review. It never installs or deploys unreviewed releases. Maintainers must
+review a failed run, update the manifest, run CI and validate a real staging import.
+Enable GitHub Actions failure notifications for this workflow in the maintainer's
+GitHub notification settings.
+
+Controlled diagnostics using the same updated dependency set found that the first
+Bhagavat Kath recording exposes downloadable formats locally without sign-in,
+while the AWS host still receives `ONLINE_PROVIDER_VERIFICATION_REQUIRED`.
+Metadata success is not media-import success. The update fixes maintenance and
+readiness; it does not guarantee Google's acceptance of an AWS browser.
+
+`ops/recover-online-playlist.mts` provides an operator recovery path when ordinary
+public downloads work on the operator's computer. It uses the same constrained Hub
+downloader, then the existing authenticated original-upload API for each saved
+playlist child. It does not export Google cookies, solve CAPTCHA, change provider
+verification state, approve content or publish. It checks the member before each
+operation, retains completed media and SHA-256 checkpoints, reconciles lost upload
+responses with server state, and never creates a second playlist. Existing shared
+permissions and generation settings continue to apply. Give it the playlist UUID
+as its argument and supply `STUDIO_RECOVERY_ORIGIN`, `STUDIO_RECOVERY_USERNAME`,
+`STUDIO_RECOVERY_PASSWORD`, `STUDIO_RECOVERY_DIRECTORY`, and `STUDIO_YTDLP_PATH`
+through a private process environment. Never put credentials in command lines or
+logs. An exclusive recovery lock prevents duplicate runners; after a crash, verify
+its PID is gone before removing the lock. Retained recordings are private inputs,
+not approved outputs. This route is conditional on normal local access and is not
+a permanent substitute for retaining originals.
+
+Long-term source acquisition should retain authorized originals in private object
+storage or a connected Drive archive. Normal external-browser OAuth is appropriate
+for account authorization; [Google's OAuth rules](https://developers.google.com/identity/protocols/oauth2/policies)
+do not support embedding the sign-in page as a universal recovery mechanism.
+Neither a Buffer publishing key nor a YouTube Data API token supplies arbitrary
+master MP4s. [YouTube Studio export](https://support.google.com/youtube/answer/56100?hl=en)
+requires access to the source owner's uploads. [Data Portability](https://developers.google.com/data-portability/schema-reference/youtube)
+can export a user's own video data but requires app approval, source-account consent
+and [eligible locations](https://support.google.com/accounts/answer/14452558?hl=en);
+it does not solve this source-owner mismatch. [Drive download access](https://developers.google.com/workspace/drive/api/guides/manage-downloads)
+or [recording broadcasts at source](https://docs.livekit.io/transport/media/ingress-egress/egress/)
+provides an independent media path. These are architectural recommendations, not
+claims that new integrations were deployed in this repair.
 
 The implementation is opt-in. Set these server variables separately in each environment:
 
