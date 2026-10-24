@@ -37,15 +37,17 @@ export function studioBundleWorkflow(item: OnlineImport) {
   const returned = count("CHANGES_REQUESTED");
   const current = !item.curation
     ? 1
-    : returned
-      ? 5
-      : count("DRAFT")
-        ? 3
-        : count("IN_REVIEW")
-          ? 4
-          : approved + count("DISCARDED") === total && approved > 0
-            ? 6
-            : 2;
+    : item.curation.pausedForSettings
+      ? 2
+      : returned
+        ? 5
+        : count("DRAFT")
+          ? 3
+          : count("IN_REVIEW")
+            ? 4
+            : approved + count("DISCARDED") === total && approved > 0
+              ? 6
+              : 2;
   const steps = studioWorkflow({ starting: true }).steps;
   for (const step of steps) {
     step.state = "pending";
@@ -59,6 +61,10 @@ export function studioBundleWorkflow(item: OnlineImport) {
       step.label = refreshing
         ? `${generated} of ${total} recordings have files · updates in progress`
         : `${generated} of ${total} recordings ready`;
+      if (item.curation.pausedForSettings) {
+        step.owner = "Content Curator";
+        step.label = "Paused — choose channels and resume";
+      }
     }
     if (step.number === 3 && submitted) {
       step.state = submitted === total ? "done" : "pending";

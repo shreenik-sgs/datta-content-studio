@@ -136,21 +136,26 @@ export function OnlineImportPanel({
           : (previous ?? body.item.parentId ?? body.item.id),
       );
       setItems((previous) =>
-        previous.some((item) => item.id === body.item.id) ? previous : [body.item, ...previous],
+        previous.some((item) => item.id === body.item.id)
+          ? previous.map((item) => (item.id === body.item.id ? body.item : item))
+          : [body.item, ...previous],
       );
       if (isOnlineBundle(body.item.source)) setSelectedBundle(body.item.id);
+      if (body.item.curation?.pausedForSettings) setReviewing(false);
       setNotice(
-        (data as { action?: string }).action === "resume-playlist"
-          ? "Playlist recovery requested for unfinished downloads and retryable generation. Recordings needing source review, completed drafts and approved outputs are preserved."
-          : body.item.curation
-            ? "Shared settings saved. Each video will move into curation automatically as its download completes."
-            : isOnlineBundle(body.item.source) && body.item.childIds?.length
-              ? "Bundle found. Set permissions and generation options once below."
-              : body.item.status === "COMPLETE"
-                ? "This source is already imported. Open its existing master below."
-                : body.item.status === "FAILED"
-                  ? "This source has an earlier failed import. Review the issue below."
-                  : "Import queued. You can leave this page and return under Continue Existing Curation.",
+        body.item.curation?.pausedForSettings
+          ? "This playlist is paused. Choose your channels below, then save to resume. Your recordings and saved work are preserved."
+          : (data as { action?: string }).action === "resume-playlist"
+            ? "Playlist recovery requested for unfinished downloads and retryable generation. Recordings needing source review, completed drafts and approved outputs are preserved."
+            : body.item.curation
+              ? "Shared settings saved. Each video will move into curation automatically as its download completes."
+              : isOnlineBundle(body.item.source) && body.item.childIds?.length
+                ? "Bundle found. Set permissions and generation options once below."
+                : body.item.status === "COMPLETE"
+                  ? "This source is already imported. Open its existing master below."
+                  : body.item.status === "FAILED"
+                    ? "This source has an earlier failed import. Review the issue below."
+                    : "Import queued. You can leave this page and return under Continue Existing Curation.",
       );
       // A successful mutation must remain successful even if its follow-up read fails.
       await load().catch(() =>
@@ -228,6 +233,7 @@ export function OnlineImportPanel({
       item.childIds?.length &&
         item.curation &&
         !item.curation.pausedForCleanup &&
+        !item.curation.pausedForSettings &&
         !Object.values(item.curation.items).some((member) => member.error === "CONTENT_REMOVED") &&
         item.childIds.every((id) =>
           ["APPROVED", "DISCARDED"].includes(item.curation?.items[id]?.status ?? ""),
@@ -267,7 +273,7 @@ export function OnlineImportPanel({
         </button>
       </section>
     );
-  if (reviewing && reviewItem?.curation)
+  if (reviewing && reviewItem?.curation && !reviewItem.curation.pausedForSettings)
     return (
       <StudioPanel
         capabilities={capabilities}
@@ -329,8 +335,9 @@ export function OnlineImportPanel({
                 : "Playlists and series"}
           </h2>
           <p>
-            One bundle, one setup and one workspace. Downloads and generation continue
-            automatically.
+            {reviewItem?.curation?.pausedForSettings
+              ? "Generation is paused for this playlist. Choose channels below, then save to resume."
+              : "One bundle, one setup and one workspace. Downloads and generation continue automatically."}
           </p>
           {selectedBundle && (
             <button
@@ -568,11 +575,13 @@ export function OnlineImportPanel({
                           : `${item.childIds.length} recordings · ${
                               item.serviceIssue
                                 ? "Import service needs attention"
-                                : complete(item)
-                                  ? "Approved"
-                                  : item.curation
-                                    ? "Curation in progress"
-                                    : "Ready for shared setup"
+                                : item.curation?.pausedForSettings
+                                  ? "Paused — choose channels to resume"
+                                  : complete(item)
+                                    ? "Approved"
+                                    : item.curation
+                                      ? "Curation in progress"
+                                      : "Ready for shared setup"
                             }`}
                       </p>
                       <button

@@ -10,8 +10,9 @@ export function BundleWorkflow({ item }: { item: OnlineImport }) {
         <span>Step {flow.current} of 6</span>
       </div>
       <p>
-        Each recording keeps its own progress. You can review ready files while the remaining
-        recordings continue.
+        {item.curation?.pausedForSettings
+          ? "Your recordings and saved work are preserved. Generation resumes only after you save your channel choices."
+          : "Each recording keeps its own progress. You can review ready files while the remaining recordings continue."}
       </p>
       <ol>
         {flow.steps.map((step) => (

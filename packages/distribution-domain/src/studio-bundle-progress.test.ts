@@ -45,6 +45,20 @@ it("never treats approval as publication", () => {
   expect(flow.steps[5]?.state).toBe("current");
   expect(flow.steps[5]?.label).toBe("You are here");
 });
+it("keeps a playlist paused for channel choices at generation, not draft review", () => {
+  const item = bundle(["DRAFT", "DRAFT"]);
+  if (!item.curation) throw Error("missing fixture");
+  item.curation.pausedForSettings = true;
+  for (const member of Object.values(item.curation.items)) member.outputCount = 0;
+  const flow = studioBundleWorkflow(item);
+  expect(flow.current).toBe(2);
+  expect(flow.steps[1]).toMatchObject({
+    state: "current",
+    owner: "Content Curator",
+    label: "Paused — choose channels and resume",
+  });
+  expect(flow.steps[2]?.state).toBe("pending");
+});
 it("retains file availability while a card update is queued without implying it can be submitted", () => {
   const item = bundle(["GENERATING", "QUEUED"]);
   if (!item.curation) throw Error("missing fixture");
