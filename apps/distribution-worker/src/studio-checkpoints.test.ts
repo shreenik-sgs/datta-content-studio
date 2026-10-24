@@ -261,18 +261,19 @@ it("uses an explicitly configured backup for availability/quota failures and rec
   expect(spy).not.toHaveBeenCalled();
   expect(onProvider).toHaveBeenCalledWith("openai", "synthetic-backup", false);
 });
-it.each(["STUDIO_PROVIDER_CONTENT_BLOCKED", "STUDIO_PROVIDER_AUTHENTICATION_FAILED"])(
-  "does not route around %s using another provider",
-  async (code) => {
-    const spy = mockPlans().mockRejectedValue(Error(code));
-    await expect(
-      generateCheckpointedStudioPlan(request, recovery(), {
-        fallback: { provider: "openai", apiKey: "synthetic", model: "synthetic" },
-      }),
-    ).rejects.toThrow(code);
-    expect(spy).toHaveBeenCalledTimes(1);
-  },
-);
+it.each([
+  "STUDIO_PROVIDER_CONTENT_BLOCKED",
+  "STUDIO_PROVIDER_AUTHENTICATION_FAILED",
+  "STUDIO_PROVIDER_SPEND_CAP_REACHED",
+])("does not route around %s using another provider", async (code) => {
+  const spy = mockPlans().mockRejectedValue(Error(code));
+  await expect(
+    generateCheckpointedStudioPlan(request, recovery(), {
+      fallback: { provider: "openai", apiKey: "synthetic", model: "synthetic" },
+    }),
+  ).rejects.toThrow(code);
+  expect(spy).toHaveBeenCalledTimes(1);
+});
 it("supports the full 104-output combination when all channels are suitable", async () => {
   const spy = mockPlans();
   const valid = spy.getMockImplementation();

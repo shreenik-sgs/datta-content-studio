@@ -18,6 +18,7 @@ export async function studioHttpFailure(response: Response): Promise<never> {
       : Date.parse(header) - Date.now()
     : 0;
   let quotaExhausted = false;
+  let spendCapReached = false;
   // Read only a bounded error payload to classify quota versus temporary rate limiting.
   if (response.status === 429) {
     const reader = response.body?.getReader();
@@ -34,6 +35,16 @@ export async function studioHttpFailure(response: Response): Promise<never> {
         }
       if (size <= 16384) {
         const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        // Gemini can report a project spend cap as HTTP 429 without QuotaFailure
+        // details. This requires the owner's budget decision, not a timed retry.
+        const message = typeof value?.error?.message === "string" ? value.error.message : "";
+        spendCapReached =
+          /\b(?:exceeded|reached)\s+(?:its\s+|your\s+|the\s+)?(?:monthly\s+)?spend(?:ing)?\s+cap\b/i.test(
+            message,
+          ) ||
+          /\b(?:monthly\s+)?spend(?:ing)?\s+cap\s+(?:(?:has been|is)\s+)?(?:exceeded|reached)\b/i.test(
+            message,
+          );
         quotaExhausted =
           value?.error?.code === "insufficient_quota" ||
           value?.error?.details?.some((detail: { violations?: { quotaId?: string }[] }) =>
@@ -49,9 +60,11 @@ export async function studioHttpFailure(response: Response): Promise<never> {
   } else await response.body?.cancel();
   const code =
     response.status === 429
-      ? quotaExhausted
-        ? "STUDIO_PROVIDER_QUOTA_EXHAUSTED"
-        : "STUDIO_PROVIDER_RATE_LIMITED"
+      ? spendCapReached
+        ? "STUDIO_PROVIDER_SPEND_CAP_REACHED"
+        : quotaExhausted
+          ? "STUDIO_PROVIDER_QUOTA_EXHAUSTED"
+          : "STUDIO_PROVIDER_RATE_LIMITED"
       : [401, 403].includes(response.status)
         ? "STUDIO_PROVIDER_AUTHENTICATION_FAILED"
         : response.status === 402

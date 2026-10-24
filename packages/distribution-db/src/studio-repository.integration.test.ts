@@ -843,8 +843,9 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     );
     const retry = await claim(f.pkg);
     expect(retry.checkpoint?.transcript?.value).toEqual({ privateText: "synthetic" });
-    await studio.failGeneration(retry, "STUDIO_PROVIDER_OUTPUT_LIMIT");
+    await studio.failGeneration(retry, "STUDIO_PROVIDER_SPEND_CAP_REACHED");
     const failed = await studio.get(f.ctx, f.pkg.id);
+    expect(failed.failure).toBe("STUDIO_PROVIDER_SPEND_CAP_REACHED");
     const next = await studio.enqueueGeneration(f.ctx, failed.id, {
       expectedRevision: failed.revision,
     });

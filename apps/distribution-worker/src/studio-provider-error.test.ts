@@ -48,6 +48,32 @@ it("distinguishes exhausted OpenAI credits", async () => {
   ).rejects.toThrow("STUDIO_PROVIDER_QUOTA_EXHAUSTED");
 });
 
+it.each([
+  "Your project has exceeded its monthly spending cap. Please go to AI Studio to manage it.",
+  "The monthly spend cap has been reached.",
+])("recognizes a spend cap without structured quota details: %s", async (message) => {
+  const error = await studioHttpFailure(
+    Response.json({ error: { status: "RESOURCE_EXHAUSTED", message } }, { status: 429 }),
+  ).catch((value) => value);
+  expect(error.message).toBe("STUDIO_PROVIDER_SPEND_CAP_REACHED");
+  expect(JSON.stringify(error)).not.toContain(message);
+});
+
+it("does not mistake guidance about spend caps for a temporary request limit", async () => {
+  await expect(
+    studioHttpFailure(
+      Response.json(
+        {
+          error: {
+            message: "Requests per minute exceeded. You can also manage a monthly spend cap.",
+          },
+        },
+        { status: 429 },
+      ),
+    ),
+  ).rejects.toThrow("STUDIO_PROVIDER_RATE_LIMITED");
+});
+
 it.each(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "UND_ERR_CONNECT_TIMEOUT"])(
   "recognizes an unsent %s request without exposing transport details",
   async (code) => {

@@ -8,3 +8,11 @@ it("explains transcription capacity recovery without hiding it behind a generic 
   expect(message).toContain("smaller sections");
   expect(message).not.toBe(studioMessage("GENERATION_FAILED"));
 });
+
+it("explains the owner's spending-cap action without suggesting another automatic retry", () => {
+  const message = studioMessage("STUDIO_PROVIDER_SPEND_CAP_REACHED");
+  expect(message).toContain("Google AI Studio → Spend → Monthly spend cap");
+  expect(message).toContain("Automatic retries have stopped");
+  expect(message).toContain("saved work is retained");
+  expect(message).toContain("Adding credits alone does not raise this cap");
+});

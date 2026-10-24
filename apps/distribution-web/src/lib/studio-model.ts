@@ -187,6 +187,8 @@ const messages: Record<string, string> = {
     "The AI service stopped this response because of its recitation policy. An Admin must review the affected source passage before retrying.",
   STUDIO_PROVIDER_QUOTA_EXHAUSTED:
     "The AI account has exhausted its quota or credits. An Admin must check the provider dashboard, billing and daily limits. Completed work is saved.",
+  STUDIO_PROVIDER_SPEND_CAP_REACHED:
+    "The AI project's monthly spending cap has been reached. Automatic retries have stopped; your saved work is retained. The project owner must review the cap in Google AI Studio → Spend → Monthly spend cap before you resume generation. Adding credits alone does not raise this cap.",
   STUDIO_PROVIDER_BILLING_REQUIRED:
     "The AI service requires billing or credits. An Admin must check the provider account before retrying.",
   STUDIO_PROVIDER_REQUEST_INVALID:

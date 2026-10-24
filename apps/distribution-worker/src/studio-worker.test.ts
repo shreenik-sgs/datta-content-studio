@@ -83,18 +83,19 @@ it("queues a timed retry for a drafting rate limit while retaining checkpoints",
   );
   expect(repository.failGeneration).not.toHaveBeenCalled();
 });
-it("does not automatically retry an exhausted quota", async () => {
-  vi.mocked(generateStudioPackage).mockRejectedValue(
-    new StudioProviderError("STUDIO_PROVIDER_QUOTA_EXHAUSTED"),
-  );
-  await runStudioGenerationOnce(input());
-  expect(repository.deferGeneration).not.toHaveBeenCalled();
-  expect(repository.failGeneration).toHaveBeenCalledWith(
-    expect.anything(),
-    "STUDIO_PROVIDER_QUOTA_EXHAUSTED",
-    expect.objectContaining({ errorCode: "STUDIO_PROVIDER_QUOTA_EXHAUSTED" }),
-  );
-});
+it.each(["STUDIO_PROVIDER_QUOTA_EXHAUSTED", "STUDIO_PROVIDER_SPEND_CAP_REACHED"])(
+  "does not automatically retry %s",
+  async (code) => {
+    vi.mocked(generateStudioPackage).mockRejectedValue(new StudioProviderError(code));
+    await runStudioGenerationOnce(input());
+    expect(repository.deferGeneration).not.toHaveBeenCalled();
+    expect(repository.failGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      code,
+      expect.objectContaining({ errorCode: code }),
+    );
+  },
+);
 
 it.each([
   ["drafting", "STUDIO_PROVIDER_ABORTED"],
