@@ -171,6 +171,20 @@ suite("GBADPT isolated TEST-to-live clone promotion", () => {
     ).toEqual(payload);
     expect((await db.query("SELECT * FROM distribution.operator_session")).rowCount).toBe(1);
   });
+  it("resets only known TEST worker heartbeat records without treating them as live readiness", async () => {
+    await db.query(
+      "INSERT INTO distribution.module_state(id) VALUES('online-import-worker:true'),('live-curation-worker:true')",
+    );
+    expect((await promote(false)).workerHeartbeatsReset).toBe(2);
+    expect((await db.query("SELECT * FROM distribution.module_state")).rowCount).toBe(2);
+    expect((await promote()).workerHeartbeatsReset).toBe(2);
+    expect((await db.query("SELECT * FROM distribution.module_state")).rowCount).toBe(0);
+  });
+  it("refuses unrecognized module state instead of silently clearing it", async () => {
+    await db.query("INSERT INTO distribution.module_state(id) VALUES('unrecognized-state')");
+    await expect(promote()).rejects.toThrow("PROMOTION_UNKNOWN_MODULE_STATE");
+    expect((await db.query("SELECT * FROM distribution.module_state")).rowCount).toBe(1);
+  });
   it("rejects outstanding publication records instead of turning a simulation into an upload", async () => {
     await db.query(
       "INSERT INTO distribution.studio_publication_job(package_id,is_test,package_revision,output_id,channel,requested_by,status) VALUES($1,true,1,$2,'youtube','test','SIMULATED')",

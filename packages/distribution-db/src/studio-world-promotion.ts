@@ -7,6 +7,7 @@ const supported = new Set([
   "operator",
   "operator_session",
   "login_attempt",
+  "module_state",
   "capability_grant",
   "content_master",
   "content_version",
@@ -79,6 +80,15 @@ export async function promoteGbadptClone(
       throw Error("PROMOTION_WORKERS_MUST_BE_DRAINED");
     if ((before.get("storage_cleanup") ?? []).some((r) => r.status !== "COMPLETE"))
       throw Error("PROMOTION_CLEANUP_MUST_BE_COMPLETE");
+    const heartbeats = before.get("module_state") ?? [];
+    if (
+      heartbeats.some(
+        (row) =>
+          !["online-import-worker:true", "live-curation-worker:true"].includes(String(row.id)) ||
+          row.schema_version !== 1,
+      )
+    )
+      throw Error("PROMOTION_UNKNOWN_MODULE_STATE");
     const settings = before.get("studio_settings");
     if (settings?.length !== 1) throw Error("PROMOTION_SETTINGS_REQUIRED");
     const config = parseStudioProviderConfig(
@@ -100,7 +110,7 @@ export async function promoteGbadptClone(
     for (const [table, rows] of before) {
       expected.set(
         table,
-        table === "operator_session"
+        table === "operator_session" || table === "module_state"
           ? []
           : rows.map((row) => {
               const next = structuredClone(row);
@@ -138,6 +148,8 @@ export async function promoteGbadptClone(
     ]);
     // An existing TEST browser session must never silently acquire real-posting access.
     await client.query("DELETE FROM distribution.operator_session");
+    // TEST worker liveness is not evidence that a LIVE worker has started.
+    await client.query("DELETE FROM distribution.module_state");
     await client.query("SET CONSTRAINTS ALL IMMEDIATE");
     for (const c of constraints)
       await client.query(
@@ -169,6 +181,7 @@ export async function promoteGbadptClone(
         .filter(([, rows]) => rows.length)
         .map(([table, rows]) => ({ table, rows: rows.length })),
       sessionsRevoked: before.get("operator_session")?.length ?? 0,
+      workerHeartbeatsReset: heartbeats.length,
       preservedRevisions: before.get("studio_revision")?.length ?? 0,
       destination: target.channelUrl,
       publicationJobs: 0,
