@@ -7,6 +7,7 @@ import {
   STUDIO_SUBTITLE_TOP,
   type StudioAppLinks,
   type StudioOutput,
+  type StudioPackage,
   type StudioPresentationReview,
   studioAssetName,
   studioClosingCardPlan,
@@ -14,6 +15,7 @@ import {
   validateStudioAiReviewEvidence,
   validateStudioPresentationReview,
 } from "@satsang/distribution-domain";
+import sharp from "sharp";
 import { createPrivateRenderScratch } from "./renderer.js";
 import { type StudioCheckpoints, studioFingerprint } from "./studio-checkpoints.js";
 import { studioClosingCard } from "./studio-ending.js";
@@ -24,7 +26,7 @@ const sha = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).d
 
 export class StudioClosingPreservationError extends Error {
   constructor(
-    readonly check: "audio" | "picture" | "captions",
+    readonly check: "audio" | "picture" | "captions" | "card",
     readonly minimum?: number,
   ) {
     super("STUDIO_CLOSING_PRESERVATION_FAILED");
@@ -167,7 +169,35 @@ async function renderClosingReplacement(input: ClosingReplacementInput, crf: num
   }
   const minimumFrameSsim = await similarity(false);
   const minimumCaptionSsim = await similarity(true);
-  return { path, audioSha256, minimumFrameSsim, minimumCaptionSsim };
+  const framePath = join(directory, "closing-proof.png");
+  await execute(path, [
+    "-v",
+    "error",
+    "-y",
+    "-ss",
+    String((input.endMs - 1000) / 1000),
+    "-i",
+    "__SOURCE__",
+    "-frames:v",
+    "1",
+    "-update",
+    "1",
+    framePath,
+  ]);
+  const region = { left: 100, top: 240, width: 800, height: 1120 };
+  const expected = await sharp(input.card).extract(region).removeAlpha().raw().toBuffer();
+  const actual = await sharp(await readFile(framePath))
+    .extract(region)
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+  let difference = 0;
+  for (let index = 0; index < actual.length; index++)
+    difference += Math.abs((actual[index] ?? 0) - (expected[index] ?? 0));
+  const cardMeanAbsoluteDifference = difference / actual.length;
+  if (actual.length !== expected.length || cardMeanAbsoluteDifference >= 4)
+    throw new StudioClosingPreservationError("card", cardMeanAbsoluteDifference);
+  return { path, audioSha256, minimumFrameSsim, minimumCaptionSsim, cardMeanAbsoluteDifference };
 }
 
 /** Closing copy changes operate on the reviewed export, never on the raw recording. */
@@ -180,10 +210,28 @@ export async function refreshStudioClosingCards(input: {
   signal?: AbortSignal;
   checkpoints?: StudioCheckpoints;
 }) {
-  const { claim, store, env, signal, checkpoints } = input;
+  const { claim } = input;
   const pkg = claim.package;
   if (!pkg.provenance || pkg.approval || claim.source.sha256 !== pkg.source.sha256)
     throw Error("SOURCE_DEPENDENCY_CHANGED");
+  return {
+    outputs: await refreshStudioClosingOutputs({ ...input, pkg }),
+    provenance: pkg.provenance,
+  };
+}
+
+/** Also used for uncommitted preview checkpoints. This never promotes them to draft outputs. */
+export async function refreshStudioClosingOutputs(input: {
+  pkg: StudioPackage;
+  store: PrivateAssetStore;
+  env: Record<string, string | undefined>;
+  appLinks?: StudioAppLinks;
+  closingDestinations?: Record<string, "app" | "youtube">;
+  signal?: AbortSignal;
+  checkpoints?: StudioCheckpoints;
+}) {
+  const { pkg, store, env, signal, checkpoints } = input;
+  if (pkg.approval) throw Error("SOURCE_DEPENDENCY_CHANGED");
   const scratch = env.STUDIO_SCRATCH_ROOT ?? env.DISTRIBUTION_ASSET_ROOT;
   if (!scratch || !isAbsolute(scratch)) throw Error("STUDIO_PRIVATE_SCRATCH_REQUIRED");
   const outputs: StudioOutput[] = [];
@@ -199,7 +247,7 @@ export async function refreshStudioClosingCards(input: {
       throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
     const durationMs = prior.endMs - prior.startMs;
     validateStudioPresentationReview(prior.presentationReview, {
-      sourceSha256: claim.source.sha256,
+      sourceSha256: pkg.source.sha256,
       renderedSha256: prior.asset.sha256,
       fileVersion: prior.fileVersion ?? 1,
       durationMs,
@@ -207,7 +255,7 @@ export async function refreshStudioClosingCards(input: {
     validateStudioAiReviewEvidence(prior.aiReview, {
       ...prior,
       fileVersion: prior.fileVersion ?? 1,
-      sourceSha256: claim.source.sha256,
+      sourceSha256: pkg.source.sha256,
     });
     const destination = pkg.request.youtubeClosing
       ? "youtube"
@@ -336,6 +384,7 @@ export async function refreshStudioClosingCards(input: {
         audioSha256: result.audioSha256,
         minimumFrameSsim: result.minimumFrameSsim,
         minimumCaptionSsim: result.minimumCaptionSsim,
+        cardMeanAbsoluteDifference: result.cardMeanAbsoluteDifference,
       };
       const output: StudioOutput = {
         ...prior,
@@ -356,7 +405,7 @@ export async function refreshStudioClosingCards(input: {
       };
       if (!output.presentationReview) throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
       validateStudioPresentationReview(output.presentationReview, {
-        sourceSha256: claim.source.sha256,
+        sourceSha256: pkg.source.sha256,
         renderedSha256: asset.sha256,
         fileVersion,
         durationMs,
@@ -367,5 +416,5 @@ export async function refreshStudioClosingCards(input: {
       await rm(directory, { recursive: true, force: true });
     }
   }
-  return { outputs, provenance: pkg.provenance };
+  return outputs;
 }

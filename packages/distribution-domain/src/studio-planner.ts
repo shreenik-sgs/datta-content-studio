@@ -11,7 +11,7 @@ import {
   type StudioTranscript,
 } from "./intelligent-content";
 import type { StudioExcludedMessage } from "./studio-content-review";
-import { STUDIO_CLOSING_HOLD_MS, studioYoutubeClosing } from "./studio-ending";
+import { STUDIO_CLOSING_HOLD_MS, studioYoutubeClosing, studioYoutubeFooter } from "./studio-ending";
 
 import { studioSourceBranding } from "./studio-source-branding";
 export { STUDIO_BRAND_NAME, STUDIO_BRAND_SIGNATURE } from "./studio-source-branding";
@@ -137,7 +137,7 @@ export function studioCopyFooter(
     channel === "youtube" && request?.youtubeClosing
       ? studioYoutubeClosing(request.youtubeClosing)
       : undefined;
-  return `${target ? `\n\nSubscribe to ${target.label}: ${target.url}` : ""}\n\n${studioSourceBranding(request?.sourceBranding).signature}`;
+  return `${target ? `\n\n${studioYoutubeFooter(target)}` : ""}\n\n${studioSourceBranding(request?.sourceBranding).signature}`;
 }
 /** Add fixed branding metadata only; leave empty/malformed copy and length errors for validation. */
 export function enforceStudioPlanBranding(
@@ -156,7 +156,7 @@ export function enforceStudioPlanBranding(
         output.channel === "youtube" && request?.youtubeClosing
           ? studioYoutubeClosing(request.youtubeClosing)
           : undefined;
-      const subscribe = target ? `Subscribe to ${target.label}: ${target.url}` : undefined;
+      const subscribe = target ? studioYoutubeFooter(target) : undefined;
       if (subscribe && !body.includes(subscribe)) body += `\n\n${subscribe}`;
       return {
         ...output,

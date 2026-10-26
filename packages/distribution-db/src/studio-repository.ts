@@ -60,6 +60,7 @@ import {
 } from "./repository.js";
 import { requireIndependentSourceReview } from "./review-integrity.js";
 import type { StudioRoleAuthority } from "./studio-authority.js";
+import { validateStudioClosingReplacement } from "./studio-closing-replacement.js";
 import { materializeFileWorkflows, studioFileFingerprint } from "./studio-file-review.js";
 import { studioGenerationPreviews } from "./studio-generation-previews.js";
 import { currentStudioTranscript, loadStudioSource } from "./studio-source.js";
@@ -154,6 +155,7 @@ const knownFailures = new Set([
   "STUDIO_PROVIDER_RESPONSE_LIMIT",
   "STUDIO_PROVIDER_UNAVAILABLE",
   "STUDIO_CLOSING_PRESERVATION_FAILED",
+  "STUDIO_CLOSING_FOOTER_REVIEW_REQUIRED",
   "STUDIO_CLOSING_TIMELINE_CHANGED",
   "STUDIO_PROVIDER_ABORTED",
   "STUDIO_CACHE_INVALID",
@@ -978,6 +980,122 @@ export function createIntelligentContentRepository(
     return next;
   }
   return {
+    replaceDraftClosingCards: (
+      ctx: DistributionContext,
+      id: string,
+      input: {
+        expectedRevision: number;
+        target: import("@satsang/distribution-domain").StudioYoutubeClosing;
+        outputs: StudioOutput[];
+      },
+    ) =>
+      transaction(async (client) => {
+        await requireDistributionCapability(client, ctx, ["operations.manage"]);
+        const pkg = await load(client, ctx.isTest, id, true);
+        requireContentRevision(pkg.revision, input.expectedRevision);
+        active(pkg);
+        await sourceCurrent(client, pkg);
+        if (
+          pkg.status !== "DRAFT" ||
+          pkg.approval ||
+          pkg.generation ||
+          !pkg.outputs.length ||
+          pkg.outputs.some((output) => !studioCanEditFile(pkg, output, ["content.create"]))
+        )
+          throw Error("STUDIO_FILE_LOCKED");
+        const target = studioYoutubeClosing(input.target);
+        if (
+          target.url !== pkg.request.youtubeClosing?.url ||
+          input.outputs.length !== pkg.outputs.length
+        )
+          throw Error("STUDIO_TARGET_SETTINGS_CHANGED");
+        for (const [index, prior] of pkg.outputs.entries()) {
+          const next = input.outputs[index];
+          if (!next) throw Error("STUDIO_SELECT_OUTPUTS");
+          if (
+            same(prior, next) &&
+            same(prior.presentationReview?.closingCard?.youtubeClosing, target)
+          )
+            continue;
+          validateStudioClosingReplacement(pkg, prior, next, target);
+        }
+        if (
+          (
+            await client.query(
+              "SELECT 1 FROM distribution.studio_generation_job WHERE package_id=$1 AND is_test=$2 AND status IN ('RUNNING','QUEUED')",
+              [id, ctx.isTest],
+            )
+          ).rowCount
+        )
+          throw Error("STUDIO_DESTINATION_BUSY");
+        return save(
+          client,
+          pkg,
+          ctx.userId,
+          "CLOSING_CARDS_REFRESHED",
+          {
+            request: { ...pkg.request, youtubeClosing: target },
+            outputs: input.outputs,
+          },
+          {
+            action: "REVISED",
+            comment:
+              "Closing-card watch and subscription links updated. Verified original audio, captions and preceding pictures preserved. Human approval is still required.",
+          },
+        );
+      }),
+    replaceGenerationPreview: (
+      ctx: DistributionContext,
+      id: string,
+      input: {
+        expectedRevision: number;
+        target?: import("@satsang/distribution-domain").StudioYoutubeClosing;
+        key: string;
+        before: { fingerprint: string; value: unknown };
+        after: { fingerprint: string; value: unknown };
+      },
+    ) =>
+      transaction(async (client) => {
+        await requireDistributionCapability(client, ctx, ["operations.manage"]);
+        const pkg = await load(client, ctx.isTest, id, true);
+        requireContentRevision(pkg.revision, input.expectedRevision);
+        active(pkg);
+        await sourceCurrent(client, pkg);
+        const destination = input.target ?? pkg.request.youtubeClosing;
+        if (!destination) throw Error("STUDIO_CLOSING_CHANNEL_REQUIRED");
+        const target = studioYoutubeClosing(destination);
+        if (target.url !== pkg.request.youtubeClosing?.url)
+          throw Error("STUDIO_TARGET_SETTINGS_CHANGED");
+        const prior = input.before.value as StudioOutput;
+        const next = input.after.value as StudioOutput;
+        if (
+          !/^[a-f0-9]{64}$/.test(input.after.fingerprint) ||
+          !studioGenerationPreviews(pkg, "1970-01-01T00:00:00Z", { [input.key]: input.before })
+            .length ||
+          !studioGenerationPreviews(pkg, "1970-01-01T00:00:00Z", { [input.key]: input.after })
+            .length
+        )
+          throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
+        validateStudioClosingReplacement(pkg, prior, next, target, true);
+        // Compare-and-swap the one checkpoint. Do not change the package revision or active lease.
+        // A new render finishing concurrently wins; an administrator cannot overwrite it.
+        const updated = await client.query(
+          `UPDATE distribution.studio_package SET generation_checkpoint=
+          jsonb_set(jsonb_set(generation_checkpoint,ARRAY[$3::text],$4::jsonb),ARRAY[$6::text],$7::jsonb)
+          WHERE id=$1 AND is_test=$2 AND generation_checkpoint->$3=$5::jsonb`,
+          [
+            id,
+            ctx.isTest,
+            input.key,
+            input.after,
+            input.before,
+            `preview-history:${prior.id}:${input.before.fingerprint}`,
+            { ...input.before, refreshedBy: ctx.userId, refreshedAt: new Date().toISOString() },
+          ],
+        );
+        if (updated.rowCount !== 1) throw Error("STUDIO_PREVIEW_CHANGED");
+        return { outputId: next.id, revision: pkg.revision };
+      }),
     refreshYoutubeDestination: (
       ctx: DistributionContext,
       id: string,

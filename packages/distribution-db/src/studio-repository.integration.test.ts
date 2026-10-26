@@ -22,6 +22,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDistributionEditorialRepository } from "./editorial-repository";
 import { createDistributionRepository } from "./repository";
+import { closingFixture } from "./studio-closing-test-fixture";
 import type { StudioProviderConfig } from "./studio-provider-config";
 import { createIntelligentContentRepository } from "./studio-repository";
 import { studioSettingsRevision } from "./studio-settings";
@@ -964,6 +965,116 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     expect(
       await studio.getOutputAsset(f.ctx, f.pkg.id, output.id, { kind: "asset", preview: true }),
     ).toEqual(output.asset);
+  });
+  it("repairs a preview with compare-and-swap without changing its running generation lease or review state", async () => {
+    const f = await fixture({ channels: ["youtube"] });
+    const c = await claim(f.pkg);
+    const sample = closingFixture();
+    const make = (value: StudioOutput) => {
+      if (!value.asset || !value.aiReview || !value.presentationReview) throw Error("fixture");
+      return {
+        ...value,
+        asset: {
+          ...value.asset,
+          ...studioAssetName(
+            {
+              masterId: f.pkg.source.masterId,
+              sourceVersionId: f.pkg.source.versionId,
+              packageId: f.pkg.id,
+              outputId: value.id,
+              channel: "youtube",
+              format: "short",
+              language: "en",
+              aspect: "9:16",
+              fileVersion: value.fileVersion ?? 1,
+              renderId: "12345678",
+            },
+            "mp4",
+          ),
+        },
+        aiReview: { ...value.aiReview, sourceSha256: f.pkg.source.sha256 },
+        presentationReview: { ...value.presentationReview, sourceSha256: f.pkg.source.sha256 },
+      };
+    };
+    const prior = make(sample.prior);
+    const next = make(sample.next);
+    const pkg = {
+      ...c.package,
+      request: {
+        ...c.package.request,
+        sourceBranding: "bala-swamiji",
+        youtubeClosing: sample.target,
+      },
+    };
+    await migration.query(
+      "UPDATE distribution.studio_revision SET snapshot=$3 WHERE package_id=$1 AND revision=$2",
+      [pkg.id, pkg.revision, pkg],
+    );
+    const before = { fingerprint: "a".repeat(64), value: prior };
+    const after = { fingerprint: "b".repeat(64), value: next };
+    await studio.checkpointGeneration(c, { key: "output:youtube:en", ...before });
+    const administrator = identity();
+    administrator.roles = ["SUPER_ADMIN"];
+    await migration.query(
+      "INSERT INTO distribution.capability_grant(user_id,is_test,capability,granted_by) VALUES($1,$2,'operations.manage',$1)",
+      [administrator.userId, administrator.isTest],
+    );
+    const input = { expectedRevision: pkg.revision, key: "output:youtube:en", before, after };
+    await expect(studio.replaceGenerationPreview(f.ctx, pkg.id, input)).rejects.toThrow(
+      "FORBIDDEN",
+    );
+    await expect(
+      studio.replaceGenerationPreview({ ...administrator, isTest: false }, pkg.id, input),
+    ).rejects.toThrow();
+    await expect(
+      studio.replaceGenerationPreview(administrator, pkg.id, {
+        ...input,
+        after: { ...after, value: { ...next, title: "Tampered" } },
+      }),
+    ).rejects.toThrow("STUDIO_CLOSING_PRESERVATION_FAILED");
+    await studio.replaceGenerationPreview(administrator, pkg.id, input);
+    await expect(studio.replaceGenerationPreview(administrator, pkg.id, input)).rejects.toThrow(
+      "STUDIO_PREVIEW_CHANGED",
+    );
+    const updated = await studio.get(f.ctx, pkg.id);
+    expect(updated.revision).toBe(pkg.revision);
+    expect(updated.status).toBe("GENERATING");
+    expect(updated.outputs).toEqual([]);
+    expect(updated.approval).toBeNull();
+    expect(updated.generationPreviews?.[0]?.asset?.sha256).toBe(next.asset.sha256);
+    expect(await studio.renewGeneration(c)).toBe(true);
+    await studio.failGeneration(c, "STUDIO_PROVIDER_TIMEOUT");
+    const failed = await studio.get(f.ctx, pkg.id);
+    const draft = { ...failed, status: "DRAFT", failure: null, outputs: [prior] };
+    await migration.query(
+      "UPDATE distribution.studio_revision SET snapshot=$3 WHERE package_id=$1 AND revision=$2",
+      [pkg.id, draft.revision, draft],
+    );
+    const replacement = {
+      expectedRevision: draft.revision,
+      target: sample.target,
+      outputs: [next],
+    };
+    await expect(studio.replaceDraftClosingCards(f.ctx, pkg.id, replacement)).rejects.toThrow(
+      "FORBIDDEN",
+    );
+    await expect(
+      studio.replaceDraftClosingCards(administrator, pkg.id, {
+        ...replacement,
+        outputs: [{ ...next, title: "Sneaked edit" }],
+      }),
+    ).rejects.toThrow("STUDIO_CLOSING_PRESERVATION_FAILED");
+    const repaired = await studio.replaceDraftClosingCards(administrator, pkg.id, replacement);
+    expect(repaired.status).toBe("DRAFT");
+    expect(repaired.approval).toBeNull();
+    expect(repaired.outputs[0]?.asset).toEqual(next.asset);
+    expect(
+      (await studio.history(f.ctx, pkg.id)).revisions.find((r) => r.revision === draft.revision)
+        ?.package.outputs[0]?.asset,
+    ).toEqual(prior.asset);
+    await expect(
+      studio.replaceDraftClosingCards(administrator, pkg.id, replacement),
+    ).rejects.toThrow("REVISION_CONFLICT");
   });
   it("refreshes an approved destination only as an audited administrator render, preserving the approved revision", async () => {
     const f = await fixture({ channels: ["youtube"] });

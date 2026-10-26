@@ -303,6 +303,21 @@ export function StudioOutputPreview({
               .<span className="muted"> This player link is separate from the exported video.</span>
             </p>
           )}
+          {output.presentationReview?.closingCard?.youtubeClosing?.fullVideosUrl && (
+            <p>
+              Full videos:{" "}
+              <a
+                href={output.presentationReview.closingCard.youtubeClosing.fullVideosUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {new URL(
+                  output.presentationReview.closingCard.youtubeClosing.fullVideosUrl,
+                ).pathname.slice(1)}
+              </a>
+              . Subscribe using YouTube’s own Subscribe button on the Shorts channel.
+            </p>
+          )}
           {closingChannel && !downloadUrl && (
             <p>
               <strong>Closing-card channel:</strong> {closingChannel.name}. Its YouTube destination

@@ -102,3 +102,30 @@ it("keeps additional discovery separate from existing-file repair", () => {
       studioRegenerateSchema.parse({ expectedRevision: 3, mode: "discover", ...change }),
     ).toThrow();
 });
+it("keeps separate full-video and subscribe channels and rejects unsafe full-video links", () => {
+  const request = {
+    languages: ["en"],
+    channels: ["youtube"],
+    captions: true,
+    instructions: "",
+    youtubeClosing: {
+      label: "Sri Datta Vijayananda Teertha Swamiji",
+      url: "https://www.youtube.com/@sridattavijayam",
+      fullVideosUrl: "https://youtube.com/@gurubhavanaadpt/",
+    },
+  };
+  expect(studioGenerationRequestSchema.parse(request).youtubeClosing?.fullVideosUrl).toBe(
+    "https://www.youtube.com/@gurubhavanaadpt",
+  );
+  for (const fullVideosUrl of [
+    "javascript:alert(1)",
+    "https://example.com/@source",
+    "https://youtube.com/@source?token=private",
+  ])
+    expect(
+      studioGenerationRequestSchema.safeParse({
+        ...request,
+        youtubeClosing: { ...request.youtubeClosing, fullVideosUrl },
+      }).success,
+    ).toBe(false);
+});

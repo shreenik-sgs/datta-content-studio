@@ -5,7 +5,12 @@ export const STUDIO_CLOSING_CARD_POLICY = "green-plain-text-closing-card-v7" as 
 export const STUDIO_MORE_TEACHINGS_URL = "https://sgsdattasannidhi.org/";
 export const STUDIO_YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@sgsswamiji";
 /** A package-specific subscription destination; never changes the source attribution. */
-export type StudioYoutubeClosing = { label: string; url: string };
+export type StudioYoutubeClosing = {
+  label: string;
+  url: string;
+  /** The full recordings may live on a different channel from the Shorts subscription target. */
+  fullVideosUrl?: string | undefined;
+};
 export const STUDIO_BALA_YOUTUBE_CLOSING: StudioYoutubeClosing = {
   label: "Sri Datta Vijayananda Teertha Swamiji",
   url: "https://www.youtube.com/@sridattavijayam",
@@ -46,9 +51,32 @@ export function studioYoutubeClosing(value: StudioYoutubeClosing): StudioYoutube
   return {
     label: value.label.trim(),
     url: `https://www.youtube.com${url.pathname.replace(/\/$/u, "")}`,
+    ...(value.fullVideosUrl !== undefined
+      ? {
+          fullVideosUrl: studioYoutubeClosing({ label: value.label, url: value.fullVideosUrl }).url,
+        }
+      : {}),
   };
 }
 export const STUDIO_OPENING_CARD_POLICY = "steady-opening-original-voice-v1" as const;
+export function studioYoutubeFooter(value: StudioYoutubeClosing): string {
+  const target = studioYoutubeClosing(value);
+  return `${target.fullVideosUrl && target.fullVideosUrl !== target.url ? `Watch full videos: ${target.fullVideosUrl}\n` : ""}Subscribe to ${target.label}: ${target.url}`;
+}
+/** Replace only the app-owned footer; never rewrite teaching text or source attribution. */
+export function replaceStudioYoutubeFooter(
+  body: string,
+  before: StudioYoutubeClosing,
+  target: StudioYoutubeClosing,
+): string {
+  const oldFooter = studioYoutubeFooter(before);
+  if (
+    body.split(oldFooter).length !== 2 ||
+    !body.split("\n").includes(`Subscribe to ${before.label}: ${before.url}`)
+  )
+    throw Error("STUDIO_CLOSING_FOOTER_REVIEW_REQUIRED");
+  return body.replace(oldFooter, studioYoutubeFooter(target));
+}
 export type StudioOpeningCard = {
   policy: typeof STUDIO_OPENING_CARD_POLICY;
   startMs: 0;
@@ -148,6 +176,7 @@ export function studioAppDestination(
 export type StudioClosingCard = {
   policy:
     | typeof STUDIO_CLOSING_CARD_POLICY
+    | "green-separate-watch-subscribe-v8"
     | "green-channel-watch-subscribe-closing-card-v6"
     | "green-watch-subscribe-closing-card-v5"
     | "green-subscribe-closing-card-v4"
@@ -175,6 +204,7 @@ export function studioClosingDisplayName(sourceBranding?: StudioSourceBranding):
 export function studioClosingChannel(value: StudioClosingCard): { name: string; url?: string } {
   if (
     value.policy !== STUDIO_CLOSING_CARD_POLICY &&
+    value.policy !== "green-separate-watch-subscribe-v8" &&
     value.policy !== "green-channel-watch-subscribe-closing-card-v6" &&
     value.policy !== "green-watch-subscribe-closing-card-v5" &&
     value.policy !== "green-subscribe-closing-card-v4" &&
@@ -238,7 +268,10 @@ export function studioClosingCardPlan(
   if (options.destination !== undefined && !["app", "youtube"].includes(options.destination))
     throw Error("STUDIO_CLOSING_CARD_INVALID");
   return {
-    policy: STUDIO_CLOSING_CARD_POLICY,
+    policy:
+      youtubeClosing?.fullVideosUrl && youtubeClosing.fullVideosUrl !== youtubeClosing.url
+        ? "green-separate-watch-subscribe-v8"
+        : STUDIO_CLOSING_CARD_POLICY,
     startMs: Math.max(0, durationMs - 2000),
     speechEndMs: durationMs,
     endMs: durationMs + STUDIO_CLOSING_HOLD_MS,
@@ -306,7 +339,8 @@ export function validateStudioClosingCard(value: StudioClosingCard, durationMs: 
           )
         : key === "youtubeClosing"
           ? value.youtubeClosing?.label !== expected.youtubeClosing?.label ||
-            value.youtubeClosing?.url !== expected.youtubeClosing?.url
+            value.youtubeClosing?.url !== expected.youtubeClosing?.url ||
+            value.youtubeClosing?.fullVideosUrl !== expected.youtubeClosing?.fullVideosUrl
           : value[key as keyof StudioClosingCard] !== v,
     )
   )

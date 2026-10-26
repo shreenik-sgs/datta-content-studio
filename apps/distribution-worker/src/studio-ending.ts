@@ -76,6 +76,11 @@ export async function studioClosingCard(
 ): Promise<Buffer> {
   const [top, bottom, accent] = palettes.forest;
   const target = youtubeClosing ? studioYoutubeClosing(youtubeClosing) : undefined;
+  const separate = target?.fullVideosUrl && target.fullVideosUrl !== target.url;
+  const channelText = (url: string) =>
+    new URL(url).pathname.startsWith("/@")
+      ? new URL(url).pathname.slice(1)
+      : (target?.label ?? "YouTube");
   studioSourceBranding(sourceBranding);
   if (target && destination !== "youtube") throw Error("STUDIO_CLOSING_CARD_INVALID");
   const escapeText = (value: string) =>
@@ -136,21 +141,30 @@ export async function studioClosingCard(
   );
   const watch =
     destination === "youtube"
-      ? await textBlock("Watch full videos and\nsubscribe on YouTube", 44, 820, 112, "#fff8ec", 16)
+      ? await textBlock(
+          separate ? "Watch full videos" : "Watch full videos and\nsubscribe on YouTube",
+          44,
+          820,
+          112,
+          "#fff8ec",
+          16,
+        )
       : undefined;
   // Render the package's actual destination, not a hard-coded source handle.
   // This is a plain-text invitation, not an interactive control in the exported MP4.
   const channel =
     destination === "youtube" && target
       ? await textBlock(
-          new URL(target.url).pathname.startsWith("/@")
-            ? new URL(target.url).pathname.slice(1)
-            : target.label,
+          separate ? `Subscribe · ${channelText(target.url)}` : channelText(target.url),
           36,
           880,
           48,
           accent,
         )
+      : undefined;
+  const fullVideos =
+    separate && target?.fullVideosUrl
+      ? await textBlock(channelText(target.fullVideosUrl), 36, 880, 48, accent)
       : undefined;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920">
     <defs><linearGradient id="green" x2="0" y2="1"><stop stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient><clipPath id="photo"><circle cx="500" cy="500" r="250"/></clipPath></defs>
@@ -170,10 +184,19 @@ export async function studioClosingCard(
       {
         input: label.bytes,
         left: Math.round(500 - label.width / 2),
-        top: destination === "youtube" ? 880 : 930,
+        top: destination === "youtube" ? (separate ? 840 : 880) : 930,
       },
       ...(watch
-        ? [{ input: watch.bytes, left: Math.round(500 - watch.width / 2), top: 1100 }]
+        ? [
+            {
+              input: watch.bytes,
+              left: Math.round(500 - watch.width / 2),
+              top: separate ? 1050 : 1100,
+            },
+          ]
+        : []),
+      ...(fullVideos
+        ? [{ input: fullVideos.bytes, left: Math.round(500 - fullVideos.width / 2), top: 1130 }]
         : []),
     ])
     .png()

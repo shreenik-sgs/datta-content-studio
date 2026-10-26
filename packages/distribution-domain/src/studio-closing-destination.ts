@@ -1,6 +1,7 @@
 import type { StudioPackage } from "./intelligent-content";
 import {
   type StudioYoutubeClosing,
+  replaceStudioYoutubeFooter,
   studioClosingDisplayName,
   studioYoutubeClosing,
 } from "./studio-ending";
@@ -31,21 +32,21 @@ export function prepareStudioYoutubeClosingRefresh(
     pkg.request.channels.some((channel) => channel !== "youtube")
   )
     throw Error("STUDIO_CLOSING_RETARGET_REQUIRES_RENDER");
-  if (before.url === target.url && before.label === target.label) return pkg;
+  if (
+    before.url === target.url &&
+    before.label === target.label &&
+    before.fullVideosUrl === target.fullVideosUrl
+  )
+    return pkg;
   // A destination change cannot repair a recording with no suitable excerpt.
   if (!pkg.outputs.length) return { ...pkg, request: { ...pkg.request, youtubeClosing: target } };
-  const oldFooter = `Subscribe to ${before.label}: ${before.url}`;
-  const newFooter = `Subscribe to ${target.label}: ${target.url}`;
   const outputs = pkg.outputs.map((output) => {
     if (output.channel !== "youtube") throw Error("STUDIO_CLOSING_RETARGET_REQUIRES_RENDER");
-    const lines = output.body.split("\n");
-    if (lines.filter((line) => line === oldFooter).length !== 1)
-      throw Error("STUDIO_CLOSING_FOOTER_REVIEW_REQUIRED");
     if (output.asset && (!output.presentationReview?.closingCard || !output.aiReview))
       throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
     return {
       ...output,
-      body: lines.map((line) => (line === oldFooter ? newFooter : line)).join("\n"),
+      body: replaceStudioYoutubeFooter(output.body, before, target),
       workflow: { status: "DRAFT" as const, actorId: actor.userId, updatedAt: actor.at },
     };
   });
@@ -74,6 +75,8 @@ export function retargetStudioYoutubeClosing(
     target.label !== studioClosingDisplayName(pkg.request.sourceBranding) ||
     pkg.request.channels.some((channel) => channel !== "youtube")
   )
+    throw Error("STUDIO_CLOSING_RETARGET_REQUIRES_RENDER");
+  if (before.fullVideosUrl !== target.fullVideosUrl)
     throw Error("STUDIO_CLOSING_RETARGET_REQUIRES_RENDER");
   if (before.label === target.label && before.url === target.url) return pkg;
   const oldFooter = `Subscribe to ${before.label}: ${before.url}`;

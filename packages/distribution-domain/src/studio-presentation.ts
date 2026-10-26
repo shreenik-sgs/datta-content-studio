@@ -66,6 +66,7 @@ export type StudioPresentationReview = {
     audioSha256: string;
     minimumFrameSsim: number;
     minimumCaptionSsim: number;
+    cardMeanAbsoluteDifference?: number;
   };
   closingCard?: StudioClosingCard;
   openingCard?: StudioOpeningCard;
@@ -337,6 +338,10 @@ export function validateStudioPresentationReview(
       refresh.previousFileVersion >= input.fileVersion ||
       !Number.isFinite(Date.parse(refresh.verifiedAt)) ||
       refresh.unchangedUntilMs !== value.closingCard?.startMs ||
+      (refresh.cardMeanAbsoluteDifference !== undefined &&
+        (!Number.isFinite(refresh.cardMeanAbsoluteDifference) ||
+          refresh.cardMeanAbsoluteDifference < 0 ||
+          refresh.cardMeanAbsoluteDifference >= 4)) ||
       ![refresh.minimumFrameSsim, refresh.minimumCaptionSsim].every(
         (v) => Number.isFinite(v) && v >= 0.995 && v <= 1,
       ))

@@ -286,6 +286,7 @@ export function validateStudioOutputs(
         closing?.sourceBranding !== input.request.sourceBranding ||
         closing?.youtubeClosing?.label !== requestedClosing?.label ||
         closing?.youtubeClosing?.url !== requestedClosing?.url ||
+        closing?.youtubeClosing?.fullVideosUrl !== requestedClosing?.fullVideosUrl ||
         (requestedClosing &&
           (closing?.destination !== "youtube" || closing.channelUrl !== requestedClosing.url))
       )

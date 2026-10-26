@@ -7,6 +7,7 @@ import { StudioNoSuitableContentError } from "./studio-checkpoints.js";
 import { StudioClosingPreservationError } from "./studio-closing-refresh.js";
 import { StudioContentQualityError } from "./studio-content-review.js";
 import { generateStudioPackage } from "./studio-generation.js";
+import { refreshStudioPreviewClosings } from "./studio-preview-closing.js";
 import { StudioProviderError } from "./studio-provider-error.js";
 import { runStudioPublicationOnce } from "./studio-publishing.js";
 
@@ -55,6 +56,17 @@ export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise
     total: 1,
   };
   try {
+    await refreshStudioPreviewClosings({
+      pkg: claim.package,
+      entries: saved,
+      store: input.store,
+      env: input.env,
+      signal,
+      persist: async (key, _before, after) => {
+        await input.repository.checkpointGeneration(claim, { key, ...after });
+        saved[key] = structuredClone(after);
+      },
+    });
     const result = await generateStudioPackage({
       claim,
       store: input.store,

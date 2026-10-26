@@ -153,3 +153,28 @@ The series shows previews before detailed progress and explains when no playable
 MP4 exists yet. Do not restart generation or overwrite checkpoints just to make a
 file visible. Regression coverage includes list/detail projection, failure/retry,
 media access, environment separation and unchanged approval/publication gates.
+
+### Separate full recordings from the Shorts subscription channel
+
+A subscription target does not establish where full recordings are hosted. An optional
+`youtubeClosing.fullVideosUrl` now keeps those channel identities separate. When different,
+the green v8 card explicitly labels **Watch full videos** and **Subscribe**, and the posting
+copy retains both links. Existing single-channel cards keep their v7 appearance.
+
+On a resumed generation job, validated earlier preview checkpoints receive a closing-only
+refresh before discovery continues. This never approves them or makes them publishable.
+The old editorial timestamp is retained and the render cache fingerprint is invalidated.
+The replacement copies the original encoded audio, compares all preceding frames and the
+caption band, and compares the actual closing pixels with the requested template.
+
+For an already-running older worker, `ops/refresh-preview-and-draft-closings.mts` can perform
+explicit GBADPT-only maintenance without restarting it. It defaults to a dry run; applying
+requires an Admin identity, explicit target, bundle/count guard and a private audit directory.
+The original checkpoints are backed up. A compare-and-swap prevents overwriting newer
+checkpoints; finished unapproved drafts receive an audited new revision. Approved or
+submitted files are locked. `--watch` follows this same bundle as generation completes;
+it neither starts generation nor publishes. Run at most one instance for a bundle.
+
+26 October 2026 Bhagavat Katha decision: full videos remain on `@gurubhavanaadpt`, while
+subscription and posting target `@sridattavijayam`. This change is scoped to Bhagavat Katha;
+it does not retarget the separate Vishnu Purana batch or alter Buffer settings.

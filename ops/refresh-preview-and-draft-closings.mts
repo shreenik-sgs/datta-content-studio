@@ -1,0 +1,252 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
+import { setTimeout as wait } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
+import { Pool } from "pg";
+import { refreshStudioClosingOutputs } from "../apps/distribution-worker/src/studio-closing-refresh.ts";
+import {
+  refreshStudioPreviewClosings,
+  studioPreviewClosingCandidates,
+} from "../apps/distribution-worker/src/studio-preview-closing.ts";
+import { createAssetStore } from "../packages/distribution-assets/src/index.ts";
+import { createStudioRoleAuthority } from "../packages/distribution-db/src/studio-authority.ts";
+import { createIntelligentContentRepository } from "../packages/distribution-db/src/studio-repository.ts";
+import {
+  type StudioOutput,
+  type StudioPackage,
+  replaceStudioYoutubeFooter,
+  studioYoutubeClosing,
+} from "../packages/distribution-domain/src/index.ts";
+
+// Explicitly authorized closing-only maintenance while older generation jobs finish.
+// No worker/lease restart, AI request, publishing action, or approval is permitted.
+const env = process.env;
+const database = new URL(env.DISTRIBUTION_DATABASE_URL ?? "");
+const origin = env.DISTRIBUTION_APP_ORIGIN;
+const isTest = env.DISTRIBUTION_HUB_STAGE === "TEST";
+const local =
+  isTest &&
+  origin === "http://localhost:3070" &&
+  database.pathname === "/datta_content_studio_local";
+const hosted =
+  !isTest &&
+  env.DISTRIBUTION_HUB_STAGE === "ON" &&
+  origin === "https://gbadpt.sgsdattasannidhi.org" &&
+  database.pathname === "/datta_content_studio_gbadpt_live" &&
+  process.argv.includes("--allow-live-drafts");
+if (
+  env.STUDIO_IDENTITY !== "gbadpt" ||
+  !["localhost", "127.0.0.1"].includes(database.hostname) ||
+  (!local && !hosted)
+)
+  throw Error("WRONG_TARGET");
+const bundleId = env.STUDIO_BUNDLE_ID ?? "";
+if (!/^[a-f0-9-]{36}$/.test(bundleId)) throw Error("BUNDLE_REQUIRED");
+const target = studioYoutubeClosing({
+  label: env.STUDIO_CLOSING_LABEL ?? "",
+  url: env.STUDIO_CLOSING_URL ?? "",
+  ...(env.STUDIO_FULL_VIDEOS_URL ? { fullVideosUrl: env.STUDIO_FULL_VIDEOS_URL } : {}),
+});
+const apply = process.argv.includes("--apply");
+const watch = process.argv.includes("--watch");
+const directory = env.STUDIO_CLOSING_AUDIT_DIRECTORY;
+if (apply && (!directory || !isAbsolute(directory))) throw Error("BACKUP_REQUIRED");
+if (directory) await mkdir(directory, { recursive: true, mode: 0o700 });
+const pool = new Pool({ connectionString: database.toString(), max: 2 });
+const repository = createIntelligentContentRepository(pool, {
+  authorize: createStudioRoleAuthority(env, pool),
+});
+const store = createAssetStore(env);
+const identity = `${Date.now()}`;
+let backedUp = false;
+const completed: unknown[] = [];
+const evidence = (pkg: StudioPackage, output: StudioOutput) => ({
+  packageId: pkg.id,
+  outputId: output.id,
+  asset: output.asset,
+  target: output.presentationReview?.closingCard?.youtubeClosing,
+  generatedAt: output.generatedAt,
+  preserved: output.presentationReview?.closingRefresh,
+  approved: false,
+});
+try {
+  for (let attempt = 0; attempt < (watch ? 1440 : 1); attempt++) {
+    const actor = (
+      await pool.query(
+        "SELECT id,roles FROM distribution.operator WHERE email=$1 AND is_test=$2 AND active=true",
+        [env.STUDIO_ACTOR_EMAIL, isTest],
+      )
+    ).rows[0];
+    if (!actor?.roles.includes("SUPER_ADMIN")) throw Error("ADMIN_REQUIRED");
+    const ctx = { userId: actor.id as string, isTest, roles: actor.roles as string[] };
+    const root = (
+      await pool.query(
+        "SELECT curation FROM distribution.online_import WHERE id=$1 AND is_test=$2 AND deleted_at IS NULL",
+        [bundleId, isTest],
+      )
+    ).rows[0];
+    const ids = [
+      ...new Set(
+        Object.values(root?.curation?.items ?? {})
+          .map((item) => (item as { packageId?: string }).packageId)
+          .filter(Boolean),
+      ),
+    ];
+    if (ids.length !== Number(env.STUDIO_EXPECTED_PACKAGES)) throw Error("PACKAGE_COUNT_CHANGED");
+    const rows = (
+      await pool.query(
+        "SELECT p.id,r.snapshot,p.generation_checkpoint FROM distribution.studio_package p JOIN distribution.studio_revision r ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision WHERE p.id=ANY($1::uuid[]) AND p.is_test=$2 AND p.deleted_at IS NULL ORDER BY p.id",
+        [ids, isTest],
+      )
+    ).rows as {
+      id: string;
+      snapshot: StudioPackage;
+      generation_checkpoint: Record<string, { fingerprint: string; value: unknown }>;
+    }[];
+    if (rows.length !== ids.length) throw Error("PACKAGE_COUNT_CHANGED");
+    if (
+      rows.some(
+        ({ snapshot: p }) =>
+          p.request.youtubeClosing?.url !== target.url ||
+          p.request.sourceBranding !== "bala-swamiji",
+      )
+    )
+      throw Error("STUDIO_TARGET_SETTINGS_CHANGED");
+    if (apply && !backedUp) {
+      await writeFile(
+        join(directory ?? "", `before-${identity}.json`),
+        JSON.stringify({ at: new Date().toISOString(), origin, bundleId, target, root, rows }),
+        { mode: 0o600, flag: "wx" },
+      );
+      backedUp = true;
+    }
+    let pending = 0;
+    for (const { snapshot: pkg, generation_checkpoint: entries } of rows) {
+      try {
+        if (["QUEUED", "GENERATING", "FAILED"].includes(pkg.status) && !pkg.outputs.length) {
+          const virtual = { ...pkg, request: { ...pkg.request, youtubeClosing: target } };
+          const candidates = studioPreviewClosingCandidates(virtual, entries);
+          if (candidates.length)
+            console.info(
+              JSON.stringify({
+                packageId: pkg.id,
+                previewCards: candidates.length,
+                dryRun: !apply,
+              }),
+            );
+          if (apply)
+            await refreshStudioPreviewClosings({
+              pkg: virtual,
+              entries,
+              store,
+              env,
+              persist: async (key, before, after) => {
+                await repository.replaceGenerationPreview(ctx, pkg.id, {
+                  expectedRevision: pkg.revision,
+                  target,
+                  key,
+                  before,
+                  after,
+                });
+                completed.push(evidence(pkg, after.value as StudioOutput));
+                await writeFile(
+                  join(directory ?? "", `completed-${identity}.json`),
+                  JSON.stringify(completed),
+                  { mode: 0o600 },
+                );
+                console.info(JSON.stringify({ previewUpdated: (after.value as StudioOutput).id }));
+              },
+            });
+          if (pkg.status === "FAILED") throw Error(`SOURCE_FAILED:${pkg.id}:${pkg.failure}`);
+          pending++;
+          continue;
+        }
+        const mismatched = pkg.outputs.filter(
+          (o) => !isDeepStrictEqual(o.presentationReview?.closingCard?.youtubeClosing, target),
+        );
+        if (!mismatched.length) continue;
+        if (pkg.status !== "DRAFT" || pkg.approval || pkg.generation)
+          throw Error(`REVIEW_LOCKED:${pkg.id}`);
+        console.info(
+          JSON.stringify({ packageId: pkg.id, draftCards: mismatched.length, dryRun: !apply }),
+        );
+        if (!apply) continue;
+        const outputs: StudioOutput[] = [];
+        for (const prior of pkg.outputs) {
+          if (!mismatched.includes(prior)) {
+            outputs.push(prior);
+            continue;
+          }
+          const before = prior.presentationReview?.closingCard?.youtubeClosing;
+          if (!before) throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
+          const repaired = await refreshStudioClosingOutputs({
+            pkg: {
+              ...pkg,
+              request: { ...pkg.request, youtubeClosing: target },
+              outputs: [{ ...prior, body: replaceStudioYoutubeFooter(prior.body, before, target) }],
+            },
+            store,
+            env,
+          });
+          if (!repaired[0]) throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
+          outputs.push(repaired[0]);
+        }
+        await repository.replaceDraftClosingCards(ctx, pkg.id, {
+          expectedRevision: pkg.revision,
+          target,
+          outputs,
+        });
+        completed.push(...outputs.map((output) => evidence(pkg, output)));
+        await writeFile(
+          join(directory ?? "", `completed-${identity}.json`),
+          JSON.stringify(completed),
+          { mode: 0o600 },
+        );
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "CLOSING_REFRESH_FAILED";
+        if (!["REVISION_CONFLICT", "STUDIO_PREVIEW_CHANGED"].includes(code)) throw error;
+        pending++;
+        console.info(JSON.stringify({ packageId: pkg.id, retainedNewerWork: true, code }));
+      }
+    }
+    console.info(
+      JSON.stringify({
+        at: new Date().toISOString(),
+        pendingRecordings: pending,
+        verifiedReplacements: completed.length,
+      }),
+    );
+    if (!pending) {
+      if (apply) {
+        if (rows.some(({ snapshot: p }) => p.approval || p.status !== "DRAFT"))
+          throw Error("REVIEW_STATE_CHANGED");
+        const curation = {
+          ...root.curation,
+          request: { ...root.curation.request, youtubeClosing: target },
+        };
+        const changed = await pool.query(
+          "UPDATE distribution.online_import SET curation=$3,updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 AND curation=$4::jsonb",
+          [bundleId, isTest, curation, root.curation],
+        );
+        if (changed.rowCount !== 1) throw Error("BUNDLE_SETTINGS_CHANGED_RELOAD_AND_RETRY");
+        await writeFile(
+          join(directory ?? "", "all-recordings-verified.json"),
+          JSON.stringify({
+            at: new Date().toISOString(),
+            origin,
+            bundleId,
+            target,
+            packages: ids.length,
+            allUnapproved: true,
+            completed,
+          }),
+          { mode: 0o600 },
+        );
+      }
+      break;
+    }
+    if (watch) await wait(60000);
+  }
+} finally {
+  await pool.end();
+}

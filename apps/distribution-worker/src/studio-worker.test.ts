@@ -8,6 +8,7 @@ vi.mock("./studio-publishing", () => ({
   runStudioPublicationOnce: vi.fn().mockResolvedValue(false),
 }));
 vi.mock("./studio-generation", () => ({ generateStudioPackage: vi.fn() }));
+vi.mock("./studio-preview-closing", () => ({ refreshStudioPreviewClosings: vi.fn() }));
 const repository = {
   claimGeneration: vi.fn(),
   renewGeneration: vi.fn(),

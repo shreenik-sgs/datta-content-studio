@@ -6,7 +6,7 @@ import {
 import { z } from "zod";
 
 const youtubeClosing = z
-  .object({ label: z.string(), url: z.string() })
+  .object({ label: z.string(), url: z.string(), fullVideosUrl: z.string().optional() })
   .strict()
   .transform((value, ctx) => {
     try {
