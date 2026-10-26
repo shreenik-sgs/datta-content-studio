@@ -14,8 +14,11 @@ export function prepareStudioYoutubeClosingRefresh(
   input: StudioYoutubeClosing,
   actor: { userId: string; at: string },
 ): StudioPackage {
+  const replacingClosingRender =
+    ["QUEUED", "GENERATING"].includes(pkg.status) && pkg.generation?.mode === "closing";
   if (
-    !["DRAFT", "CHANGES_REQUESTED", "FAILED", "IN_REVIEW", "APPROVED"].includes(pkg.status) ||
+    (!replacingClosingRender &&
+      !["DRAFT", "CHANGES_REQUESTED", "FAILED", "IN_REVIEW", "APPROVED"].includes(pkg.status)) ||
     !actor.userId ||
     !Number.isFinite(Date.parse(actor.at))
   )

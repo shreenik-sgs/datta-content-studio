@@ -319,14 +319,16 @@ export function PlaylistCuration({
               >
                 <option value="">Sri Ganapathy Sachchidananda Swamiji · @sgsswamiji</option>
                 <option value="bala-swamiji">
-                  Sri Datta Vijayananda Teertha Swamiji · @gurubhavanaadpt
+                  {STUDIO_BALA_YOUTUBE_CLOSING.label} ·{" "}
+                  {new URL(STUDIO_BALA_YOUTUBE_CLOSING.url).pathname.slice(1)}
                 </option>
               </select>
             </label>
             {sourceBranding === "bala-swamiji" && (
               <p>
                 Every output credits Sri Datta Vijayananda Teertha Swamiji. The green video closing
-                card points to @gurubhavanaadpt. Choose your target channels below.
+                card points to {new URL(STUDIO_BALA_YOUTUBE_CLOSING.url).pathname.slice(1)}. Choose
+                your target channels below.
               </p>
             )}
             <details className="playlist-options">

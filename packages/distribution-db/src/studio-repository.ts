@@ -1003,13 +1003,33 @@ export function createIntelligentContentRepository(
         if (
           (
             await client.query(
-              `SELECT 1 FROM distribution.studio_generation_job WHERE package_id=$1 AND is_test=$2 AND status IN ('QUEUED','RUNNING')
-               UNION ALL SELECT 1 FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND status IN ('QUEUED','RUNNING','PROCESSING','UNCERTAIN') LIMIT 1`,
+              `SELECT 1 FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND status IN ('QUEUED','RUNNING','PROCESSING','UNCERTAIN') LIMIT 1`,
               [id, ctx.isTest],
             )
           ).rowCount
         )
           throw Error("STUDIO_DESTINATION_BUSY");
+        const pendingRenders = await client.query(
+          "SELECT id,package_revision FROM distribution.studio_generation_job WHERE package_id=$1 AND is_test=$2 AND status IN ('QUEUED','RUNNING') FOR UPDATE",
+          [id, ctx.isTest],
+        );
+        if (
+          pendingRenders.rowCount &&
+          (pkg.generation?.mode !== "closing" ||
+            pendingRenders.rows.some((job) => job.package_revision !== pkg.revision))
+        )
+          throw Error("STUDIO_DESTINATION_BUSY");
+        // A newer explicit destination supersedes only an older closing-only job.
+        // Invalidating its lease and appending the replacement revision happen in
+        // one transaction, so an in-flight renderer cannot commit obsolete cards.
+        for (const job of pendingRenders.rows)
+          await generationState(
+            client,
+            job.id,
+            ctx.isTest,
+            "STALE",
+            "STUDIO_DESTINATION_SUPERSEDED",
+          );
         if (!prepared.outputs.length)
           return save(client, pkg, ctx.userId, "CLOSING_DESTINATION_UPDATED", {
             request: prepared.request,

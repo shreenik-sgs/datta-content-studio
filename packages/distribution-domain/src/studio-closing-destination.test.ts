@@ -79,12 +79,12 @@ it("prepares a handle-bearing card for rendering without rewriting old visual ev
     at: "2026-10-26T00:00:00Z",
   });
   expect(pkg).toEqual(original);
-  expect(next.request.youtubeClosing?.url).toBe("https://www.youtube.com/@dattavijayam");
+  expect(next.request.youtubeClosing?.url).toBe("https://www.youtube.com/@sridattavijayam");
   expect(next.status).toBe("DRAFT");
   expect(next.approval).toBeNull();
   expect(next.outputs[0]?.workflow?.status).toBe("DRAFT");
   expect(next.outputs[0]?.body).toContain(
-    `Subscribe to ${STUDIO_BALA_YOUTUBE_CLOSING.label}: https://www.youtube.com/@dattavijayam`,
+    `Subscribe to ${STUDIO_BALA_YOUTUBE_CLOSING.label}: https://www.youtube.com/@sridattavijayam`,
   );
   for (const key of [
     "asset",
@@ -109,6 +109,33 @@ it("prepares a handle-bearing card for rendering without rewriting old visual ev
     ),
   ).toThrow("INVALID_STUDIO_TRANSITION");
 });
+it.each(["QUEUED", "GENERATING"] as const)(
+  "replaces a %s closing-only destination while retaining the original media evidence",
+  (status) => {
+    const pkg = {
+      ...fixture(),
+      status,
+      generation: { mode: "closing" as const, outputIds: ["short"] },
+    };
+    const next = prepareStudioYoutubeClosingRefresh(pkg, STUDIO_BALA_YOUTUBE_CLOSING, {
+      userId: "admin",
+      at: "2026-10-26T00:00:00Z",
+    });
+    expect(next.status).toBe("DRAFT");
+    expect(next.generation).toBeNull();
+    expect(next.outputs[0]?.asset).toBe(pkg.outputs[0]?.asset);
+    expect(next.outputs[0]?.presentationReview).toBe(pkg.outputs[0]?.presentationReview);
+    expect(next.outputs[0]?.captions).toBe(pkg.outputs[0]?.captions);
+    expect(next.request.youtubeClosing).toEqual(STUDIO_BALA_YOUTUBE_CLOSING);
+    expect(() =>
+      prepareStudioYoutubeClosingRefresh(
+        { ...pkg, generation: { mode: "ai", outputIds: ["short"] } },
+        STUDIO_BALA_YOUTUBE_CLOSING,
+        { userId: "admin", at: "2026-10-26T00:00:00Z" },
+      ),
+    ).toThrow("INVALID_STUDIO_TRANSITION");
+  },
+);
 it("does not claim that changing the destination repairs a failed excerpt selection", () => {
   const pkg = {
     ...fixture(),

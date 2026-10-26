@@ -265,7 +265,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     }
     if (!result) {
       const state = await migration.query(
-        "SELECT status,last_error FROM distribution.studio_generation_job WHERE id=$1",
+        "SELECT status FROM distribution.studio_generation_job WHERE id=$1",
         [row.id],
       );
       throw new Error(`MISSING_CLAIM:${JSON.stringify(state.rows[0])}`);
@@ -1088,7 +1088,37 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     ).rejects.toThrow();
     const closing = await claim(next);
     expect(closing.package.request.youtubeClosing).toEqual(target);
-    await studio.failGeneration(closing, "STUDIO_PROVIDER_TIMEOUT");
+    const finalTarget = { ...target, url: "https://www.youtube.com/@sridattavijayam" };
+    const replacement = await studio.refreshYoutubeDestination(administrator, f.pkg.id, {
+      expectedRevision: closing.package.revision,
+      target: finalTarget,
+    });
+    expect(replacement.status).toBe("QUEUED");
+    expect(replacement.outputs[0]?.asset).toEqual(original.outputs[0]?.asset);
+    expect(replacement.outputs[0]?.body).toContain(finalTarget.url);
+    expect(
+      (
+        await migration.query(
+          "SELECT status FROM distribution.studio_generation_job WHERE id=$1 AND is_test=$2",
+          [closing.id, closing.package.isTest],
+        )
+      ).rows[0].status,
+    ).toBe("STALE");
+    await expect(
+      studio.checkpointGeneration(closing, {
+        progress: { phase: "rendering", provider: "local", completed: 1, total: 1 },
+      }),
+    ).rejects.toThrow("STUDIO_LEASE_LOST");
+    const queuedReplacement = await studio.refreshYoutubeDestination(administrator, f.pkg.id, {
+      expectedRevision: replacement.revision,
+      target: { ...finalTarget, url: "https://www.youtube.com/@final-channel" },
+    });
+    const currentClosing = await claim(queuedReplacement);
+    expect(currentClosing.package.outputs[0]?.asset).toEqual(original.outputs[0]?.asset);
+    expect(currentClosing.package.request.youtubeClosing?.url).toBe(
+      "https://www.youtube.com/@final-channel",
+    );
+    await studio.failGeneration(currentClosing, "STUDIO_PROVIDER_TIMEOUT");
   });
   it("checkpoints are private, fenced by the lease, and reused across explicit retries without revisions", async () => {
     const f = await fixture();
