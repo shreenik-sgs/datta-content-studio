@@ -292,6 +292,10 @@ const messages: Record<string, string> = {
     "This saved Short uses a different ending duration. A card-only update cannot change its timeline. Open the editor to review a full render; your existing file and edits are retained.",
   STUDIO_GENERATION_FAILED:
     "Generation could not finish. Check service readiness and regenerate the package.",
+  RENDER_TIMEOUT:
+    "Video encoding exceeded its time allowance. Your source, saved previews and completed analysis are retained. An Admin should check rendering capacity before retrying this recording from its saved work.",
+  RENDER_STALLED:
+    "Video encoding stopped making progress and was stopped safely. Your source and saved work are retained. An Admin should check the encoder before retrying this recording.",
   GENERATION_FAILED:
     "An unexpected error stopped this recording at the stage shown above. The source and saved work are retained. Retry the unfinished recording; if it fails again, ask an administrator to check the worker logs. Other recordings can continue.",
   STUDIO_PUBLICATION_FAILED:

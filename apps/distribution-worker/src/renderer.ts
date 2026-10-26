@@ -268,9 +268,16 @@ type ProcessInput = {
   outputFd?: number;
   signal?: AbortSignal;
   output?: "stdout" | "stderr";
+  /** Read FFmpeg's -progress pipe:5; repeated status lines do not count as progress. */
+  progressTimeoutMs?: number;
 };
 async function run(input: ProcessInput): Promise<string> {
   if (input.signal?.aborted) throw new Error("RENDER_CANCELLED");
+  if (
+    input.progressTimeoutMs !== undefined &&
+    (!Number.isSafeInteger(input.progressTimeoutMs) || input.progressTimeoutMs < 1)
+  )
+    throw new Error("INVALID_RENDER_TIMEOUT");
   const remaining = input.deadline - Date.now();
   if (remaining <= 0) throw new Error("RENDER_TIMEOUT");
   return new Promise((resolvePromise, reject) => {
@@ -279,7 +286,14 @@ async function run(input: ProcessInput): Promise<string> {
       windowsHide: true,
       cwd: input.cwd,
       env: { PATH: dirname(input.executable), LC_ALL: "C", TZ: "UTC" },
-      stdio: ["ignore", "pipe", "pipe", input.inputFd ?? "ignore", input.outputFd ?? "ignore"],
+      stdio: [
+        "ignore",
+        "pipe",
+        "pipe",
+        input.inputFd ?? "ignore",
+        input.outputFd ?? "ignore",
+        input.progressTimeoutMs ? "pipe" : "ignore",
+      ],
     });
     let refusal: string | null = null;
     let stdout = "";
@@ -289,11 +303,41 @@ async function run(input: ProcessInput): Promise<string> {
       child.kill("SIGKILL");
     };
     const timer = setTimeout(() => kill("RENDER_TIMEOUT"), remaining);
+    let progressTimer: ReturnType<typeof setTimeout> | undefined;
+    const renewProgress = () => {
+      if (!input.progressTimeoutMs || refusal) return;
+      clearTimeout(progressTimer);
+      progressTimer = setTimeout(() => kill("RENDER_STALLED"), input.progressTimeoutMs);
+    };
+    renewProgress();
+    let progressBuffer = "";
+    const counters: Record<string, number> = { frame: -1, out_time_us: -1 };
+    child.stdio.at(5)?.on("data", (chunk: Buffer) => {
+      progressBuffer += chunk.toString("utf8");
+      if (progressBuffer.length > MAX_PROCESS_OUTPUT) {
+        progressBuffer = "";
+        kill("RENDER_PROCESS_OUTPUT_LIMIT");
+        return;
+      }
+      const lines = progressBuffer.split("\n");
+      progressBuffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const match = /^(frame|out_time_us)=(\d+)\s*$/.exec(line);
+        if (!match?.[1]) continue;
+        const key = match[1];
+        const value = Number(match[2]);
+        if (Number.isSafeInteger(value) && value > (counters[key] ?? -1)) {
+          counters[key] = value;
+          renewProgress();
+        }
+      }
+    });
     const cancel = () => kill("RENDER_CANCELLED");
     input.signal?.addEventListener("abort", cancel, { once: true });
     if (input.signal?.aborted) cancel();
     const clean = () => {
       clearTimeout(timer);
+      clearTimeout(progressTimer);
       input.signal?.removeEventListener("abort", cancel);
     };
     child.stdout?.on("data", (chunk: Buffer) => {

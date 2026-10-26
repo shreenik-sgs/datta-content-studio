@@ -827,6 +827,19 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       await studio.list({ ...f.ctx, isTest: false }, { masterId: f.master.id, summaryOnly: true }),
     ).toEqual([]);
   });
+  it.each(["RENDER_TIMEOUT", "RENDER_STALLED"])(
+    "retains the actionable %s reason without discarding saved generation work",
+    async (code) => {
+      const f = await fixture();
+      const c = await claim(f.pkg);
+      await studio.failGeneration(c, code);
+      const failed = await studio.get(f.ctx, f.pkg.id);
+      expect(failed.status).toBe("FAILED");
+      expect(failed.failure).toBe(code);
+      expect(failed.source).toEqual(f.pkg.source);
+      expect(failed.approval).toBeNull();
+    },
+  );
   it("retains checked MP4 previews across failures and retries without making them submittable or exportable", async () => {
     const f = await fixture({ channels: ["youtube"] });
     const c = await claim(f.pkg);

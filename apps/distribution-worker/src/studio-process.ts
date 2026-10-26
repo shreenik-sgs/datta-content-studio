@@ -32,6 +32,7 @@ export async function executeStudioSource(input: {
   timeoutMs: number;
   signal?: AbortSignal;
   output?: "stdout" | "stderr";
+  progressTimeoutMs?: number;
 }): Promise<string> {
   const demuxer = (
     {
@@ -74,6 +75,7 @@ export async function executeStudioSource(input: {
         args,
         cwd: input.directory,
         deadline: Date.now() + input.timeoutMs,
+        ...(input.progressTimeoutMs ? { progressTimeoutMs: input.progressTimeoutMs } : {}),
         inputFd: file.fd,
         ...(input.output ? { output: input.output } : {}),
         ...(input.signal ? { signal: input.signal } : {}),

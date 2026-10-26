@@ -20,6 +20,7 @@ import {
 import sharp from "sharp";
 import { measureStudioAudio, studioAudioNormalization, studioNoiseFilter } from "./studio-audio.js";
 import { executeStudioSource } from "./studio-process.js";
+import { studioRenderBudget } from "./studio-render-budget.js";
 
 const escapeMarkup = (s: string) =>
   s.replace(
@@ -571,11 +572,11 @@ export async function renderStudioVideo(input: {
   ];
   await executeStudioSource({
     executable: input.ffmpeg,
-    args,
+    args: ["-progress", "pipe:5", "-stats_period", "5", ...args],
     sourcePath: input.sourcePath,
     mimeType: input.mimeType,
     directory: input.directory,
-    timeoutMs: 600000,
+    ...studioRenderBudget(durationMs + holdMs),
     ...(input.signal ? { signal: input.signal } : {}),
   });
   if ((await stat(destination)).size > 100 * 1024 * 1024)

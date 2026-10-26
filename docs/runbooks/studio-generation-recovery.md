@@ -178,3 +178,26 @@ it neither starts generation nor publishes. Run at most one instance for a bundl
 26 October 2026 Bhagavat Katha decision: full videos remain on `@gurubhavanaadpt`, while
 subscription and posting target `@sridattavijayam`. This change is scoped to Bhagavat Katha;
 it does not retarget the separate Vishnu Purana batch or alter Buffer settings.
+
+## Portrait encoding timeout on a fractional CPU (26 October 2026)
+
+The Bhagavat recovery worker reported `RENDER_TIMEOUT` while composing a portrait
+Short. Its container had half a CPU, but the encoder used a fixed ten-minute wall
+clock limit regardless of clip duration. Discovery, review and completed preview
+checkpoints remained intact; this was a local encoder limit, not an AI credit error.
+
+Portrait encoding now allows thirty times the output duration, with a ten-minute
+minimum and a one-hour hard maximum. A separate five-minute watchdog consumes
+[FFmpeg's structured progress stream](https://www.ffmpeg.org/ffmpeg.html#Main-options)
+on a dedicated descriptor. Only advancing frame/timestamp counters renew it;
+repeated status lines cannot keep a stalled encoder alive. `RENDER_STALLED` and
+`RENDER_TIMEOUT` remain distinct, safe failure reasons in the database and UI.
+Cancellation, output bounds and the absolute deadline still terminate the process.
+Framing, English captions, audio controls, encoding quality and all AI/human review
+requirements are unchanged.
+
+After deploying the tested worker, retry only affected failed recordings using
+their saved checkpoints. Do not enqueue another job while one is active or force
+restart workers that are processing other recordings. A successful code test is
+not proof that the failed real Short has finished: verify the resulting media and
+both closing-card destinations before reporting series completion.
