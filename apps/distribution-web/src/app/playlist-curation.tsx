@@ -524,18 +524,24 @@ export function PlaylistCuration({
             </button>
           </section>
         )}
-      {(reviewable || (planned > 0 && !plan?.pausedForSettings)) && onReview && (
+      {(reviewable || planned > 0) && onReview && (
         <div className="playlist-next-action">
           <p>
-            {!reviewable
-              ? "Open the live workspace to watch completed MP4s as they become available."
-              : canReview
-                ? "Review the files for each recording, approve or return them with comments, then publish approved content."
-                : "Check the generated files, make any corrections, then send each recording's content to the Content Approver."}{" "}
+            {plan?.pausedForSettings
+              ? "View saved files while generation stays paused. Opening the workspace does not resume processing."
+              : !reviewable
+                ? "Open the live workspace to watch completed MP4s as they become available."
+                : canReview
+                  ? "Review the files for each recording, approve or return them with comments, then publish approved content."
+                  : "Check the generated files, make any corrections, then send each recording's content to the Content Approver."}{" "}
             {reviewable && "Approved files stay locked against editing."}
           </p>
           <button type="button" className="button primary" disabled={busy} onClick={onReview}>
-            {reviewable ? "Review curated content" : "View generation & previews"}
+            {plan?.pausedForSettings
+              ? "View saved files"
+              : reviewable
+                ? "Review curated content"
+                : "View generation & previews"}
           </button>
         </div>
       )}

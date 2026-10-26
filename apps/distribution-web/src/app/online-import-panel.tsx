@@ -273,9 +273,17 @@ export function OnlineImportPanel({
         </button>
       </section>
     );
-  if (reviewing && reviewItem?.curation && !reviewItem.curation.pausedForSettings)
+  if (reviewing && reviewItem?.curation)
     return (
       <>
+        {reviewItem.curation.pausedForSettings && (
+          <div className="notice">
+            <p>Generation is paused. Saved files remain available to preview.</p>
+            <button className="button" type="button" onClick={() => setReviewing(false)}>
+              View playlist settings
+            </button>
+          </div>
+        )}
         {progressError && (
           <output className="notice">{progressError} The series list may be out of date.</output>
         )}

@@ -166,73 +166,130 @@ it("explains a removed bookmarked series without falling back to an unrelated so
     await act(async () => root.unmount());
   }
 });
-it("opens a paused bookmarked playlist at its channel settings without resuming generation", async () => {
-  vi.stubGlobal("React", React);
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const item = {
-    id: "paused-playlist",
-    title: "Bhagavat Katha",
-    status: "COMPLETE",
-    source: {
-      provider: "youtube",
-      kind: "playlist",
-      url: "https://youtube.com/playlist?list=PLtest",
-    },
-    childIds: ["child"],
-    curation: {
-      pausedForSettings: true,
-      rights: {
-        owner: "Saved owner",
-        authorizationBasis: "Saved permission",
-        privacyClass: "PUBLIC",
-        territories: ["WORLDWIDE"],
-        channels: ["youtube"],
-        releaseAt: null,
-        expiresAt: null,
+it.each(["Curator", "Approver"])(
+  "keeps paused playlist previews accessible to %s without resuming generation",
+  async (role) => {
+    vi.stubGlobal("React", React);
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const item = {
+      id: "paused-playlist",
+      title: "Bhagavat Katha",
+      status: "COMPLETE",
+      source: {
+        provider: "youtube",
+        kind: "playlist",
+        url: "https://youtube.com/playlist?list=PLtest",
       },
-      request: {
-        languages: ["en"],
-        channels: ["youtube"],
-        captions: true,
-        sourceBranding: "bala-swamiji",
+      childIds: ["child"],
+      curation: {
+        pausedForSettings: true,
+        rights: {
+          owner: "Saved owner",
+          authorizationBasis: "Saved permission",
+          privacyClass: "PUBLIC",
+          territories: ["WORLDWIDE"],
+          channels: ["youtube"],
+          releaseAt: null,
+          expiresAt: null,
+        },
+        request: {
+          languages: ["en"],
+          channels: ["youtube"],
+          captions: true,
+          sourceBranding: "bala-swamiji",
+        },
+        items: {
+          child: { packageId: value.id, status: "DRAFT", error: "PLAYLIST_SETTINGS_PAUSED" },
+        },
       },
-      items: { child: { error: "PLAYLIST_SETTINGS_PAUSED" } },
-    },
-  };
-  const fetcher = vi.fn(async (url: string, options?: RequestInit) => {
-    expect(options?.method ?? "GET").toBe("GET");
-    expect(url).toBe("/distribution/api/content/import?rootId=paused-playlist");
-    return Response.json({ items: [item], available: true });
-  });
-  vi.stubGlobal("fetch", fetcher);
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  try {
-    await act(async () =>
-      root.render(
-        <OnlineImportPanel
-          locale="en"
-          showForm={false}
-          initialBundleId={item.id}
-          onOpen={vi.fn()}
-        />,
-      ),
-    );
-    expect(host.textContent).toContain("Save channels and resume all 1 recordings");
-    expect(host.querySelectorAll('input[name="channel"]')).toHaveLength(13);
-    expect(
-      (host.querySelector('input[name="channel"][value="youtube"]') as HTMLInputElement).checked,
-    ).toBe(true);
-    expect((host.querySelector('select[name="sourceBranding"]') as HTMLSelectElement).value).toBe(
-      "bala-swamiji",
-    );
-    expect(host.textContent).not.toContain("Series files");
-    expect(fetcher).toHaveBeenCalledTimes(1);
-  } finally {
-    await act(async () => root.unmount());
-  }
-});
+    };
+    const fetcher = vi.fn(async (url: string, options?: RequestInit) => {
+      expect(options?.method ?? "GET").toBe("GET");
+      if (url === "/distribution/api/content/import?rootId=paused-playlist")
+        return Response.json({
+          items: [
+            item,
+            {
+              id: "child",
+              parentId: item.id,
+              masterId: value.source.masterId,
+              status: "COMPLETE",
+              source: { provider: "youtube", kind: "video" },
+            },
+          ],
+          available: true,
+        });
+      if (url.includes("/distribution/api/studio?"))
+        return Response.json({
+          packages: [
+            {
+              ...value,
+              outputs: [],
+              generationPreviews: [{ ...value.outputs[0], fromPreviousRun: true }],
+            },
+          ],
+          readiness: {
+            generation: { available: true },
+            publishing: { available: false },
+            channels: [],
+          },
+        });
+      throw Error(`Unexpected request ${url}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () =>
+        root.render(
+          <OnlineImportPanel
+            locale="en"
+            showForm={false}
+            initialBundleId={item.id}
+            onOpen={vi.fn()}
+            capabilities={role === "Curator" ? ["content.create"] : ["content.review"]}
+          />,
+        ),
+      );
+      expect(host.textContent).toContain(
+        "Generation is paused. Saved files remain available to preview.",
+      );
+      expect(host.textContent).toContain("Ready to preview · 1 MP4");
+      expect(host.querySelectorAll("video")).toHaveLength(1);
+      const settings = [...host.querySelectorAll("button")].find(
+        (b) => b.textContent === "View playlist settings",
+      );
+      expect(settings).toBeTruthy();
+      await act(async () => settings?.click());
+      if (role === "Curator") {
+        expect(host.textContent).toContain("Save channels and resume all 1 recordings");
+        expect(host.querySelectorAll('input[name="channel"]')).toHaveLength(13);
+        expect(
+          (host.querySelector('input[name="channel"][value="youtube"]') as HTMLInputElement)
+            .checked,
+        ).toBe(true);
+        expect(
+          (host.querySelector('select[name="sourceBranding"]') as HTMLSelectElement).value,
+        ).toBe("bala-swamiji");
+      } else {
+        expect(host.textContent).not.toContain("Save channels and resume");
+      }
+      const saved = [...host.querySelectorAll("button")].find(
+        (b) => b.textContent === "View saved files",
+      );
+      expect(saved).toBeTruthy();
+      await act(async () => saved?.click());
+      expect(host.textContent).toContain("Ready to preview · 1 MP4");
+      expect(host.querySelectorAll("video")).toHaveLength(1);
+      expect(
+        fetcher.mock.calls.every(([, options]) => !options?.method || options.method === "GET"),
+      ).toBe(true);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
 it("removes a stale import-progress warning when the next poll succeeds", async () => {
   vi.useFakeTimers();
   vi.stubGlobal("React", React);
