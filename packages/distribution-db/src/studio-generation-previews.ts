@@ -15,12 +15,16 @@ export function studioGenerationPreviews(
   pkg: StudioPackage,
   createdAt: string,
   entries: Record<string, { value?: unknown }> | null,
+  pausedForSettings = false,
 ): StudioGenerationPreview[] {
   if (
     pkg.outputs.length ||
     pkg.generation ||
     pkg.approval ||
-    !["QUEUED", "GENERATING", "FAILED"].includes(pkg.status)
+    !(
+      ["QUEUED", "GENERATING", "FAILED"].includes(pkg.status) ||
+      (pausedForSettings && pkg.status === "DRAFT")
+    )
   )
     return [];
   const since = Date.parse(createdAt);

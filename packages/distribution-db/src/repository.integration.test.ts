@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import type { ContentRights, OnlineImport } from "@satsang/distribution-domain";
+import {
+  type ContentRights,
+  type OnlineImport,
+  studioAssetName,
+} from "@satsang/distribution-domain";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
@@ -9,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDistributionEditorialRepository } from "./editorial-repository.js";
 import { createOnlineImportRepository } from "./online-import-repository.js";
 import { createDistributionRepository, provisionDistributionCapabilities } from "./repository.js";
+import { closingFixture } from "./studio-closing-test-fixture.js";
 import { createIntelligentContentRepository } from "./studio-repository.js";
 
 const run = process.env.DISTRIBUTION_RUN_DB_TESTS === "1";
@@ -421,150 +426,217 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
     expect(nextClaim?.id).toBe(next.id);
     if (nextClaim) await imports.fail(nextClaim, "ONLINE_PLAYLIST_NOT_FOUND");
   });
-  it("pauses only an unfinished playlist, fences its old worker and resumes selected channels with saved analysis", async () => {
-    const imports = createOnlineImportRepository(runtime, async () => true);
-    const studio = createIntelligentContentRepository(runtime, { authorize: async () => true });
-    const parent = await imports.enqueueBundle(ctx, {
-      title: "Editable channel plan",
-      language: "te",
-      category: "pravachanams",
-      urls: [1, 2]
-        .map(() => `https://youtube.com/watch?v=B${randomUUID().replaceAll("-", "").slice(0, 10)}`)
-        .join("\n"),
-    });
-    const request = {
-      channels: ["youtube"] as ("youtube" | "facebook")[],
-      languages: ["en"] as "en"[],
-      captions: true,
-      instructions: "Complete teachings",
-    };
-    const setup = {
-      rights: { ...rights, channels: ["youtube"] as ContentRights["channels"] },
-      request,
-    };
-    await studio.configurePlaylist(ctx, parent.id, setup);
-    const master = await create();
-    const cleared = await repository.attestRights(ctx, master.id, {
-      expectedRevision: master.revision,
-      rights: setup.rights,
-    });
-    const pkg = await studio.create(ctx, {
-      masterId: master.id,
-      expectedSourceRevision: cleared.revision,
-      request,
-    });
-    const plan = (await imports.list(ctx, { rootId: parent.id })).find(
-      (i) => i.id === parent.id,
-    )?.curation;
-    if (!plan || !parent.childIds?.[0]) throw Error("missing playlist");
-    plan.items[parent.childIds[0]] = { packageId: pkg.id, existing: false };
-    await migration.query("UPDATE distribution.online_import SET curation=$2 WHERE id=$1", [
-      parent.id,
-      plan,
-    ]);
-    const jobId = (
+  it.each([false, true])(
+    "pauses an unfinished playlist, retaining analysis and checked previews (previously failed: %s)",
+    async (previouslyFailed) => {
+      const imports = createOnlineImportRepository(runtime, async () => true);
+      const studio = createIntelligentContentRepository(runtime, { authorize: async () => true });
+      const parent = await imports.enqueueBundle(ctx, {
+        title: "Editable channel plan",
+        language: "te",
+        category: "pravachanams",
+        urls: [1, 2]
+          .map(
+            () => `https://youtube.com/watch?v=B${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+          )
+          .join("\n"),
+      });
+      const request = {
+        channels: ["youtube"] as ("youtube" | "facebook")[],
+        languages: ["en"] as "en"[],
+        captions: true,
+        instructions: "Complete teachings",
+      };
+      const setup = {
+        rights: { ...rights, channels: ["youtube"] as ContentRights["channels"] },
+        request,
+      };
+      await studio.configurePlaylist(ctx, parent.id, setup);
+      const master = await create();
+      const cleared = await repository.attestRights(ctx, master.id, {
+        expectedRevision: master.revision,
+        rights: setup.rights,
+      });
+      const pkg = await studio.create(ctx, {
+        masterId: master.id,
+        expectedSourceRevision: cleared.revision,
+        request,
+      });
+      const plan = (await imports.list(ctx, { rootId: parent.id })).find(
+        (i) => i.id === parent.id,
+      )?.curation;
+      if (!plan || !parent.childIds?.[0]) throw Error("missing playlist");
+      plan.items[parent.childIds[0]] = { packageId: pkg.id, existing: false };
+      await migration.query("UPDATE distribution.online_import SET curation=$2 WHERE id=$1", [
+        parent.id,
+        plan,
+      ]);
+      const jobId = (
+        await migration.query(
+          "SELECT id FROM distribution.studio_generation_job WHERE package_id=$1",
+          [pkg.id],
+        )
+      ).rows[0].id;
+      const claim = await studio.claimGeneration({ isTest: true, workerId: "pause-test", jobId });
+      if (!claim) throw Error("missing claim");
+      await studio.checkpointGeneration(claim, {
+        progress: { phase: "transcription", provider: "sarvam", completed: 0, total: 1 },
+      });
+      await expect(studio.pausePlaylistSettings(ctx, parent.id)).rejects.toThrow(
+        "PLAYLIST_PAUSE_WAIT",
+      );
+      expect(await studio.renewGeneration(claim)).toBe(true);
+      await studio.checkpointGeneration(claim, {
+        progress: {
+          phase: "reviewing",
+          provider: "gemini",
+          completed: 0,
+          total: 1,
+          discoverySection: 27,
+          discoverySections: 29,
+        },
+      });
+      await studio.checkpointGeneration(claim, {
+        key: "saved-analysis",
+        fingerprint: "a".repeat(64),
+        value: { complete: true },
+      });
+      const live = (await imports.list(ctx, { rootId: parent.id })).find(
+        (item) => item.id === parent.id,
+      );
+      expect(live?.curation?.items[parent.childIds[0]]).toMatchObject({
+        status: "GENERATING",
+        outputCount: 0,
+        generationProgress: { phase: "reviewing", discoverySection: 27, discoverySections: 29 },
+      });
+      expect(JSON.stringify(live)).not.toContain("saved-analysis");
+      expect(await imports.list(other, { rootId: parent.id })).toEqual([]);
+      await expect(studio.pausePlaylistSettings(reviewer, parent.id)).rejects.toThrow("FORBIDDEN");
+      await expect(studio.pausePlaylistSettings(other, parent.id)).rejects.toThrow(
+        "PLAYLIST_NOT_READY",
+      );
+      const sample = closingFixture().prior;
+      if (!sample.asset || !sample.aiReview || !sample.presentationReview) throw Error("fixture");
+      const previewOutput = {
+        ...sample,
+        generatedAt: new Date().toISOString(),
+        asset: {
+          ...sample.asset,
+          ...studioAssetName(
+            {
+              masterId: pkg.source.masterId,
+              sourceVersionId: pkg.source.versionId,
+              packageId: pkg.id,
+              outputId: sample.id,
+              channel: "youtube",
+              format: "short",
+              language: "en",
+              aspect: "9:16",
+              fileVersion: 1,
+              renderId: "12345678",
+            },
+            "mp4",
+          ),
+        },
+        aiReview: { ...sample.aiReview, sourceSha256: pkg.source.sha256 },
+        presentationReview: { ...sample.presentationReview, sourceSha256: pkg.source.sha256 },
+      };
+      await studio.checkpointGeneration(claim, {
+        key: "output:youtube:en",
+        fingerprint: "b".repeat(64),
+        value: previewOutput,
+      });
+      if (previouslyFailed) await studio.failGeneration(claim, "RENDER_TIMEOUT");
+      expect((await studio.get(ctx, pkg.id)).generationPreviews).toHaveLength(1);
+      await studio.pausePlaylistSettings(ctx, parent.id);
+      await studio.pausePlaylistSettings(ctx, parent.id);
+      expect(await studio.renewGeneration(claim)).toBe(false);
+      expect(
+        await studio.claimGeneration({ isTest: true, workerId: "stale-worker", jobId }),
+      ).toBeNull();
+      const paused = await studio.get(ctx, pkg.id);
+      expect(paused.status).toBe("DRAFT");
+      expect(paused.outputs).toEqual([]);
+      expect(paused.approval).toBeNull();
+      expect(paused.generationProgress).toBeNull();
+      expect(paused.generationPreviews?.map((p) => p.id)).toEqual([previewOutput.id]);
+      for (const summaryOnly of [true, false]) {
+        const listed = await studio.list(ctx, { playlistId: parent.id, summaryOnly });
+        expect(listed[0]?.generationPreviews).toEqual(paused.generationPreviews);
+        expect(listed[0]?.generationProgress).toBeNull();
+      }
+      expect(
+        await studio.getOutputAsset(ctx, pkg.id, previewOutput.id, {
+          kind: "asset",
+          preview: true,
+        }),
+      ).toEqual(previewOutput.asset);
+      await expect(
+        studio.getOutputAsset(ctx, pkg.id, previewOutput.id, {
+          kind: "asset",
+          preview: true,
+          forExport: true,
+        }),
+      ).rejects.toThrow();
+      await expect(
+        studio.submit(ctx, pkg.id, { expectedRevision: paused.revision }),
+      ).rejects.toThrow();
+      const pausedPlan = (await imports.list(ctx, { rootId: parent.id })).find(
+        (item) => item.id === parent.id,
+      );
+      expect(pausedPlan?.curation?.items[parent.childIds[0]]?.generationProgress).toBeNull();
+      await expect(
+        studio.enqueueGeneration(ctx, pkg.id, { expectedRevision: paused.revision }),
+      ).rejects.toThrow("PLAYLIST_SETTINGS_PAUSED");
+      expect(
+        (await imports.list(ctx, { rootId: parent.id })).find((i) => i.id === parent.id)?.curation
+          ?.pausedForSettings,
+      ).toBe(true);
+      const revised = {
+        ...setup,
+        rights: { ...setup.rights, channels: ["youtube", "facebook"] as ContentRights["channels"] },
+        request: { ...request, channels: ["youtube", "facebook"] as ("youtube" | "facebook")[] },
+      };
+      await studio.configurePlaylist(ctx, parent.id, revised);
+      const resumed = await studio.get(ctx, pkg.id);
+      expect(resumed.request.channels).toEqual(["youtube", "facebook"]);
+      expect(resumed.id).toBe(pkg.id);
+      expect(resumed.outputs).toEqual([]);
+      expect((await repository.get(ctx, master.id)).rights?.channels).toEqual([
+        "youtube",
+        "facebook",
+      ]);
+      const latest = (
+        await migration.query(
+          "SELECT id FROM distribution.studio_generation_job WHERE package_id=$1 ORDER BY package_revision DESC LIMIT 1",
+          [pkg.id],
+        )
+      ).rows[0].id;
+      const next = await studio.claimGeneration({
+        isTest: true,
+        workerId: "resumed",
+        jobId: latest,
+      });
+      expect(next?.checkpoint?.["saved-analysis"]?.value).toEqual({ complete: true });
+      if (next) await studio.failGeneration(next, "SYNTHETIC_TEST_END");
+      const restored = (await imports.list(ctx, { rootId: parent.id })).find(
+        (i) => i.id === parent.id,
+      )?.curation;
+      expect(restored?.pausedForSettings).toBeUndefined();
+      expect(Object.keys(restored?.items ?? {})).toHaveLength(1);
       await migration.query(
-        "SELECT id FROM distribution.studio_generation_job WHERE package_id=$1",
-        [pkg.id],
-      )
-    ).rows[0].id;
-    const claim = await studio.claimGeneration({ isTest: true, workerId: "pause-test", jobId });
-    if (!claim) throw Error("missing claim");
-    await studio.checkpointGeneration(claim, {
-      progress: { phase: "transcription", provider: "sarvam", completed: 0, total: 1 },
-    });
-    await expect(studio.pausePlaylistSettings(ctx, parent.id)).rejects.toThrow(
-      "PLAYLIST_PAUSE_WAIT",
-    );
-    expect(await studio.renewGeneration(claim)).toBe(true);
-    await studio.checkpointGeneration(claim, {
-      progress: {
-        phase: "reviewing",
-        provider: "gemini",
-        completed: 0,
-        total: 1,
-        discoverySection: 27,
-        discoverySections: 29,
-      },
-    });
-    await studio.checkpointGeneration(claim, {
-      key: "saved-analysis",
-      fingerprint: "a".repeat(64),
-      value: { complete: true },
-    });
-    const live = (await imports.list(ctx, { rootId: parent.id })).find(
-      (item) => item.id === parent.id,
-    );
-    expect(live?.curation?.items[parent.childIds[0]]).toMatchObject({
-      status: "GENERATING",
-      outputCount: 0,
-      generationProgress: { phase: "reviewing", discoverySection: 27, discoverySections: 29 },
-    });
-    expect(JSON.stringify(live)).not.toContain("saved-analysis");
-    expect(await imports.list(other, { rootId: parent.id })).toEqual([]);
-    await expect(studio.pausePlaylistSettings(reviewer, parent.id)).rejects.toThrow("FORBIDDEN");
-    await expect(studio.pausePlaylistSettings(other, parent.id)).rejects.toThrow(
-      "PLAYLIST_NOT_READY",
-    );
-    await studio.pausePlaylistSettings(ctx, parent.id);
-    await studio.pausePlaylistSettings(ctx, parent.id);
-    expect(await studio.renewGeneration(claim)).toBe(false);
-    expect(
-      await studio.claimGeneration({ isTest: true, workerId: "stale-worker", jobId }),
-    ).toBeNull();
-    const paused = await studio.get(ctx, pkg.id);
-    expect(paused.status).toBe("DRAFT");
-    const pausedPlan = (await imports.list(ctx, { rootId: parent.id })).find(
-      (item) => item.id === parent.id,
-    );
-    expect(pausedPlan?.curation?.items[parent.childIds[0]]?.generationProgress).toBeNull();
-    await expect(
-      studio.enqueueGeneration(ctx, pkg.id, { expectedRevision: paused.revision }),
-    ).rejects.toThrow("PLAYLIST_SETTINGS_PAUSED");
-    expect(
-      (await imports.list(ctx, { rootId: parent.id })).find((i) => i.id === parent.id)?.curation
-        ?.pausedForSettings,
-    ).toBe(true);
-    const revised = {
-      ...setup,
-      rights: { ...setup.rights, channels: ["youtube", "facebook"] as ContentRights["channels"] },
-      request: { ...request, channels: ["youtube", "facebook"] as ("youtube" | "facebook")[] },
-    };
-    await studio.configurePlaylist(ctx, parent.id, revised);
-    const resumed = await studio.get(ctx, pkg.id);
-    expect(resumed.request.channels).toEqual(["youtube", "facebook"]);
-    expect(resumed.id).toBe(pkg.id);
-    expect(resumed.outputs).toEqual([]);
-    expect((await repository.get(ctx, master.id)).rights?.channels).toEqual([
-      "youtube",
-      "facebook",
-    ]);
-    const latest = (
+        "UPDATE distribution.studio_revision SET snapshot=jsonb_set(snapshot,'{status}','\"IN_REVIEW\"') WHERE package_id=$1 AND revision=$2",
+        [pkg.id, (await studio.get(ctx, pkg.id)).revision],
+      );
+      await expect(studio.pausePlaylistSettings(ctx, parent.id)).rejects.toThrow(
+        "PLAYLIST_SETTINGS_LOCKED",
+      );
       await migration.query(
-        "SELECT id FROM distribution.studio_generation_job WHERE package_id=$1 ORDER BY package_revision DESC LIMIT 1",
-        [pkg.id],
-      )
-    ).rows[0].id;
-    const next = await studio.claimGeneration({ isTest: true, workerId: "resumed", jobId: latest });
-    expect(next?.checkpoint?.["saved-analysis"]?.value).toEqual({ complete: true });
-    if (next) await studio.failGeneration(next, "SYNTHETIC_TEST_END");
-    const restored = (await imports.list(ctx, { rootId: parent.id })).find(
-      (i) => i.id === parent.id,
-    )?.curation;
-    expect(restored?.pausedForSettings).toBeUndefined();
-    expect(Object.keys(restored?.items ?? {})).toHaveLength(1);
-    await migration.query(
-      "UPDATE distribution.studio_revision SET snapshot=jsonb_set(snapshot,'{status}','\"IN_REVIEW\"') WHERE package_id=$1 AND revision=$2",
-      [pkg.id, (await studio.get(ctx, pkg.id)).revision],
-    );
-    await expect(studio.pausePlaylistSettings(ctx, parent.id)).rejects.toThrow(
-      "PLAYLIST_SETTINGS_LOCKED",
-    );
-    await migration.query(
-      "UPDATE distribution.online_import SET deleted_at=now() WHERE id=ANY($1::uuid[])",
-      [[parent.id, ...parent.childIds]],
-    );
-  });
+        "UPDATE distribution.online_import SET deleted_at=now() WHERE id=ANY($1::uuid[])",
+        [[parent.id, ...parent.childIds]],
+      );
+    },
+  );
   it.each([
     [false, false],
     [true, false],

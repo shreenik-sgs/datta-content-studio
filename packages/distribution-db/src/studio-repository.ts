@@ -320,7 +320,7 @@ export function createIntelligentContentRepository(
       );
     }
     const rows = await client.query(
-      "SELECT r.snapshot FROM distribution.studio_package p JOIN distribution.studio_revision r ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision WHERE p.id=$1 AND p.is_test=$2 AND p.deleted_at IS NULL",
+      "SELECT r.snapshot,r.action FROM distribution.studio_package p JOIN distribution.studio_revision r ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision WHERE p.id=$1 AND p.is_test=$2 AND p.deleted_at IS NULL",
       [id, isTest],
     );
     const result = rows.rows[0]?.snapshot as StudioPackage | undefined;
@@ -337,27 +337,37 @@ export function createIntelligentContentRepository(
       revision: row.revision,
       createdAt: iso(row.created_at),
     }));
-    if (["QUEUED", "GENERATING", "FAILED"].includes(result.status)) {
+    // Only the audited pause revision may expose unfinished draft checkpoints.
+    // Editing the package or completing generation ends this read-only exception.
+    const pausedForSettings =
+      result.status === "DRAFT" && rows.rows[0]?.action === "PLAYLIST_SETTINGS_PAUSED";
+    if (["QUEUED", "GENERATING", "FAILED"].includes(result.status) || pausedForSettings) {
       const jobs = await client.query(
         `SELECT j.status,j.progress,j.created_at,j.package_revision,
-          CASE WHEN j.status IN ('RUNNING','QUEUED','FAILED') AND $3::boolean THEN
+          CASE WHEN (j.status IN ('RUNNING','QUEUED','FAILED') OR $4::boolean) AND $3::boolean THEN
             (SELECT jsonb_object_agg(e.key,e.value) FROM distribution.studio_package p,
               LATERAL jsonb_each(p.generation_checkpoint) e
               WHERE p.id=j.package_id AND p.is_test=j.is_test AND e.key LIKE 'output:%')
           ELSE NULL END AS previews
          FROM distribution.studio_generation_job j WHERE j.package_id=$1 AND j.is_test=$2 ORDER BY j.package_revision DESC LIMIT 1`,
-        [id, isTest, !result.outputs.length && !result.generation && !result.approval],
+        [
+          id,
+          isTest,
+          !result.outputs.length && !result.generation && !result.approval,
+          pausedForSettings,
+        ],
       );
       if (jobs.rows[0]?.status === "RUNNING") result.status = "GENERATING";
-      result.generationProgress = jobs.rows[0]?.progress ?? null;
+      result.generationProgress = pausedForSettings ? null : (jobs.rows[0]?.progress ?? null);
       const job = jobs.rows[0];
       result.generationPreviews =
         job &&
-        (job.package_revision === result.revision ||
+        (pausedForSettings ||
+          job.package_revision === result.revision ||
           (result.status === "FAILED" &&
             job.status === "FAILED" &&
             job.package_revision === result.revision - 1))
-          ? studioGenerationPreviews(result, iso(job.created_at), job.previews)
+          ? studioGenerationPreviews(result, iso(job.created_at), job.previews, pausedForSettings)
           : [];
     }
     return result;
@@ -372,7 +382,7 @@ export function createIntelligentContentRepository(
   ): Promise<StudioPackage[]> {
     if (!ids.length) return [];
     const rows = await client.query(
-      `SELECT p.id,CASE WHEN $3::boolean THEN r.snapshot - 'provenance'
+      `SELECT p.id,r.action,CASE WHEN $3::boolean THEN r.snapshot - 'provenance'
         ELSE r.snapshot END AS snapshot,
         CASE WHEN $3::boolean THEN r.snapshot #>> '{provenance,generatedAt}' END AS generated_at
        FROM distribution.studio_package p JOIN distribution.studio_revision r
@@ -381,8 +391,11 @@ export function createIntelligentContentRepository(
       [ids, isTest, summaryOnly],
     );
     const packages = new Map<string, StudioPackage>();
+    const pausedIds = new Set<string>();
     for (const row of rows.rows) {
       const pkg = row.snapshot as StudioPackage;
+      if (pkg.status === "DRAFT" && row.action === "PLAYLIST_SETTINGS_PAUSED")
+        pausedIds.add(pkg.id);
       pkg.feedback = [];
       if (summaryOnly) {
         pkg.provenance = null;
@@ -410,11 +423,14 @@ export function createIntelligentContentRepository(
         createdAt: iso(row.created_at),
       });
     const pendingIds = [...packages.values()]
-      .filter((pkg) => ["QUEUED", "GENERATING", "FAILED"].includes(pkg.status))
+      .filter(
+        (pkg) => ["QUEUED", "GENERATING", "FAILED"].includes(pkg.status) || pausedIds.has(pkg.id),
+      )
       .map((pkg) => pkg.id);
     if (pendingIds.length) {
       const jobs = await client.query(
-        `SELECT j.*,CASE WHEN j.status IN ('RUNNING','QUEUED','FAILED')
+        `SELECT j.*,CASE WHEN (j.status IN ('RUNNING','QUEUED','FAILED')
+          OR (r.action='PLAYLIST_SETTINGS_PAUSED' AND r.snapshot->>'status'='DRAFT'))
           AND jsonb_array_length(r.snapshot->'outputs')=0
           AND COALESCE(r.snapshot->'generation','null'::jsonb)='null'::jsonb
           AND COALESCE(r.snapshot->'approval','null'::jsonb)='null'::jsonb
@@ -433,15 +449,17 @@ export function createIntelligentContentRepository(
         const pkg = packages.get(id);
         if (!pkg) throw Error("NOT_FOUND");
         const job = latest.get(id);
+        const pausedForSettings = pausedIds.has(id);
         if (job?.status === "RUNNING") pkg.status = "GENERATING";
-        pkg.generationProgress = job?.progress ?? null;
+        pkg.generationProgress = pausedForSettings ? null : (job?.progress ?? null);
         pkg.generationPreviews =
           job &&
-          (job.package_revision === pkg.revision ||
+          (pausedForSettings ||
+            job.package_revision === pkg.revision ||
             (pkg.status === "FAILED" &&
               job.status === "FAILED" &&
               job.package_revision === pkg.revision - 1))
-            ? studioGenerationPreviews(pkg, iso(job.created_at), job.previews)
+            ? studioGenerationPreviews(pkg, iso(job.created_at), job.previews, pausedForSettings)
             : [];
       }
     }
