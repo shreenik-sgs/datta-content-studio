@@ -132,3 +132,24 @@ interactive; YouTube supplies the real Subscribe control. Preserve v6 evidence
 on existing revisions and use the same selected-draft closing refresh and
 preservation checks to apply v7. Never label a metadata-only change as a rendered
 card update.
+
+## Completed previews disappearing after a restart (26 October 2026)
+
+Bhagavat Katha had three checked MP4s in its render checkpoints, but resuming after
+channel changes created a later job timestamp. The preview filter incorrectly hid
+all earlier renders, leaving the series showing zero files. Existing Vishnu Purana
+outputs were unaffected because they were already committed drafts.
+
+Checked MP4 checkpoints now remain viewable across queued retries and failed jobs.
+Renders older than the current job are marked **Earlier render**, with their original
+filename/date and a warning that settings or closing destinations may differ. They
+are preview-only, never submitted, approved, exported for posting or counted as
+finished drafts. Source hash, media identity, AI review and presentation evidence
+are still validated; invalid or foreign-source checkpoints remain hidden. The
+successful job replaces this preview surface with the normal editable draft list.
+
+Inspect both `outputs` and `generationPreviews` when diagnosing missing videos.
+The series shows previews before detailed progress and explains when no playable
+MP4 exists yet. Do not restart generation or overwrite checkpoints just to make a
+file visible. Regression coverage includes list/detail projection, failure/retry,
+media access, environment separation and unchanged approval/publication gates.

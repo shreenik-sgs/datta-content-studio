@@ -8,8 +8,9 @@ import {
   validateStudioPresentationReview,
 } from "@satsang/distribution-domain";
 
-/** Preview only new renders from this job. Cached older settings and edited/approved packages
- * are excluded. Completion, human submission and publication retain their existing gates. */
+/** Preserve checked renders across retries as explicitly labelled, read-only previews.
+ * They are never candidates for submission/publication. Edited/approved packages use their
+ * committed outputs, and source/asset/review bindings must still match on every read. */
 export function studioGenerationPreviews(
   pkg: StudioPackage,
   createdAt: string,
@@ -19,7 +20,7 @@ export function studioGenerationPreviews(
     pkg.outputs.length ||
     pkg.generation ||
     pkg.approval ||
-    !["QUEUED", "GENERATING"].includes(pkg.status)
+    !["QUEUED", "GENERATING", "FAILED"].includes(pkg.status)
   )
     return [];
   const since = Date.parse(createdAt);
@@ -31,7 +32,7 @@ export function studioGenerationPreviews(
         !output ||
         key !== `output:${studioOutputKey(output)}` ||
         !output.generatedAt ||
-        !(Date.parse(output.generatedAt) >= since) ||
+        !Number.isFinite(Date.parse(output.generatedAt)) ||
         !["short", "reel"].includes(output.format) ||
         output.asset?.mimeType !== "video/mp4" ||
         !pkg.request.channels.includes(output.channel) ||
@@ -72,6 +73,7 @@ export function studioGenerationPreviews(
           language: output.language,
           format: output.format,
           generatedAt: output.generatedAt,
+          fromPreviousRun: Date.parse(output.generatedAt) < since,
           asset: output.asset,
           captions: output.captions,
           ...(output.thumbnail ? { thumbnail: output.thumbnail } : {}),

@@ -213,6 +213,28 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
     expect(pkg).toEqual(original);
     expect(m.review).not.toHaveBeenCalled();
   });
+  it("includes earlier render previews in both polling and detail without exposing storage or approval actions", async () => {
+    const waiting = {
+      ...pkg,
+      status: "GENERATING",
+      outputs: [],
+      generationPreviews: pkg.outputs.map((output) => ({ ...output, fromPreviousRun: true })),
+    };
+    m.list.mockResolvedValue([waiting]);
+    m.get.mockResolvedValue(waiting);
+    const listing = await (await GET(new Request("http://localhost/api/studio"))).json();
+    const complete = await (await detail(request(), { params: Promise.resolve({ id }) })).json();
+    for (const value of [listing.packages[0], complete.package]) {
+      expect(value.outputs).toEqual([]);
+      expect(value.generationPreviews[0].id).toBe(outputId);
+      expect(value.generationPreviews[0].fromPreviousRun).toBe(true);
+      expect(JSON.stringify(value.generationPreviews)).not.toContain("storageKey");
+      expect(JSON.stringify(value.generationPreviews)).not.toContain("identityKey");
+    }
+    expect(m.submit).not.toHaveBeenCalled();
+    expect(m.review).not.toHaveBeenCalled();
+    expect(m.publish).not.toHaveBeenCalled();
+  });
   it("requires publishing authority for retraction and rejects empty selections", async () => {
     const result = await action(
       request({ expectedRevision: 2, publicationIds: [] }),

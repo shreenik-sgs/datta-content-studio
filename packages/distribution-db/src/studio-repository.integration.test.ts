@@ -808,7 +808,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     await studio.failGeneration(c, "synthetic provider detail with secret");
     expect((await studio.get(f.ctx, f.pkg.id)).failure).toBe("GENERATION_FAILED");
   });
-  it("previews only checked MP4s from the current job without making them submittable or exportable", async () => {
+  it("retains checked MP4 previews across failures and retries without making them submittable or exportable", async () => {
     const f = await fixture({ channels: ["youtube"] });
     const c = await claim(f.pkg);
     const result = generated(f.pkg);
@@ -893,6 +893,7 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     expect(preview.outputs).toEqual([]);
     expect(preview.status).toBe("GENERATING");
     expect(preview.generationPreviews).toHaveLength(1);
+    expect(preview.generationPreviews?.[0]?.fromPreviousRun).toBe(false);
     expect(preview.generationPreviews?.[0]?.title).toBe(output.title);
     expect(
       await studio.getOutputAsset(f.ctx, f.pkg.id, output.id, { kind: "asset", preview: true }),
@@ -917,6 +918,9 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       studio.submit(f.ctx, f.pkg.id, { expectedRevision: preview.revision }),
     ).rejects.toThrow();
     await checkpoint({ ...output, generatedAt: "2020-01-01T00:00:00Z" });
+    expect((await studio.get(f.ctx, f.pkg.id)).generationPreviews?.[0]?.fromPreviousRun).toBe(true);
+    expect((await studio.list(f.ctx))[0]?.generationPreviews).toHaveLength(1);
+    await checkpoint({ ...output, generatedAt: "not-a-date" });
     expect((await studio.get(f.ctx, f.pkg.id)).generationPreviews).toEqual([]);
     await checkpoint({
       ...output,
@@ -932,7 +936,25 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     });
     expect((await studio.get(f.ctx, f.pkg.id)).generationPreviews).toEqual([]);
     await checkpoint(output);
-    const completed = await studio.completeGeneration(c, result);
+    await studio.failGeneration(c, "STUDIO_PROVIDER_SPEND_CAP_REACHED");
+    const failed = await studio.get(f.ctx, f.pkg.id);
+    expect(failed.status).toBe("FAILED");
+    expect(failed.generationPreviews).toHaveLength(1);
+    expect(
+      await studio.getOutputAsset(f.ctx, f.pkg.id, output.id, { kind: "asset", preview: true }),
+    ).toEqual(output.asset);
+    const queued = await studio.enqueueGeneration(f.ctx, failed.id, {
+      expectedRevision: failed.revision,
+    });
+    const resumed = await studio.get(f.ctx, queued.id);
+    expect(resumed.generationPreviews?.[0]?.fromPreviousRun).toBe(true);
+    expect(resumed.outputs).toEqual([]);
+    expect(resumed.approval).toBeNull();
+    await expect(
+      studio.submit(f.ctx, resumed.id, { expectedRevision: resumed.revision }),
+    ).rejects.toThrow();
+    const retry = await claim(queued);
+    const completed = await studio.completeGeneration(retry, result);
     expect(completed.accepted).toBe(true);
     const done = await studio.get(f.ctx, f.pkg.id);
     expect(done.generationPreviews ?? []).toEqual([]);

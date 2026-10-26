@@ -336,7 +336,7 @@ export function createIntelligentContentRepository(
     if (["QUEUED", "GENERATING", "FAILED"].includes(result.status)) {
       const jobs = await client.query(
         `SELECT j.status,j.progress,j.created_at,j.package_revision,
-          CASE WHEN j.status IN ('RUNNING','QUEUED') AND $3::boolean THEN
+          CASE WHEN j.status IN ('RUNNING','QUEUED','FAILED') AND $3::boolean THEN
             (SELECT jsonb_object_agg(e.key,e.value) FROM distribution.studio_package p,
               LATERAL jsonb_each(p.generation_checkpoint) e
               WHERE p.id=j.package_id AND p.is_test=j.is_test AND e.key LIKE 'output:%')
@@ -348,7 +348,11 @@ export function createIntelligentContentRepository(
       result.generationProgress = jobs.rows[0]?.progress ?? null;
       const job = jobs.rows[0];
       result.generationPreviews =
-        job?.package_revision === result.revision
+        job &&
+        (job.package_revision === result.revision ||
+          (result.status === "FAILED" &&
+            job.status === "FAILED" &&
+            job.package_revision === result.revision - 1))
           ? studioGenerationPreviews(result, iso(job.created_at), job.previews)
           : [];
     }

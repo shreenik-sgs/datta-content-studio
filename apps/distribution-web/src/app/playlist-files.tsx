@@ -120,6 +120,10 @@ export function PlaylistFiles({
   }
   const formatTimestamp = useHubTimestamp();
   const outputs = packages.flatMap((value) => value.outputs);
+  const previewCount = packages.reduce(
+    (count, value) => count + (value.generationPreviews?.length ?? 0),
+    0,
+  );
   const channels = [...new Set(outputs.map((output) => output.channel))];
   const groups = packages
     .map((value, index) => ({
@@ -192,7 +196,8 @@ export function PlaylistFiles({
       <div className="series-files-heading">
         <h3>Series files</h3>
         <p>
-          {outputs.length} files across {packages.length} recordings
+          {outputs.length} {previewCount ? `draft files · ${previewCount} MP4 previews` : "files"}{" "}
+          across {packages.length} recordings
           {channels
             .map(
               (name) =>
@@ -201,6 +206,7 @@ export function PlaylistFiles({
             .join("")}
         </p>
       </div>
+      <StudioGenerationPreviews packages={packages} />
       <SeriesGenerationProgress
         items={packages.map((value) => ({
           id: value.id,
@@ -210,7 +216,6 @@ export function PlaylistFiles({
           failure: value.failure,
         }))}
       />
-      <StudioGenerationPreviews packages={packages} />
       {showHandoff && (canCurate || canReview) && (drafts.length > 0 || submitted.length > 0) && (
         <section className="panel" aria-label="Review handoff" style={{ marginBlock: 16 }}>
           <h4>Next action</h4>
@@ -577,7 +582,9 @@ export function PlaylistFiles({
           {outputs.length
             ? "No files match these filters."
             : waiting.length
-              ? "Files will appear here as generation finishes."
+              ? previewCount
+                ? "Watch the MP4 previews above. Files become available in this table for editing and submission when their recording finishes."
+                : "Completed MP4s appear in the preview area above as each render passes its checks."
               : "No files were selected from these source recordings."}
         </p>
       )}

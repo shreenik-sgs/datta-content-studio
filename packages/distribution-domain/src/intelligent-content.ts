@@ -210,7 +210,10 @@ export type StudioGenerationPreview = Pick<
   | "asset"
   | "captions"
   | "thumbnail"
->;
+> & {
+  /** Read-only render from before the current job; never an approval candidate. */
+  fromPreviousRun?: boolean;
+};
 export type StudioPublicationStatus =
   | "QUEUED"
   | "RUNNING"

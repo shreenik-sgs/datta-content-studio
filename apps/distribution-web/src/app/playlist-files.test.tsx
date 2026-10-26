@@ -436,7 +436,9 @@ it("shows completed MP4 previews during generation without adding them to select
               ...first,
               status: "GENERATING",
               outputs: [],
-              generationPreviews: [{ ...output, title: "First rendered teaching" }],
+              generationPreviews: [
+                { ...output, title: "First rendered teaching", fromPreviousRun: true },
+              ],
             },
           ]}
           canCurate
@@ -450,13 +452,24 @@ it("shows completed MP4 previews during generation without adding them to select
     const previews = host.querySelector('[aria-label="Completed MP4 previews"]');
     expect(previews?.textContent).toContain("Ready to preview · 1 MP4");
     expect(previews?.textContent).toContain("Nothing has been approved or posted");
+    expect(previews?.textContent).toContain("Earlier render");
+    expect(previews?.textContent).toContain("closing-card destination may differ");
+    expect(previews?.querySelector("details")?.open).toBe(true);
     expect(previews?.querySelector("video")?.getAttribute("src")).toBe(
       `/distribution/api/studio/first/assets/${output.id}/media?preview=1`,
     );
     expect(previews?.querySelector("video")?.preload).toBe("none");
     expect(previews?.querySelector('input[type="checkbox"]')).toBeNull();
     expect(previews?.querySelector("button")).toBeNull();
-    expect(host.textContent).toContain("0 files across 1 recordings");
+    expect(host.textContent).toContain("0 draft files · 1 MP4 previews across 1 recordings");
+    // Polling updates the same surface, including the transition into editable drafts.
+    await act(async () =>
+      root.render(
+        <PlaylistFiles packages={[first]} canCurate onOpen={vi.fn()} onPreview={vi.fn()} />,
+      ),
+    );
+    expect(host.querySelector('[aria-label="Completed MP4 previews"]')).toBeNull();
+    expect(host.textContent).toContain("1 files across 1 recordings");
   } finally {
     await act(async () => root.unmount());
   }
