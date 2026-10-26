@@ -18,6 +18,7 @@ import {
 import sharp from "sharp";
 import { createPrivateRenderScratch } from "./renderer.js";
 import { type StudioCheckpoints, studioFingerprint } from "./studio-checkpoints.js";
+import { spliceClosingVideo } from "./studio-closing-splice.js";
 import { studioClosingCard } from "./studio-ending.js";
 import { executeStudioSource } from "./studio-process.js";
 import { saveSharedStudioAsset } from "./studio-shared-assets.js";
@@ -52,7 +53,7 @@ export async function replaceStudioClosingCard(input: ClosingReplacementInput) {
   }
 }
 
-/** Compare every frame, not a sample. The original voice is copied without another AAC encode. */
+/** Copy the unchanged GOPs; compare only the re-encoded ending. Original audio stays intact. */
 async function renderClosingReplacement(input: ClosingReplacementInput, crf: number) {
   const { directory, startMs } = input;
   const cardPath = join(directory, "closing.png");
@@ -68,49 +69,16 @@ async function renderClosingReplacement(input: ClosingReplacementInput, crf: num
       ...(input.signal ? { signal: input.signal } : {}),
       args,
     });
-  await execute(input.sourcePath, [
-    "-nostdin",
-    "-v",
-    "error",
-    "-n",
-    "-i",
-    "__SOURCE__",
-    "-loop",
-    "1",
-    "-i",
+  const splice = await spliceClosingVideo({
+    sourcePath: input.sourcePath,
+    directory,
+    ffmpeg: input.ffmpeg,
     cardPath,
-    "-filter_complex_threads",
-    "1",
-    "-filter_complex",
-    // Preserve the entire existing subtitle band, including the last spoken words. No re-layout,
-    // source seeking, normalization, storyboard, crop or caption generation is performed here.
-    `[1:v]crop=1080:${STUDIO_SUBTITLE_TOP}:0:0,format=yuva420p,fade=t=in:st=${startMs / 1000}:d=0.4:alpha=1[card];[0:v][card]overlay=0:0:enable='gte(t,${startMs / 1000})':shortest=1:format=yuv420[v]`,
-    "-map",
-    "[v]",
-    "-map",
-    "0:a:0",
-    "-map_metadata",
-    "-1",
-    "-map_chapters",
-    "-1",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "veryfast",
-    "-crf",
-    String(crf),
-    "-profile:v",
-    "high",
-    "-pix_fmt",
-    "yuv420p",
-    "-threads",
-    "2",
-    "-c:a",
-    "copy",
-    "-movflags",
-    "+faststart",
-    path,
-  ]);
+    startMs,
+    crf,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  const tailStart = splice.splitSeconds;
   const audioHash = async (file: string) => {
     const value = await execute(file, [
       "-v",
@@ -137,13 +105,18 @@ async function renderClosingReplacement(input: ClosingReplacementInput, crf: num
     const stats = join(directory, caption ? "caption-ssim.txt" : "body-ssim.txt");
     const filter = caption
       ? `crop=1080:${1920 - STUDIO_SUBTITLE_TOP}:0:${STUDIO_SUBTITLE_TOP}`
-      : `trim=end=${startMs / 1000}`;
+      : `trim=end=${startMs / 1000 - tailStart}`;
+    if (!caption && startMs / 1000 === tailStart) return 1;
     // Both inputs are private, hash-verified MP4s; the generated comparison file has no external references.
     await execute(input.sourcePath, [
       "-v",
       "error",
+      "-ss",
+      String(tailStart),
       "-i",
       "__SOURCE__",
+      "-ss",
+      String(tailStart),
       "-i",
       path,
       "-filter_complex_threads",
@@ -197,7 +170,14 @@ async function renderClosingReplacement(input: ClosingReplacementInput, crf: num
   const cardMeanAbsoluteDifference = difference / actual.length;
   if (actual.length !== expected.length || cardMeanAbsoluteDifference >= 4)
     throw new StudioClosingPreservationError("card", cardMeanAbsoluteDifference);
-  return { path, audioSha256, minimumFrameSsim, minimumCaptionSsim, cardMeanAbsoluteDifference };
+  return {
+    path,
+    audioSha256,
+    minimumFrameSsim,
+    minimumCaptionSsim,
+    cardMeanAbsoluteDifference,
+    splice,
+  };
 }
 
 /** Closing copy changes operate on the reviewed export, never on the raw recording. */
@@ -385,6 +365,14 @@ export async function refreshStudioClosingOutputs(input: {
         minimumFrameSsim: result.minimumFrameSsim,
         minimumCaptionSsim: result.minimumCaptionSsim,
         cardMeanAbsoluteDifference: result.cardMeanAbsoluteDifference,
+        splice: {
+          method: "h264-tail-copy-v1",
+          startMs: result.splice.splitSeconds * 1000,
+          copiedPackets: result.splice.copiedPackets,
+          encodedPackets: result.splice.encodedPackets,
+          ...(result.splice.prefixSha256 ? { prefixSha256: result.splice.prefixSha256 } : {}),
+          timingSha256: result.splice.timingSha256,
+        },
       };
       const output: StudioOutput = {
         ...prior,

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
@@ -61,7 +61,34 @@ const repository = createIntelligentContentRepository(pool, {
 });
 const store = createAssetStore(env);
 const identity = `${Date.now()}`;
-let backedUp = false;
+const resume = process.argv.includes("--resume");
+if (resume && (!apply || !directory || expectedOutputs === null))
+  throw Error("RESUME_SCOPE_INVALID");
+let originalOutputs: Map<string, StudioOutput> | undefined;
+if (resume) {
+  const names = (await readdir(directory ?? "")).filter(
+    (n) => n.startsWith("before-") && n.endsWith(".json"),
+  );
+  if (names.length !== 1) throw Error("RESUME_BASELINE_AMBIGUOUS");
+  const before = JSON.parse(await readFile(join(directory ?? "", names[0] ?? ""), "utf8")) as {
+    origin: string;
+    bundleId: string;
+    target: unknown;
+    rows: { snapshot: StudioPackage }[];
+  };
+  if (
+    before.origin !== origin ||
+    before.bundleId !== bundleId ||
+    !isDeepStrictEqual(before.target, target)
+  )
+    throw Error("RESUME_BASELINE_TARGET_CHANGED");
+  originalOutputs = new Map(
+    before.rows.flatMap((row) => row.snapshot.outputs.map((o) => [o.id, o] as const)),
+  );
+  if (originalOutputs.size !== expectedOutputs) throw Error("RESUME_BASELINE_COUNT_CHANGED");
+}
+let backedUp = resume;
+let restored = false;
 const completed: unknown[] = [];
 const reportedFailures = new Set<string>();
 let finished = false;
@@ -131,6 +158,41 @@ try {
       )
     )
       throw Error("STUDIO_TARGET_SETTINGS_CHANGED");
+    if (originalOutputs && !restored) {
+      const current = rows.flatMap((row) => row.snapshot.outputs);
+      if (
+        current.length !== originalOutputs.size ||
+        current.some((o) => !originalOutputs?.has(o.id))
+      )
+        throw Error("RESUME_OUTPUT_IDS_CHANGED");
+      for (const { snapshot: pkg } of rows)
+        for (const o of pkg.outputs) {
+          const original = originalOutputs.get(o.id);
+          if (!original?.asset || !o.asset) throw Error("RESUME_ASSET_MISSING");
+          const matched = isDeepStrictEqual(
+            o.presentationReview?.closingCard?.youtubeClosing,
+            target,
+          );
+          if (matched) {
+            if (o.presentationReview?.closingRefresh?.previousSha256 !== original.asset.sha256)
+              throw Error("RESUME_PRESERVATION_BASELINE_CHANGED");
+            completed.push(evidence(pkg, o));
+          } else if (o.asset.sha256 !== original.asset.sha256)
+            throw Error("RESUME_NEWER_MEDIA_RETAINED");
+        }
+      await writeFile(
+        join(directory ?? "", `completed-${identity}.json`),
+        JSON.stringify(completed),
+        { mode: 0o600, flag: "wx" },
+      );
+      restored = true;
+      console.info(
+        JSON.stringify({
+          resumedVerifiedOutputs: completed.length,
+          originalBaselinePreserved: true,
+        }),
+      );
+    }
     if (apply && !backedUp) {
       await writeFile(
         join(directory ?? "", `before-${identity}.json`),
@@ -235,7 +297,10 @@ try {
           target,
           outputs,
         });
-        completed.push(...outputs.map((output) => evidence(pkg, output)));
+        for (const output of outputs) {
+          if (!completed.some((item) => (item as { outputId?: string }).outputId === output.id))
+            completed.push(evidence(pkg, output));
+        }
         await writeFile(
           join(directory ?? "", `completed-${identity}.json`),
           JSON.stringify(completed),
@@ -277,6 +342,8 @@ try {
           )
         )
           throw Error("REVIEW_STATE_CHANGED");
+        if (resume && completed.length !== expectedOutputs)
+          throw Error("RESUME_COMPLETION_COUNT_CHANGED");
         const curation = {
           ...root.curation,
           request: { ...root.curation.request, youtubeClosing: target },

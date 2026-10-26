@@ -34,7 +34,7 @@ it.skipIf(!existsSync(ffmpeg))(
           "-c:v",
           "libx264",
           "-preset",
-          "ultrafast",
+          "veryfast",
           "-threads",
           "1",
           "-crf",

@@ -196,6 +196,34 @@ it("binds passing quality evidence to the exact source, rendered bytes, and file
   };
   const refreshed = { ...evidence, closingCard: studioClosingCardPlan(30000), closingRefresh };
   expect(() => validateStudioPresentationReview(refreshed, binding)).not.toThrow();
+  const splice = {
+    method: "h264-tail-copy-v1" as const,
+    startMs: 25000,
+    copiedPackets: 750,
+    encodedPackets: 150,
+    prefixSha256: "a".repeat(64),
+    timingSha256: "b".repeat(64),
+  };
+  expect(() =>
+    validateStudioPresentationReview(
+      { ...refreshed, closingRefresh: { ...closingRefresh, splice } },
+      binding,
+    ),
+  ).not.toThrow();
+  for (const change of [
+    { startMs: 29000 },
+    { copiedPackets: -1 },
+    { encodedPackets: 0 },
+    { prefixSha256: "bad" },
+    { timingSha256: "bad" },
+    { copiedPackets: 0, startMs: 20 },
+  ])
+    expect(() =>
+      validateStudioPresentationReview(
+        { ...refreshed, closingRefresh: { ...closingRefresh, splice: { ...splice, ...change } } },
+        binding,
+      ),
+    ).toThrow("STUDIO_CLOSING_PRESERVATION_FAILED");
   for (const change of [
     { previousFileVersion: 2 },
     { unchangedUntilMs: 27900 },

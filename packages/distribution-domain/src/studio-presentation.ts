@@ -67,6 +67,15 @@ export type StudioPresentationReview = {
     minimumFrameSsim: number;
     minimumCaptionSsim: number;
     cardMeanAbsoluteDifference?: number;
+    /** Unchanged picture packets and their timestamps are checked without decoding them. */
+    splice?: {
+      method: "h264-tail-copy-v1";
+      startMs: number;
+      copiedPackets: number;
+      encodedPackets: number;
+      prefixSha256?: string;
+      timingSha256: string;
+    };
   };
   closingCard?: StudioClosingCard;
   openingCard?: StudioOpeningCard;
@@ -345,6 +354,22 @@ export function validateStudioPresentationReview(
       ![refresh.minimumFrameSsim, refresh.minimumCaptionSsim].every(
         (v) => Number.isFinite(v) && v >= 0.995 && v <= 1,
       ))
+  )
+    throw Error("STUDIO_CLOSING_PRESERVATION_FAILED");
+  const splice = refresh?.splice;
+  if (
+    splice &&
+    (splice.method !== "h264-tail-copy-v1" ||
+      !Number.isFinite(splice.startMs) ||
+      splice.startMs < 0 ||
+      splice.startMs > (refresh?.unchangedUntilMs ?? 0) ||
+      !Number.isSafeInteger(splice.copiedPackets) ||
+      splice.copiedPackets < 0 ||
+      !Number.isSafeInteger(splice.encodedPackets) ||
+      splice.encodedPackets < 1 ||
+      !/^[a-f0-9]{64}$/.test(splice.timingSha256) ||
+      (splice.copiedPackets > 0 && !/^[a-f0-9]{64}$/.test(splice.prefixSha256 ?? "")) ||
+      (splice.copiedPackets === 0 && splice.startMs !== 0))
   )
     throw Error("STUDIO_CLOSING_PRESERVATION_FAILED");
   const opening = value.openingCard;
