@@ -45,10 +45,10 @@ it("removes cancelled waiters without leaking capacity or starting their process
   expect(await run(async () => "next")).toBe("next");
   expect(operation).not.toHaveBeenCalled();
 });
-it("bounds queue waiting separately from executable time and recovers the slot", async () => {
+it("waits beyond five minutes for healthy media work without starting another process", async () => {
   vi.useFakeTimers();
   try {
-    const run = createStudioMediaSlots(1, 20);
+    const run = createStudioMediaSlots(1);
     let finish = () => {};
     const first = run(
       () =>
@@ -57,11 +57,49 @@ it("bounds queue waiting separately from executable time and recovers the slot",
         }),
     );
     await Promise.resolve();
-    const second = run(async () => "must not run").catch((error) => error.message);
-    await vi.advanceTimersByTimeAsync(20);
-    expect(await second).toBe("RENDER_TIMEOUT");
+    const operation = vi.fn(async () => "complete");
+    const second = run(operation);
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    expect(operation).not.toHaveBeenCalled();
     finish();
     await first;
+    expect(await second).toBe("complete");
+    expect(operation).toHaveBeenCalledOnce();
+    expect(await run(async () => "next")).toBe("next");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("keeps FIFO order after a long wait and removes a waiter when its lease expires", async () => {
+  vi.useFakeTimers();
+  try {
+    const run = createStudioMediaSlots(1);
+    let finish = () => {};
+    const first = run(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await Promise.resolve();
+    const controller = new AbortController();
+    const cancelledOperation = vi.fn();
+    const cancelled = run(cancelledOperation, controller.signal).catch((error) => error.message);
+    const events: string[] = [];
+    const second = run(async () => {
+      events.push("second");
+    });
+    const third = run(async () => {
+      events.push("third");
+    });
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    controller.abort();
+    expect(await cancelled).toBe("RENDER_CANCELLED");
+    expect(cancelledOperation).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+    finish();
+    await Promise.all([first, second, third]);
+    expect(events).toEqual(["second", "third"]);
     expect(await run(async () => "next")).toBe("next");
   } finally {
     vi.useRealTimers();

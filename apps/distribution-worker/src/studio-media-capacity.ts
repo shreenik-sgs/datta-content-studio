@@ -6,7 +6,7 @@ export function studioMediaCapacity(env: Record<string, string | undefined>) {
   return Number(value);
 }
 
-export function createStudioMediaSlots(limit: number, waitMs = 300000) {
+export function createStudioMediaSlots(limit: number) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 4)
     throw Error("INVALID_STUDIO_MEDIA_CONCURRENCY");
   let active = 0;
@@ -19,7 +19,6 @@ export function createStudioMediaSlots(limit: number, waitMs = 300000) {
     }
     return new Promise((resolve, reject) => {
       const remove = () => {
-        clearTimeout(timer);
         signal?.removeEventListener("abort", cancel);
         const index = queue.indexOf(start);
         if (index >= 0) queue.splice(index, 1);
@@ -33,10 +32,9 @@ export function createStudioMediaSlots(limit: number, waitMs = 300000) {
         active++;
         resolve();
       };
-      const timer = setTimeout(() => {
-        remove();
-        reject(Error("RENDER_TIMEOUT"));
-      }, waitMs);
+      // The process ahead has its own deadline and progress watchdog. Waiting for
+      // that process is not an encoding timeout. Keep FIFO order until capacity
+      // is available or the generation lease/shutdown signal cancels this work.
       signal?.addEventListener("abort", cancel, { once: true });
       queue.push(start);
       if (signal?.aborted) cancel();
