@@ -201,3 +201,19 @@ their saved checkpoints. Do not enqueue another job while one is active or force
 restart workers that are processing other recordings. A successful code test is
 not proof that the failed real Short has finished: verify the resulting media and
 both closing-card destinations before reporting series completion.
+
+### Keep series polling separate from file evidence
+
+On 26 October, the 95-file series still returned about 1.1 MB per refresh after
+transcripts had been removed. AI-review reasons, presentation evidence and caption
+cues accounted for most of the remaining payload. Slow transfers could exceed the
+client deadline even when the server responded in under a second.
+
+Series summaries now omit those detail-only fields and retain the latest feedback
+and review note. They carry the rendered duration separately so the closing-card
+hold remains included in the table. Preview selection fetches the complete package
+before showing review details; a failed load is retryable and closing the modal
+cancels the read. Approval preparation still fetches fresh full detail and validates
+on the server. No saved evidence or media is removed. The local real-browser check
+returned all 95 files in a 440 KB response and verified full evidence on opening a
+preview. Keep this separation when adding more review metadata.

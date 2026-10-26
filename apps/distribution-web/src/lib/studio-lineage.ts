@@ -31,12 +31,13 @@ export function studioOutputLength(output: PublicStudioOutput): { label: string;
       output.endMs <= output.startMs
     )
       return { label: "Not available", detail: "Source clip duration" };
-    const seconds = studioRenderedDurationMs(output) / 1000;
+    const seconds = (output.listedDurationMs ?? studioRenderedDurationMs(output)) / 1000;
     return {
       label: `${Number(seconds.toFixed(2))} sec`,
-      detail: output.presentationReview?.closingCard?.cleanHoldMs
-        ? "Video including clean closing card"
-        : "Source clip",
+      detail:
+        (output.listedClosingHoldMs ?? output.presentationReview?.closingCard?.cleanHoldMs)
+          ? "Video including clean closing card"
+          : "Source clip",
     };
   }
   if (output.format === "blog") {

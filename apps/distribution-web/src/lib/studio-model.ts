@@ -12,6 +12,9 @@ import { studioNeedsSuitabilityReview } from "@satsang/distribution-domain";
 /** The operator client receives a filename and authenticated URL, never a storage address. */
 export type PublicStudioAsset = Omit<StudioAsset, "storageKey" | "identityKey">;
 export type PublicStudioOutput = Omit<StudioOutput, "asset" | "captions" | "thumbnail"> & {
+  /** List-only duration; full review evidence is fetched when opening the file. */
+  listedDurationMs?: number;
+  listedClosingHoldMs?: number;
   asset: PublicStudioAsset | null;
   thumbnail?: PublicStudioAsset;
   captions: { language: StudioOutput["language"]; asset: PublicStudioAsset; translated: boolean }[];

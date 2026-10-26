@@ -193,6 +193,111 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
     expect(data.blockers).not.toContain("NATIVE_REVIEWER_REQUIRED");
     expect(m.review).not.toHaveBeenCalled();
   });
+  it("omits file review evidence from polls while retaining it for on-demand review", async () => {
+    const sample = structuredClone(pkg);
+    const output = sample.outputs[0];
+    if (!output) throw Error("Missing fixture output");
+    output.captionCues = [
+      { id: "segment-1", startMs: 0, endMs: 1000, text: "Original accurate caption." },
+    ];
+    output.aiReview = {
+      status: "PASSED",
+      policyVersion: "content-integrity-v1",
+      provider: "gemini",
+      model: "reviewer",
+      recordedAt: now,
+      inputMode: "transcript_and_audio",
+      sourceSha256: sample.source.sha256,
+      fileVersion: 1,
+      humanFeedbackConsidered: true,
+      checks: {
+        channel: "instagram",
+        language: "en",
+        openingComplete: true,
+        endingComplete: true,
+        contextComplete: true,
+        attributionCorrect: true,
+        captionsFaithful: true,
+        copySupported: true,
+        reason: "Complete supported teaching. ".repeat(50),
+      },
+    };
+    output.presentationReview = {
+      policy: "source-safe-portrait-v1",
+      sourceSha256: sample.source.sha256,
+      renderedSha256: descriptor.sha256,
+      fileVersion: 1,
+      model: "reviewer",
+      reviewedAt: now,
+      framing: "screened-portrait",
+      repairs: 0,
+      source: {
+        openingComplete: true,
+        endingComplete: true,
+        naturalStart: true,
+        naturalEnd: true,
+        reason: "Complete source passage. ".repeat(50),
+        scenes: [],
+      },
+      checks: {
+        illustrationsRelevant: true,
+        textIntact: true,
+        subjectIntact: true,
+        captionsClear: true,
+        naturalBoundaries: true,
+        reason: "Audio and video checked.",
+      },
+    };
+    sample.feedback = [
+      {
+        id: "old",
+        actorId: actor,
+        action: "REVISED",
+        revision: 1,
+        comment: "Old edit",
+        createdAt: now,
+      },
+      {
+        id: "review",
+        actorId: actor,
+        action: "REJECTED",
+        revision: 1,
+        comment: "Check boundary",
+        createdAt: now,
+      },
+      {
+        id: "latest",
+        actorId: actor,
+        action: "REVISED",
+        revision: 2,
+        comment: "Boundary corrected",
+        createdAt: now,
+      },
+    ];
+    const before = structuredClone(sample);
+    m.list.mockResolvedValue([sample]);
+    m.get.mockResolvedValue(sample);
+    const summary = (await (await GET(new Request("http://localhost/api/studio"))).json())
+      .packages[0];
+    expect(summary.outputs[0].aiReview).toBeUndefined();
+    expect(summary.outputs[0].presentationReview).toBeUndefined();
+    expect(summary.outputs[0].captionCues).toBeUndefined();
+    expect(summary.outputs[0].captions[0].asset.filename).toContain("captions.vtt");
+    expect(summary.outputs[0].listedDurationMs).toBe(1000);
+    expect(summary.feedback.map((item: { id: string }) => item.id)).toEqual(["review", "latest"]);
+    const complete = (
+      await (
+        await detail(new Request("http://localhost/api/studio"), {
+          params: Promise.resolve({ id }),
+        })
+      ).json()
+    ).package;
+    expect(complete.outputs[0].aiReview).toEqual(output.aiReview);
+    expect(complete.outputs[0].presentationReview).toEqual(output.presentationReview);
+    expect(complete.outputs[0].captionCues).toEqual(output.captionCues);
+    expect(complete.feedback).toEqual(sample.feedback);
+    expect(sample).toEqual(before);
+  });
   it("keeps series polling compact while preserving complete evidence on the detail endpoint", async () => {
     const original = structuredClone(pkg);
     const listing = await (await GET(new Request("http://localhost/api/studio"))).json();

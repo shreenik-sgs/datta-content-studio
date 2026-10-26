@@ -46,6 +46,7 @@ import { StudioLineage } from "./studio-lineage";
 import { StudioMediaSummary } from "./studio-media-editor";
 import { StudioDraftPostingHistory } from "./studio-posting-check";
 import { StudioPreviewDialog } from "./studio-preview-dialog";
+import { StudioPreviewLoader } from "./studio-preview-loader";
 import { StudioProgressSummary } from "./studio-progress-summary";
 import { StudioPublishing } from "./studio-publishing";
 import { StudioQualitySelection } from "./studio-quality-selection";
@@ -823,7 +824,6 @@ export function StudioPanel({
 
   if (bundle && !selectedId) {
     const previewPackage = bundlePackages.find((item) => item.id === bundlePreview?.packageId);
-    const preview = previewPackage?.outputs.find((output) => output.id === bundlePreview?.outputId);
     return (
       <section className="panel" aria-label="Intelligent content" style={{ minWidth: 0 }}>
         <div className="actions wrap series-context-heading">
@@ -887,32 +887,52 @@ export function StudioPanel({
             />
           </>
         )}
-        {previewPackage && preview && (
+        {previewPackage && bundlePreview && (
           <StudioPreviewDialog onClose={() => setBundlePreview(null)}>
-            <div className="preview-file-heading">
-              <h3>{preview.title}</h3>
-              {preview.included && studioCanEditFile(previewPackage, preview, capabilities) ? (
-                <button
-                  className="button primary"
-                  type="button"
-                  onClick={() => {
-                    select(previewPackage);
-                    setManualEdit({ id: preview.id, sequence: (manualEdit?.sequence ?? 0) + 1 });
-                  }}
-                >
-                  Edit this file
-                </button>
-              ) : (
-                <button className="button" type="button" onClick={() => select(previewPackage)}>
-                  Open recording workflow
-                </button>
+            <StudioPreviewLoader
+              key={`${previewPackage.id}:${bundlePreview.outputId}`}
+              packageId={previewPackage.id}
+              outputId={bundlePreview.outputId}
+              revision={previewPackage.revision}
+            >
+              {(loadedPackage, preview) => (
+                <>
+                  <div className="preview-file-heading">
+                    <h3>{preview.title}</h3>
+                    {preview.included && studioCanEditFile(loadedPackage, preview, capabilities) ? (
+                      <button
+                        className="button primary"
+                        type="button"
+                        onClick={() => {
+                          select(loadedPackage);
+                          setManualEdit({
+                            id: preview.id,
+                            sequence: (manualEdit?.sequence ?? 0) + 1,
+                          });
+                        }}
+                      >
+                        Edit this file
+                      </button>
+                    ) : (
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => select(loadedPackage)}
+                      >
+                        Open recording workflow
+                      </button>
+                    )}
+                  </div>
+                  <StudioOutputPreview
+                    value={loadedPackage}
+                    output={preview}
+                    canDownload={
+                      canPublish && studioFileStatus(loadedPackage, preview) === "APPROVED"
+                    }
+                  />
+                </>
               )}
-            </div>
-            <StudioOutputPreview
-              value={previewPackage}
-              output={preview}
-              canDownload={canPublish && studioFileStatus(previewPackage, preview) === "APPROVED"}
-            />
+            </StudioPreviewLoader>
           </StudioPreviewDialog>
         )}
       </section>

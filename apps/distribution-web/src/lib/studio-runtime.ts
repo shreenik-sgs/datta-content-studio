@@ -13,6 +13,7 @@ import {
   type StudioReadiness,
   studioChannelLabel,
   studioGenerationReadiness,
+  studioRenderedDurationMs,
 } from "@satsang/distribution-domain";
 import { json, readBoundedBody, safeProblem } from "./http";
 import { distributionPool } from "./runtime";
@@ -76,16 +77,32 @@ export function publicStudioSummary(
   workspaceName?: string,
 ): PublicStudioPackage {
   const result = publicStudioPackage(value, workspaceName);
+  const latestReview = result.feedback.findLast((item) =>
+    ["APPROVED", "REJECTED", "DISCARDED"].includes(item.action),
+  );
   return {
     ...result,
     summaryOnly: true,
     provenance: null,
-    outputs: result.outputs.map((output) => ({
-      ...output,
-      ...(output.generatedAt || !value.provenance?.generatedAt
-        ? {}
-        : { generatedAt: value.provenance.generatedAt }),
-    })),
+    feedback: result.feedback.filter(
+      (item) => item === latestReview || item === result.feedback.at(-1),
+    ),
+    outputs: result.outputs.map((output) => {
+      const {
+        aiReview: _ai,
+        presentationReview: _presentation,
+        captionCues: _cues,
+        ...file
+      } = output;
+      return {
+        ...file,
+        listedDurationMs: studioRenderedDurationMs(output),
+        listedClosingHoldMs: output.presentationReview?.closingCard?.cleanHoldMs ?? 0,
+        ...(output.generatedAt || !value.provenance?.generatedAt
+          ? {}
+          : { generatedAt: value.provenance.generatedAt }),
+      };
+    }),
   };
 }
 export function publicStudioPublication(value: StudioPublication): PublicStudioPublication {
