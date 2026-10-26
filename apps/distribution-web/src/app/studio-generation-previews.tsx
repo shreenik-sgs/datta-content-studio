@@ -48,7 +48,7 @@ export function StudioGenerationPreviews({
               {file.title} · Preview MP4{file.fromPreviousRun ? " · Earlier render" : ""}
             </summary>
             <p className="muted">{pkg.workspaceName ?? pkg.source.title}</p>
-            <p className="muted">
+            <p className="filename">
               {file.asset?.filename}
               {file.generatedAt && (
                 <>
