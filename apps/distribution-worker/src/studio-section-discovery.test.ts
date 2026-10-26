@@ -8,6 +8,7 @@ import {
 import { afterEach, expect, it, vi } from "vitest";
 import {
   type StudioCheckpoints,
+  StudioNoSuitableContentError,
   generateCheckpointedStudioPlan,
   studioFingerprint,
 } from "./studio-checkpoints";
@@ -168,3 +169,68 @@ it("uses the normal quality pipeline and resumes its paid section plans with dis
   expect(planner).toHaveBeenCalledTimes(3);
   expect(reviewer).toHaveBeenCalledTimes(3);
 });
+
+it.each(["unsuitable", "rejected"] as const)(
+  "does not retry a completed %s section or shift retained teachings after a later provider interruption",
+  async (outcome) => {
+    vi.spyOn(novelty, "reviewStudioDiscoveryNovelty").mockImplementation(async (_i, candidates) =>
+      candidates.map((_o, i) => ({
+        key: `candidate-${i}`,
+        duplicateOf: null,
+        reason: "Distinct.",
+      })),
+    );
+    const cache = recovery();
+    const run = vi.fn(async (value: Parameters<typeof generateStudioSectionPlan>[0]) => {
+      if (value.discoverySection?.index === 0)
+        throw outcome === "unsuitable"
+          ? new StudioNoSuitableContentError([])
+          : new quality.StudioContentQualityError([]);
+      if (value.discoverySection?.index === 2) throw Error("STUDIO_PROVIDER_TIMEOUT");
+      return planFor("next");
+    });
+    await expect(generateStudioSectionPlan(input, cache, {}, run)).rejects.toThrow(
+      "STUDIO_PROVIDER_TIMEOUT",
+    );
+    // If section zero were repurchased, the provider could return a new candidate and
+    // invalidate every later novelty/plan checkpoint even though only rendering failed.
+    run.mockClear();
+    run.mockImplementation(async (value) =>
+      planFor(value.discoverySection?.index === 1 ? "next" : "repeat"),
+    );
+    const result = await generateStudioSectionPlan(input, cache, {}, run);
+    expect(run.mock.calls.map(([value]) => value.discoverySection?.index)).toEqual([1, 2]);
+    expect(result.discovery?.sections.map((section) => section.accepted)).toEqual([0, 1, 1]);
+    expect(result.outputs.flatMap((output) => output.sourceSegmentIds)).toEqual(["next", "repeat"]);
+  },
+);
+
+it.each(["request", "source", "transcript", "retained", "model", "review-policy"] as const)(
+  "reconsiders empty sections when %s changes",
+  async (change) => {
+    const cache = recovery();
+    const run = vi.fn(async () => {
+      throw new StudioNoSuitableContentError([]);
+    });
+    await generateStudioSectionPlan(input, cache, {}, run);
+    run.mockClear();
+    const changed = structuredClone(input);
+    const options: Parameters<typeof generateStudioSectionPlan>[2] = {};
+    if (change === "request") changed.pkg.request.instructions = "Look for practical teaching.";
+    if (change === "source") changed.pkg.source.language = "te";
+    if (change === "transcript")
+      changed.transcript.segments = changed.transcript.segments.map((segment) => ({
+        ...segment,
+        text: "Corrected native transcript.",
+      }));
+    if (change === "retained")
+      changed.discoveryExcludedOutputs = changed.discoveryExcludedOutputs.map((output) => ({
+        ...output,
+        title: "Revised retained teaching",
+      }));
+    if (change === "model") changed.model = "updated-model";
+    if (change === "review-policy") options.mediaReviewPolicy = "updated-policy";
+    await generateStudioSectionPlan(changed, cache, options, run);
+    expect(run).toHaveBeenCalled();
+  },
+);

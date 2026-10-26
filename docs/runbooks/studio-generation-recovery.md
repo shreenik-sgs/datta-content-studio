@@ -217,3 +217,18 @@ cancels the read. Approval preparation still fetches fresh full detail and valid
 on the server. No saved evidence or media is removed. The local real-browser check
 returned all 95 files in a 440 KB response and verified full evidence on opening a
 preview. Keep this separation when adding more review metadata.
+
+## Keep completed empty sections stable during recovery
+
+Section discovery recorded empty coverage but did not reuse that completed
+outcome. After a later provider or rendering failure, it could buy more correction
+attempts for a section that had already exhausted its quality review. New candidates
+from that repeat could then change every later duplicate-check fingerprint.
+
+Completed suitability/quality rejections now have a separate checkpoint tied to
+the source, transcript, requested outputs and guidance, retained teachings, models,
+and review policies. A recovery skips those unchanged empty sections and continues
+with the unfinished work. Provider, timeout and contract failures are never cached
+as empty content. Changed inputs invalidate the checkpoint; no rejected excerpt
+is promoted or exempted from review. Deploy worker changes only after its active
+jobs have drained, preserving the existing checkpoints.

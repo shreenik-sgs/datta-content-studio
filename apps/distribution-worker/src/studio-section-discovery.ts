@@ -15,7 +15,10 @@ import {
   StudioNoSuitableContentError,
   studioFingerprint,
 } from "./studio-checkpoints.js";
-import { StudioContentQualityError } from "./studio-content-review.js";
+import {
+  STUDIO_EDITORIAL_REVIEW_POLICY,
+  StudioContentQualityError,
+} from "./studio-content-review.js";
 import { reviewStudioDiscoveryNovelty } from "./studio-discovery-review.js";
 import type { generateStudioPlan } from "./studio-intelligence.js";
 
@@ -72,6 +75,56 @@ export async function generateStudioSectionPlan(
       discoverySection: section,
       discoveryExcludedOutputs: retained,
     };
+    // A completed empty section is a reviewed outcome, not a transient failure. Preserve it
+    // during a later render retry so new candidates cannot shift downstream deduplication.
+    const emptyFingerprint = studioFingerprint({
+      version: 1,
+      discoveryPolicy: STUDIO_DISCOVERY_POLICY,
+      editorialPolicy: STUDIO_EDITORIAL_REVIEW_POLICY,
+      section,
+      source: scoped.pkg.source,
+      request: scoped.pkg.request,
+      feedback: scoped.pkg.feedback,
+      transcript: scoped.transcript,
+      retained,
+      provider: scoped.provider,
+      model: scoped.model,
+      fallback: options.fallback && {
+        provider: options.fallback.provider,
+        model: options.fallback.model,
+      },
+      audioReview: Boolean(input.reviewAudio),
+      mediaReview: Boolean(options.reviewMedia),
+      mediaReviewPolicy: options.mediaReviewPolicy,
+    });
+    type EmptyOutcome = "no-suitable-content" | "quality-review-rejected";
+    const recordEmpty = async (outcome: EmptyOutcome) => {
+      const result = {
+        ...section,
+        candidates: 0,
+        accepted: 0,
+        duplicates: 0,
+        reason:
+          outcome === "quality-review-rejected"
+            ? "Candidate teachings did not pass the strict quality review after correction attempts."
+            : "No suitable complete teaching found in this section.",
+      };
+      coverage.sections.push(result);
+      await namespace?.set("coverage", studioFingerprint(scoped.transcript), result);
+      await checkpoints?.progress({
+        phase: "drafting",
+        provider: input.provider,
+        completed: section.index + 1,
+        total: sections.length,
+        discoverySection: section.index + 1,
+        discoverySections: sections.length,
+      });
+    };
+    const empty = namespace?.get<EmptyOutcome>("completed-empty-section", emptyFingerprint);
+    if (empty === "no-suitable-content" || empty === "quality-review-rejected") {
+      await recordEmpty(empty);
+      continue;
+    }
     let plan: StudioPlan;
     try {
       plan = await run(scoped, namespace, {
@@ -97,21 +150,12 @@ export async function generateStudioSectionPlan(
         !(error instanceof StudioContentQualityError)
       )
         throw error;
-      coverage.sections.push({
-        ...section,
-        candidates: 0,
-        accepted: 0,
-        duplicates: 0,
-        reason:
-          error instanceof StudioContentQualityError
-            ? "Candidate teachings did not pass the strict quality review after correction attempts."
-            : "No suitable complete teaching found in this section.",
-      });
-      await namespace?.set(
-        "coverage",
-        studioFingerprint(scoped.transcript),
-        coverage.sections.at(-1),
-      );
+      const outcome: EmptyOutcome =
+        error instanceof StudioContentQualityError
+          ? "quality-review-rejected"
+          : "no-suitable-content";
+      await namespace?.set("completed-empty-section", emptyFingerprint, outcome);
+      await recordEmpty(outcome);
       continue;
     }
     const groups = [...new Map(plan.outputs.map((o) => [o.messageId, o])).values()];
