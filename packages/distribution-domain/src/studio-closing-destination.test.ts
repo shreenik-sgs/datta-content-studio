@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import type { StudioPackage, StudioStatus } from "./intelligent-content";
 import {
+  prepareStudioYoutubeClosingRefresh,
   retargetStudioYoutubeClosing,
   reviseStudioYoutubeClosing,
 } from "./studio-closing-destination";
@@ -9,6 +10,7 @@ import {
   studioClosingCardPlan,
   studioClosingChannel,
 } from "./studio-ending";
+import { STUDIO_MEDIA_DEFAULTS } from "./studio-media-edits";
 
 function fixture(): StudioPackage {
   const prior = {
@@ -47,7 +49,7 @@ it("changes only the subscription footer and URL metadata, preserving the review
   const next = retargetStudioYoutubeClosing(pkg, STUDIO_BALA_YOUTUBE_CLOSING);
   expect(pkg).toEqual(before);
   expect(next.outputs[0]?.body).toBe(
-    "A source-faithful teaching.\n\nSubscribe to Sri Datta Vijayananda Teertha Swamiji: https://www.youtube.com/@gurubhavanaadpt\n\n@gurubhavanaadpt",
+    `A source-faithful teaching.\n\nSubscribe to Sri Datta Vijayananda Teertha Swamiji: ${STUDIO_BALA_YOUTUBE_CLOSING.url}\n\n@gurubhavanaadpt`,
   );
   const output = next.outputs[0];
   const original = pkg.outputs[0];
@@ -62,6 +64,50 @@ it("changes only the subscription footer and URL metadata, preserving the review
     url: STUDIO_BALA_YOUTUBE_CLOSING.url,
   });
   expect(retargetStudioYoutubeClosing(next, STUDIO_BALA_YOUTUBE_CLOSING)).toBe(next);
+});
+
+it("prepares a handle-bearing card for rendering without rewriting old visual evidence or edits", () => {
+  const pkg = fixture();
+  pkg.status = "APPROVED";
+  const output = pkg.outputs[0];
+  if (!output?.presentationReview?.closingCard) throw Error("Missing fixture");
+  output.presentationReview.closingCard.policy = "green-plain-text-closing-card-v7";
+  output.mediaEdits = { ...STUDIO_MEDIA_DEFAULTS, portraitFocus: 0.7 };
+  const original = structuredClone(pkg);
+  const next = prepareStudioYoutubeClosingRefresh(pkg, STUDIO_BALA_YOUTUBE_CLOSING, {
+    userId: "admin",
+    at: "2026-10-26T00:00:00Z",
+  });
+  expect(pkg).toEqual(original);
+  expect(next.request.youtubeClosing?.url).toBe("https://www.youtube.com/@dattavijayam");
+  expect(next.status).toBe("DRAFT");
+  expect(next.approval).toBeNull();
+  expect(next.outputs[0]?.workflow?.status).toBe("DRAFT");
+  expect(next.outputs[0]?.body).toContain(
+    `Subscribe to ${STUDIO_BALA_YOUTUBE_CLOSING.label}: https://www.youtube.com/@dattavijayam`,
+  );
+  for (const key of [
+    "asset",
+    "captions",
+    "mediaEdits",
+    "aiReview",
+    "presentationReview",
+    "fileVersion",
+  ] as const)
+    expect(next.outputs[0]?.[key]).toEqual(output[key]);
+  expect(
+    prepareStudioYoutubeClosingRefresh(next, STUDIO_BALA_YOUTUBE_CLOSING, {
+      userId: "admin",
+      at: "2026-10-26T00:00:00Z",
+    }),
+  ).toBe(next);
+  expect(() =>
+    prepareStudioYoutubeClosingRefresh(
+      { ...pkg, status: "GENERATING" },
+      STUDIO_BALA_YOUTUBE_CLOSING,
+      { userId: "admin", at: "2026-10-26T00:00:00Z" },
+    ),
+  ).toThrow("INVALID_STUDIO_TRANSITION");
 });
 it.each<StudioStatus>(["APPROVED", "IN_REVIEW", "DISCARDED", "QUEUED", "GENERATING"])(
   "refuses changes to %s packages",

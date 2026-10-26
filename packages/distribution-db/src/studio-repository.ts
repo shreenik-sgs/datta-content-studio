@@ -22,6 +22,7 @@ import {
   assertStudioDiscoveryIsolation,
   contentExportDecision,
   postingCheckBlock,
+  prepareStudioYoutubeClosingRefresh,
   requireContentRevision,
   requireIndependentContentReview,
   requirePlaylistSettingsEditable,
@@ -973,6 +974,76 @@ export function createIntelligentContentRepository(
     return next;
   }
   return {
+    refreshYoutubeDestination: (
+      ctx: DistributionContext,
+      id: string,
+      input: {
+        expectedRevision: number;
+        target: import("@satsang/distribution-domain").StudioYoutubeClosing;
+      },
+    ) =>
+      transaction(async (client) => {
+        // Changing an approved destination is explicit administrator maintenance,
+        // never a curator shortcut around immutable approval.
+        await requireDistributionCapability(client, ctx, ["operations.manage"]);
+        const pkg = await load(client, ctx.isTest, id, true);
+        requireContentRevision(pkg.revision, input.expectedRevision);
+        active(pkg);
+        // Administrators do not inherit curator permissions. The audited change
+        // is theirs; generation remains under the original, still-active curator
+        // and the worker rechecks that authority before accepting the job.
+        if (!(await fresh(pkg.createdBy, pkg.isTest, "content.create")))
+          throw Error("REQUESTER_ROLE_REVOKED");
+        await sourceCurrent(client, pkg);
+        const prepared = prepareStudioYoutubeClosingRefresh(pkg, input.target, {
+          userId: ctx.userId,
+          at: new Date().toISOString(),
+        });
+        if (prepared === pkg) return pkg;
+        if (
+          (
+            await client.query(
+              `SELECT 1 FROM distribution.studio_generation_job WHERE package_id=$1 AND is_test=$2 AND status IN ('QUEUED','RUNNING')
+               UNION ALL SELECT 1 FROM distribution.studio_publication_job WHERE package_id=$1 AND is_test=$2 AND status IN ('QUEUED','RUNNING','PROCESSING','UNCERTAIN') LIMIT 1`,
+              [id, ctx.isTest],
+            )
+          ).rowCount
+        )
+          throw Error("STUDIO_DESTINATION_BUSY");
+        // Reopen review without changing any reviewed content, then append the new
+        // destination and enqueue its closing-only render in the SAME transaction.
+        const reopened = await save(client, pkg, ctx.userId, "CLOSING_REVIEW_REOPENED", {
+          status: "DRAFT",
+          approval: null,
+          outputs: pkg.outputs.map((output) => ({
+            ...output,
+            workflow: {
+              status: "DRAFT" as const,
+              actorId: ctx.userId,
+              updatedAt: new Date().toISOString(),
+            },
+          })),
+        });
+        const outputIds = prepared.outputs.filter((o) => o.asset).map((o) => o.id);
+        const next = await save(
+          client,
+          reopened,
+          ctx.userId,
+          "CLOSING_DESTINATION_UPDATED",
+          {
+            ...prepared,
+            status: outputIds.length ? "QUEUED" : "DRAFT",
+            generation: outputIds.length ? { outputIds, mode: "closing" } : null,
+            contributorIds: [...new Set([...pkg.contributorIds, ctx.userId])],
+          },
+          {
+            action: "REVISED",
+            comment: `Administrator changed the subscription destination to ${prepared.request.youtubeClosing?.url}. Existing edits are preserved; changed files require fresh human approval.`,
+          },
+        );
+        if (outputIds.length) await enqueue(client, next, pkg.createdBy);
+        return next;
+      }),
     queueLiveWindow: (isTest: boolean) =>
       transaction(async (client) => {
         const row = (

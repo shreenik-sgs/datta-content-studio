@@ -943,6 +943,153 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       await studio.getOutputAsset(f.ctx, f.pkg.id, output.id, { kind: "asset", preview: true }),
     ).toEqual(output.asset);
   });
+  it("refreshes an approved destination only as an audited administrator render, preserving the approved revision", async () => {
+    const f = await fixture({ channels: ["youtube"] });
+    const prior = {
+      label: "Sri Datta Vijayananda Teertha Swamiji",
+      url: "https://www.youtube.com/@gurubhavanaadpt",
+    };
+    f.pkg.request = { ...f.pkg.request, sourceBranding: "bala-swamiji", youtubeClosing: prior };
+    await migration.query(
+      "UPDATE distribution.studio_revision SET snapshot=$3 WHERE package_id=$1 AND is_test=$2 AND revision=1",
+      [f.pkg.id, f.pkg.isTest, f.pkg],
+    );
+    const c = await claim(f.pkg);
+    const result = generated(f.pkg);
+    result.provenance.sourceBranding = "bala-swamiji";
+    result.provenance.brandName = "Sri Datta Vijayananda Teertha Swamiji";
+    result.provenance.brandLogoSha256 = null;
+    const output = result.outputs[0];
+    if (!output?.asset) throw Error("missing output");
+    output.generatedAt = new Date(
+      (await migration.query("SELECT clock_timestamp() AS now")).rows[0].now,
+    ).toISOString();
+    output.aiReview = {
+      status: "PASSED",
+      policyVersion: "content-integrity-v1",
+      provider: "gemini",
+      model: "synthetic",
+      recordedAt: output.generatedAt,
+      inputMode: "transcript_and_audio",
+      fileVersion: 1,
+      sourceSha256: f.pkg.source.sha256,
+      humanFeedbackConsidered: false,
+      checks: {
+        channel: "youtube",
+        language: "en",
+        openingComplete: true,
+        endingComplete: true,
+        contextComplete: true,
+        attributionCorrect: true,
+        captionsFaithful: true,
+        copySupported: true,
+        reason: "Complete synthetic teaching",
+      },
+    };
+    output.presentationReview = {
+      policy: "source-safe-portrait-v1",
+      sourceSha256: f.pkg.source.sha256,
+      renderedSha256: output.asset.sha256,
+      fileVersion: 1,
+      model: "fixture",
+      reviewedAt: output.generatedAt,
+      framing: "full-picture",
+      repairs: 0,
+      source: {
+        openingComplete: true,
+        endingComplete: true,
+        naturalStart: true,
+        naturalEnd: true,
+        reason: "Fixture",
+        scenes: [],
+      },
+      checks: {
+        illustrationsRelevant: true,
+        textIntact: true,
+        subjectIntact: true,
+        captionsClear: true,
+        naturalBoundaries: true,
+        reason: "Fixture",
+      },
+    };
+    validateStudioAsset(output.asset, {
+      masterId: f.pkg.source.masterId,
+      versionId: f.pkg.source.versionId,
+      packageId: f.pkg.id,
+      outputId: output.id,
+    });
+    validateStudioAiReviewEvidence(output.aiReview, {
+      ...output,
+      sourceSha256: f.pkg.source.sha256,
+      fileVersion: 1,
+    });
+    validateStudioPresentationReview(output.presentationReview, {
+      sourceSha256: f.pkg.source.sha256,
+      renderedSha256: output.asset.sha256,
+      fileVersion: 1,
+      durationMs: 2000,
+    });
+
+    output.body += `\nSubscribe to ${prior.label}: ${prior.url}`;
+    output.presentationReview.closingCard = studioClosingCardPlan(2000, {
+      destination: "youtube",
+      youtubeClosing: prior,
+      sourceBranding: "bala-swamiji",
+    });
+    const completed = await studio.completeGeneration(c, result);
+    if (!completed.accepted) throw Error(completed.reason);
+    let original = await studio.submit(f.ctx, f.pkg.id, {
+      expectedRevision: completed.package.revision,
+    });
+    original = await studio.review(f.reviewer, f.pkg.id, {
+      expectedRevision: original.revision,
+      decision: "APPROVED",
+      confirmTranscript: true,
+      confirmTeachingIntegrity: true,
+    });
+    const target = { ...prior, url: "https://www.youtube.com/@dattavijayam" };
+    await expect(
+      studio.refreshYoutubeDestination(f.ctx, f.pkg.id, {
+        expectedRevision: original.revision,
+        target,
+      }),
+    ).rejects.toThrow("FORBIDDEN");
+    const administrator = identity();
+    administrator.roles = ["SUPER_ADMIN"];
+    roles.set(`${administrator.isTest}:${administrator.userId}`, administrator.roles);
+    await migration.query(
+      "INSERT INTO distribution.capability_grant(user_id,is_test,capability,granted_by) VALUES($1,$2,'operations.manage',$1)",
+      [administrator.userId, administrator.isTest],
+    );
+    await expect(
+      studio.refreshYoutubeDestination(administrator, f.pkg.id, {
+        expectedRevision: original.revision - 1,
+        target,
+      }),
+    ).rejects.toThrow("REVISION_CONFLICT");
+    const next = await studio.refreshYoutubeDestination(administrator, f.pkg.id, {
+      expectedRevision: original.revision,
+      target,
+    });
+    expect(next.status).toBe("QUEUED");
+    expect(next.approval).toBeNull();
+    expect(next.generation).toEqual({ mode: "closing", outputIds: [output.id] });
+    expect(next.outputs[0]?.asset).toEqual(original.outputs[0]?.asset);
+    expect(next.outputs[0]?.presentationReview).toEqual(original.outputs[0]?.presentationReview);
+    expect(next.outputs[0]?.workflow?.status).toBe("DRAFT");
+    expect(next.outputs[0]?.body).toContain(target.url);
+    expect(
+      (await studio.history(f.ctx, f.pkg.id)).revisions.find(
+        (r) => r.revision === original.revision,
+      )?.package.outputs,
+    ).toEqual(original.outputs);
+    await expect(
+      studio.publish(f.reviewer, f.pkg.id, { expectedRevision: next.revision }),
+    ).rejects.toThrow();
+    const closing = await claim(next);
+    expect(closing.package.request.youtubeClosing).toEqual(target);
+    await studio.failGeneration(closing, "STUDIO_PROVIDER_TIMEOUT");
+  });
   it("checkpoints are private, fenced by the lease, and reused across explicit retries without revisions", async () => {
     const f = await fixture();
     const c = await claim(f.pkg);

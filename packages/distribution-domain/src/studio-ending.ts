@@ -8,7 +8,7 @@ export const STUDIO_YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@sgsswamiji";
 export type StudioYoutubeClosing = { label: string; url: string };
 export const STUDIO_BALA_YOUTUBE_CLOSING: StudioYoutubeClosing = {
   label: "Sri Datta Vijayananda Teertha Swamiji",
-  url: "https://www.youtube.com/@gurubhavanaadpt",
+  url: "https://www.youtube.com/@dattavijayam",
 };
 export function studioYoutubeClosing(value: StudioYoutubeClosing): StudioYoutubeClosing {
   if (
