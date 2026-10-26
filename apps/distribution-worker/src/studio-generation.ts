@@ -39,10 +39,12 @@ import {
   type StudioTranscript,
   applyStudioBoundaryReview,
   assertStudioDiscoveryIsolation,
+  canExcludeRenderedStudioCandidate,
   enforceStudioPlanBranding,
   preserveStudioEditorialEdits,
   retimeStudioIllustrations,
   safeStudioPortraitScenes,
+  selectInitialStudioCandidates,
   studioAppLinks,
   studioAssetName,
   studioBoundaryPasses,
@@ -1037,7 +1039,12 @@ export async function generateStudioPackage(input: {
       logo: sha(logo),
       mode: input.closingOnly ? "closing" : input.renderOnly ? "render" : "ai",
     });
-    for (const planned of plan.outputs) {
+    const canExcludeBoundary = canExcludeRenderedStudioCandidate(
+      claim.package,
+      Boolean(input.renderOnly || input.retainedOutputs),
+    );
+    const rejectedBoundaries = new Map<string, string>();
+    outputLoop: for (const planned of plan.outputs) {
       if (signal?.aborted) throw new Error("GENERATION_TIMEOUT");
       const video = ["short", "reel", "video"].includes(planned.format);
       const prior = claim.package.outputs.find(
@@ -1056,6 +1063,20 @@ export async function generateStudioPackage(input: {
         prior,
         translations: plan.translations.find((value) => value.language === planned.language),
       });
+      const rejectionKey = `render-boundary-rejection:${studioOutputKey(planned)}`;
+      const excludeBoundary = async (reason: string) => {
+        if (!canExcludeBoundary) throw Error("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
+        const finding = reason.slice(0, 3000);
+        rejectedBoundaries.set(studioOutputKey(planned), finding);
+        await checkpoints?.set(rejectionKey, fingerprint, { reason: finding });
+      };
+      const rejected = canExcludeBoundary
+        ? checkpoints?.get<{ reason: string }>(rejectionKey, fingerprint)
+        : undefined;
+      if (rejected && typeof rejected.reason === "string" && rejected.reason.trim()) {
+        rejectedBoundaries.set(studioOutputKey(planned), rejected.reason.slice(0, 3000));
+        continue;
+      }
       await checkpoints?.progress({
         phase: "rendering",
         provider: "local",
@@ -1271,8 +1292,10 @@ export async function generateStudioPackage(input: {
               screened.screen.naturalStart,
               screened.screen.naturalEnd,
             ].every(Boolean)
-          )
-            throw Error("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
+          ) {
+            await excludeBoundary(screened.screen.reason);
+            continue;
+          }
           let rejectedIllustration = false;
           const illustrations = preservedScreen
             ? await Promise.all(
@@ -1511,7 +1534,10 @@ export async function generateStudioPackage(input: {
                 language: planned.language,
                 presentationIssues: [checks.reason],
               });
-            if (!checks.naturalBoundaries) throw Error("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
+            if (!checks.naturalBoundaries) {
+              await excludeBoundary(checks.reason);
+              continue outputLoop;
+            }
             if (
               [
                 checks.illustrationsRelevant,
@@ -1618,6 +1644,24 @@ export async function generateStudioPackage(input: {
       }
       await checkpoints?.set(cacheKey, fingerprint, output);
       outputs.push(output);
+    }
+    if (rejectedBoundaries.size) {
+      const checks = plan.outputs.map((planned) => {
+        const key = studioOutputKey(planned);
+        const check = aiReviews.get(key)?.checks;
+        if (!check) throw Error("STUDIO_VIDEO_REVIEW_INVALID");
+        const reason = rejectedBoundaries.get(key);
+        return reason ? { ...check, openingComplete: false, endingComplete: false, reason } : check;
+      });
+      const selected = selectInitialStudioCandidates(plan, checks, claim.package.request);
+      // No successful package when every candidate failed the actual-media gate.
+      if (!outputs.length) throw Error("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
+      provenance.excludedMessages = [
+        ...(provenance.excludedMessages ?? []),
+        ...(selected.excludedMessages ?? []),
+      ];
+      provenance.skippedChannels = selected.skippedChannels;
+      validateStudioProvenance(provenance);
     }
     validateStudioOutputs(outputs, {
       packageId: claim.package.id,

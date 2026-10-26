@@ -519,6 +519,136 @@ describe("automatic Studio generation with real media", () => {
     expect(write.mock.calls.some(([input]) => input.mimeType === "video/mp4")).toBe(false);
   }, 30000);
 
+  it.each([false, true])(
+    "records a rejected final-media candidate without losing passing files or repeating paid work (all rejected: %s)",
+    async (allRejected) => {
+      vi.spyOn(intelligence, "generateStudioPlan").mockImplementation(
+        async ({ pkg, transcript }) => {
+          const plan = createLocalStudioPlan(
+            { ...pkg, request: { ...pkg.request, allCompleteMessages: false } },
+            transcript,
+          );
+          const template = plan.outputs[0];
+          if (!template) throw Error("Missing fixture output");
+          return {
+            ...plan,
+            outputs: transcript.segments.map((segment, index) => ({
+              ...template,
+              messageId: `message-${index + 1}`,
+              title: index ? "Second teaching" : "First teaching",
+              sourceSegmentIds: [segment.id],
+            })),
+          };
+        },
+      );
+      vi.spyOn(quality, "reviewStudioContent").mockImplementation(async ({ plan }) =>
+        plan.outputs.map((output) => ({
+          channel: output.channel,
+          language: output.language,
+          ...(output.messageId ? { messageId: output.messageId } : {}),
+          openingComplete: true,
+          endingComplete: true,
+          contextComplete: true,
+          attributionCorrect: true,
+          captionsFaithful: true,
+          copySupported: true,
+          reason: "Source fixture passed.",
+        })),
+      );
+      vi.spyOn(presentation, "screenStudioSource").mockResolvedValue({
+        openingComplete: true,
+        endingComplete: true,
+        naturalStart: true,
+        naturalEnd: true,
+        reason: "Source passed.",
+        scenes: [],
+        illustrations: [],
+      });
+      vi.spyOn(presentation, "reviewStudioPresentation").mockResolvedValue({
+        illustrationsRelevant: true,
+        textIntact: true,
+        subjectIntact: true,
+        captionsClear: true,
+        naturalBoundaries: true,
+        reason: "Presentation passed.",
+      });
+      const boundary = vi.mocked(boundaries.reviewStudioClipBoundaries);
+      const original = boundary.getMockImplementation();
+      if (!original) throw Error("Missing boundary fixture");
+      boundary.mockImplementation(async (input) => {
+        const value = await original(input);
+        return input.fileStartMs === 0 && (allRejected || input.startMs === 1000)
+          ? {
+              ...value,
+              opening: {
+                ...value.opening,
+                verdict: "incomplete",
+                needsOutsideSpeech: true,
+                audibleWords: "An incomplete opening",
+                reason: "The rendered clip begins mid-verse.",
+              },
+            }
+          : value;
+      });
+      const saved = new Map<string, unknown>();
+      const render = vi.spyOn(mediaRenderer, "renderStudioVideo");
+      const attempt = () =>
+        generateStudioPackage({
+          claim: {
+            ...claim,
+            externalProcessing: { allowed: true, reason: null },
+            package: {
+              ...claim.package,
+              request: {
+                ...claim.package.request,
+                channels: ["youtube"],
+                allCompleteMessages: true,
+              },
+            },
+          },
+          store,
+          checkpoints: {
+            get: <T>(key: string, fingerprint: string) =>
+              structuredClone(saved.get(`${key}:${fingerprint}`)) as T | undefined,
+            set: async (key, fingerprint, value) => {
+              saved.set(`${key}:${fingerprint}`, structuredClone(value));
+            },
+            progress: async () => {},
+          },
+          env: {
+            ...env,
+            STUDIO_INTELLIGENCE_PROVIDER: "gemini",
+            STUDIO_GEMINI_API_KEY: "synthetic",
+            STUDIO_GEMINI_MODEL: "gemini-test",
+          },
+        });
+      if (allRejected) {
+        await expect(attempt()).rejects.toThrow("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
+        await expect(attempt()).rejects.toThrow("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
+      } else {
+        const first = await attempt();
+        expect(first.outputs).toHaveLength(1);
+        expect(first.outputs[0]?.messageId).toBe("message-1");
+        expect(first.provenance.excludedMessages).toEqual([
+          expect.objectContaining({
+            messageId: "message-2",
+            reasons: [expect.stringContaining("begins mid-verse")],
+          }),
+        ]);
+        const resumed = await attempt();
+        expect(
+          resumed.outputs.map((o) => ({ id: o.id, asset: o.asset, captions: o.captions })),
+        ).toEqual(first.outputs.map((o) => ({ id: o.id, asset: o.asset, captions: o.captions })));
+      }
+      expect(render).toHaveBeenCalledTimes(2);
+      expect(boundary.mock.calls.filter(([input]) => input.fileStartMs === 0)).toHaveLength(2);
+      expect(
+        [...saved.keys()].filter((key) => key.startsWith("render-boundary-rejection:")),
+      ).toHaveLength(allRejected ? 2 : 1);
+    },
+    60000,
+  );
+
   it("holds an abrupt actual ending even when the transcript reviewer passed it", async () => {
     vi.spyOn(intelligence, "generateStudioPlan").mockImplementation(async ({ pkg, transcript }) =>
       createLocalStudioPlan(pkg, transcript),

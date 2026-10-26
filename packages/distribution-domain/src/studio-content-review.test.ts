@@ -4,6 +4,7 @@ import {
   STUDIO_CONTENT_REVIEW_CHECKS,
   type StudioAiReviewEvidence,
   type StudioContentReview,
+  canExcludeRenderedStudioCandidate,
   canSelectInitialStudioCandidates,
   selectInitialStudioCandidates,
   studioContentReviewIssues,
@@ -71,6 +72,26 @@ describe("initial candidate selection", () => {
     provenance: null,
     feedback: [],
   } as unknown as StudioPackage;
+
+  it("isolates final-media failures only for independent new discovery candidates", () => {
+    const single = {
+      ...initial,
+      request: { ...initial.request, channels: ["youtube"] },
+    } as StudioPackage;
+    expect(canExcludeRenderedStudioCandidate(single, false)).toBe(true);
+    expect(canExcludeRenderedStudioCandidate(initial, false)).toBe(false);
+    expect(canExcludeRenderedStudioCandidate(single, true)).toBe(false);
+    for (const changed of [
+      { outputs: [{}] },
+      { provenance: {} },
+      { approval: {} },
+      { feedback: [{ action: "REJECTED" }] },
+      { request: { ...single.request, languages: ["en", "te"] } },
+    ])
+      expect(
+        canExcludeRenderedStudioCandidate({ ...single, ...changed } as StudioPackage, false),
+      ).toBe(false);
+  });
 
   it("never drops files during human corrections or after delivery", () => {
     expect(canSelectInitialStudioCandidates(initial, false)).toBe(true);

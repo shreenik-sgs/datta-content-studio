@@ -22,6 +22,18 @@ export function canSelectInitialStudioCandidates(pkg: StudioPackage, selectedCor
   );
 }
 
+/** A final media rejection may omit only an independent, undelivered discovery candidate.
+ * Multiple variants must stay atomic; existing files and human corrections always fail closed.
+ */
+export function canExcludeRenderedStudioCandidate(pkg: StudioPackage, selectedCorrection: boolean) {
+  return (
+    canSelectInitialStudioCandidates(pkg, selectedCorrection) &&
+    !pkg.approval &&
+    pkg.request.channels.length === 1 &&
+    pkg.request.languages.length === 1
+  );
+}
+
 /** Keep complete reviewed messages across every variant, without rewriting the passing work. */
 export function selectInitialStudioCandidates(
   plan: StudioPlan,
