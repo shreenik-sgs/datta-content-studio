@@ -60,6 +60,7 @@ import {
 import { requireIndependentSourceReview } from "./review-integrity.js";
 import type { StudioRoleAuthority } from "./studio-authority.js";
 import { materializeFileWorkflows, studioFileFingerprint } from "./studio-file-review.js";
+import { studioGenerationPreviews } from "./studio-generation-previews.js";
 import { currentStudioTranscript, loadStudioSource } from "./studio-source.js";
 
 export type StudioRevisionHistoryEntry = {
@@ -333,11 +334,22 @@ export function createIntelligentContentRepository(
     }));
     if (["QUEUED", "GENERATING", "FAILED"].includes(result.status)) {
       const jobs = await client.query(
-        "SELECT status,progress FROM distribution.studio_generation_job WHERE package_id=$1 AND is_test=$2 ORDER BY package_revision DESC LIMIT 1",
-        [id, isTest],
+        `SELECT j.status,j.progress,j.created_at,j.package_revision,
+          CASE WHEN j.status IN ('RUNNING','QUEUED') AND $3::boolean THEN
+            (SELECT jsonb_object_agg(e.key,e.value) FROM distribution.studio_package p,
+              LATERAL jsonb_each(p.generation_checkpoint) e
+              WHERE p.id=j.package_id AND p.is_test=j.is_test AND e.key LIKE 'output:%')
+          ELSE NULL END AS previews
+         FROM distribution.studio_generation_job j WHERE j.package_id=$1 AND j.is_test=$2 ORDER BY j.package_revision DESC LIMIT 1`,
+        [id, isTest, !result.outputs.length && !result.generation && !result.approval],
       );
       if (jobs.rows[0]?.status === "RUNNING") result.status = "GENERATING";
       result.generationProgress = jobs.rows[0]?.progress ?? null;
+      const job = jobs.rows[0];
+      result.generationPreviews =
+        job?.package_revision === result.revision
+          ? studioGenerationPreviews(result, iso(job.created_at), job.previews)
+          : [];
     }
     return result;
   }
@@ -353,6 +365,7 @@ export function createIntelligentContentRepository(
       ...pkg,
       ...change,
       generationProgress: null,
+      generationPreviews: [],
       id: pkg.id,
       isTest: pkg.isTest,
       source: pkg.source,
@@ -1828,6 +1841,7 @@ export function createIntelligentContentRepository(
         kind: "asset" | "caption" | "thumbnail";
         language?: string | undefined;
         forExport?: boolean | undefined;
+        preview?: boolean | undefined;
       },
     ) =>
       transaction(async (client) => {
@@ -1836,8 +1850,14 @@ export function createIntelligentContentRepository(
         active(pkg);
         await sourceCurrent(client, pkg);
         if (input.forExport) await publicationEligible(client, pkg, false, [outputId]);
-        const output = pkg.outputs.find((value) => value.id === outputId);
-        if (input.forExport && !output?.included) throw new Error("OUTPUT_EXCLUDED");
+        if (input.preview && input.forExport) throw new Error("FORBIDDEN");
+        const output =
+          pkg.outputs.find((value) => value.id === outputId) ??
+          (input.preview
+            ? pkg.generationPreviews?.find((value) => value.id === outputId)
+            : undefined);
+        if (input.forExport && (!output || !("included" in output) || !output.included))
+          throw new Error("OUTPUT_EXCLUDED");
         const asset =
           input.kind === "asset"
             ? output?.asset

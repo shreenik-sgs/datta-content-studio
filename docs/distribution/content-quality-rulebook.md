@@ -94,6 +94,12 @@ normal generation pipeline. AI pass does not grant human approval or publication
 Run the standard `ops/studio-configured-providers.ts` bootstrap, which starts
 `apps/distribution-worker/src/studio-index.ts` and monitors the sealed provider
 configuration. `STUDIO_GENERATION_CONCURRENCY` accepts integers 1–8 (default 1).
+`STUDIO_MEDIA_PROCESS_CONCURRENCY` independently limits CPU-heavy FFmpeg/ffprobe
+operations to 1–4 (default 1). On the 2-CPU GBADPT host, use two generation
+slots and one media slot so provider waits can overlap without simultaneous
+full video encoders. Queue waits are bounded to five minutes, abort promptly
+on shutdown, and do not consume the executable timeout. Monitor memory,
+provider rate limits and output throughput before increasing either setting.
 The generation queue and bounded import prefetch scale with that capacity; downloads
 remain serialized per provider, and publication retains one loop. Set concurrency to
 5 only on a worker with suitable CPU, memory, scratch space and provider quota.

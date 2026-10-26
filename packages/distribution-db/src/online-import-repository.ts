@@ -453,7 +453,16 @@ export function createOnlineImportRepository(
       );
       if (ids.length) {
         const packages = await pool.query(
-          `SELECT p.id, r.snapshot->>'status' AS status, r.snapshot->>'failure' AS failure, jsonb_array_length(COALESCE(r.snapshot->'outputs','[]'::jsonb)) AS output_count, EXISTS(SELECT 1 FROM distribution.studio_generation_job j WHERE j.package_id=p.id AND j.is_test=p.is_test AND j.status='RUNNING') AS running FROM distribution.studio_package p JOIN distribution.studio_revision r ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision WHERE p.is_test=$1 AND p.id=ANY($2::uuid[])`,
+          `SELECT p.id, r.snapshot->>'status' AS status, r.snapshot->>'failure' AS failure,
+             jsonb_array_length(COALESCE(r.snapshot->'outputs','[]'::jsonb)) AS output_count,
+             j.status='RUNNING' AS running, j.progress
+           FROM distribution.studio_package p
+           JOIN distribution.studio_revision r ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision
+           LEFT JOIN LATERAL (
+             SELECT status,progress FROM distribution.studio_generation_job
+             WHERE package_id=p.id AND is_test=p.is_test ORDER BY package_revision DESC LIMIT 1
+           ) j ON true
+           WHERE p.is_test=$1 AND p.id=ANY($2::uuid[]) AND p.deleted_at IS NULL`,
           [context.isTest, ids],
         );
         const statuses = new Map(
@@ -465,6 +474,11 @@ export function createOnlineImportRepository(
               value.status = statuses.get(value.packageId);
               const snapshot = packages.rows.find((row) => row.id === value.packageId);
               value.outputCount = snapshot?.output_count ?? 0;
+              value.generationProgress = ["QUEUED", "GENERATING", "FAILED"].includes(
+                value.status ?? "",
+              )
+                ? (snapshot?.progress ?? null)
+                : null;
               const failure = snapshot?.failure;
               if (
                 value.status === "FAILED" &&

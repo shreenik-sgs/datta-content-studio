@@ -275,43 +275,48 @@ export function OnlineImportPanel({
     );
   if (reviewing && reviewItem?.curation && !reviewItem.curation.pausedForSettings)
     return (
-      <StudioPanel
-        capabilities={capabilities}
-        {...(completeOnly ? { scope: "complete" as const } : {})}
-        bundle={{
-          totalRecordings: reviewItem.childIds?.length ?? 0,
-          title: reviewItem.title ?? "Playlist",
-          playlistId: reviewItem.id,
-          sourceLinks: Object.fromEntries(
-            (reviewItem.childIds ?? []).flatMap((id) => {
+      <>
+        {progressError && (
+          <output className="notice">{progressError} The series list may be out of date.</output>
+        )}
+        <StudioPanel
+          capabilities={capabilities}
+          {...(completeOnly ? { scope: "complete" as const } : {})}
+          bundle={{
+            totalRecordings: reviewItem.childIds?.length ?? 0,
+            title: reviewItem.title ?? "Playlist",
+            playlistId: reviewItem.id,
+            sourceLinks: Object.fromEntries(
+              (reviewItem.childIds ?? []).flatMap((id) => {
+                const child = items.find((value) => value.id === id);
+                return child?.masterId && child.source?.url
+                  ? [[child.masterId, child.source.url]]
+                  : [];
+              }),
+            ),
+            masterIds: (reviewItem.childIds ?? []).flatMap((id) => {
               const child = items.find((value) => value.id === id);
-              return child?.masterId && child.source?.url
-                ? [[child.masterId, child.source.url]]
-                : [];
+              return child?.masterId ? [child.masterId] : [];
             }),
-          ),
-          masterIds: (reviewItem.childIds ?? []).flatMap((id) => {
-            const child = items.find((value) => value.id === id);
-            return child?.masterId ? [child.masterId] : [];
-          }),
-          packageIds: Object.values(reviewItem.curation.items).flatMap((member) =>
-            member.packageId ? [member.packageId] : [],
-          ),
-        }}
-        onOpenSource={(id, packageId) => void open(id, packageId)}
-        onRenameBundle={
-          canCurate ? (
-            <WorkspaceName
-              kind="import"
-              id={reviewItem.id}
-              title={reviewItem.title ?? "Playlist"}
-              name={reviewItem.workspaceName}
-              onSaved={load}
-            />
-          ) : undefined
-        }
-        onBackToBundle={() => setReviewing(false)}
-      />
+            packageIds: Object.values(reviewItem.curation.items).flatMap((member) =>
+              member.packageId ? [member.packageId] : [],
+            ),
+          }}
+          onOpenSource={(id, packageId) => void open(id, packageId)}
+          onRenameBundle={
+            canCurate ? (
+              <WorkspaceName
+                kind="import"
+                id={reviewItem.id}
+                title={reviewItem.title ?? "Playlist"}
+                name={reviewItem.workspaceName}
+                onSaved={load}
+              />
+            ) : undefined
+          }
+          onBackToBundle={() => setReviewing(false)}
+        />
+      </>
     );
   if (
     !showForm &&

@@ -12,6 +12,9 @@ import {
   studioAssetName,
   studioClosingCardPlan,
   studioFileStatus,
+  validateStudioAiReviewEvidence,
+  validateStudioAsset,
+  validateStudioPresentationReview,
 } from "@satsang/distribution-domain";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -804,6 +807,141 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     expect(await studio.get(f.ctx, f.pkg.id)).not.toHaveProperty("leaseToken");
     await studio.failGeneration(c, "synthetic provider detail with secret");
     expect((await studio.get(f.ctx, f.pkg.id)).failure).toBe("GENERATION_FAILED");
+  });
+  it("previews only checked MP4s from the current job without making them submittable or exportable", async () => {
+    const f = await fixture({ channels: ["youtube"] });
+    const c = await claim(f.pkg);
+    const result = generated(f.pkg);
+    const output = result.outputs[0];
+    if (!output?.asset) throw Error("missing output");
+    output.generatedAt = new Date(
+      (await migration.query("SELECT clock_timestamp() AS now")).rows[0].now,
+    ).toISOString();
+    output.aiReview = {
+      status: "PASSED",
+      policyVersion: "content-integrity-v1",
+      provider: "gemini",
+      model: "synthetic",
+      recordedAt: output.generatedAt,
+      inputMode: "transcript_and_audio",
+      fileVersion: 1,
+      sourceSha256: f.pkg.source.sha256,
+      humanFeedbackConsidered: false,
+      checks: {
+        channel: "youtube",
+        language: "en",
+        openingComplete: true,
+        endingComplete: true,
+        contextComplete: true,
+        attributionCorrect: true,
+        captionsFaithful: true,
+        copySupported: true,
+        reason: "Complete synthetic teaching",
+      },
+    };
+    output.presentationReview = {
+      policy: "source-safe-portrait-v1",
+      sourceSha256: f.pkg.source.sha256,
+      renderedSha256: output.asset.sha256,
+      fileVersion: 1,
+      model: "fixture",
+      reviewedAt: output.generatedAt,
+      framing: "full-picture",
+      repairs: 0,
+      source: {
+        openingComplete: true,
+        endingComplete: true,
+        naturalStart: true,
+        naturalEnd: true,
+        reason: "Fixture",
+        scenes: [],
+      },
+      checks: {
+        illustrationsRelevant: true,
+        textIntact: true,
+        subjectIntact: true,
+        captionsClear: true,
+        naturalBoundaries: true,
+        reason: "Fixture",
+      },
+    };
+    validateStudioAsset(output.asset, {
+      masterId: f.pkg.source.masterId,
+      versionId: f.pkg.source.versionId,
+      packageId: f.pkg.id,
+      outputId: output.id,
+    });
+    validateStudioAiReviewEvidence(output.aiReview, {
+      ...output,
+      sourceSha256: f.pkg.source.sha256,
+      fileVersion: 1,
+    });
+    validateStudioPresentationReview(output.presentationReview, {
+      sourceSha256: f.pkg.source.sha256,
+      renderedSha256: output.asset.sha256,
+      fileVersion: 1,
+      durationMs: 2000,
+    });
+    const checkpoint = (value: unknown) =>
+      studio.checkpointGeneration(c, {
+        key: "output:youtube:en",
+        fingerprint: "a".repeat(64),
+        value,
+      });
+    await checkpoint(output);
+    const preview = await studio.get(f.ctx, f.pkg.id);
+    expect(preview.outputs).toEqual([]);
+    expect(preview.status).toBe("GENERATING");
+    expect(preview.generationPreviews).toHaveLength(1);
+    expect(preview.generationPreviews?.[0]?.title).toBe(output.title);
+    expect(
+      await studio.getOutputAsset(f.ctx, f.pkg.id, output.id, { kind: "asset", preview: true }),
+    ).toEqual(output.asset);
+    await expect(
+      studio.getOutputAsset(f.ctx, f.pkg.id, output.id, { kind: "asset" }),
+    ).rejects.toThrow("NOT_FOUND");
+    await expect(
+      studio.getOutputAsset(f.reviewer, f.pkg.id, output.id, {
+        kind: "asset",
+        preview: true,
+        forExport: true,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      studio.getOutputAsset({ ...f.ctx, isTest: false }, f.pkg.id, output.id, {
+        kind: "asset",
+        preview: true,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      studio.submit(f.ctx, f.pkg.id, { expectedRevision: preview.revision }),
+    ).rejects.toThrow();
+    await checkpoint({ ...output, generatedAt: "2020-01-01T00:00:00Z" });
+    expect((await studio.get(f.ctx, f.pkg.id)).generationPreviews).toEqual([]);
+    await checkpoint({
+      ...output,
+      aiReview: {
+        ...output.aiReview,
+        checks: { ...output.aiReview.checks, endingComplete: false },
+      },
+    });
+    expect((await studio.get(f.ctx, f.pkg.id)).generationPreviews).toEqual([]);
+    await checkpoint({
+      ...output,
+      presentationReview: { ...output.presentationReview, renderedSha256: "d".repeat(64) },
+    });
+    expect((await studio.get(f.ctx, f.pkg.id)).generationPreviews).toEqual([]);
+    await checkpoint(output);
+    const completed = await studio.completeGeneration(c, result);
+    expect(completed.accepted).toBe(true);
+    const done = await studio.get(f.ctx, f.pkg.id);
+    expect(done.generationPreviews ?? []).toEqual([]);
+    expect(done.outputs).toHaveLength(1);
+    expect(done.status).toBe("DRAFT");
+    // An open player keeps working when the render becomes a normal draft.
+    expect(
+      await studio.getOutputAsset(f.ctx, f.pkg.id, output.id, { kind: "asset", preview: true }),
+    ).toEqual(output.asset);
   });
   it("checkpoints are private, fenced by the lease, and reused across explicit retries without revisions", async () => {
     const f = await fixture();

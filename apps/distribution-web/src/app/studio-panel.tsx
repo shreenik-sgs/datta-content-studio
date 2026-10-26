@@ -39,6 +39,7 @@ import { PlaylistReviewNavigation } from "./playlist-review-navigation";
 import { SeriesNavigation } from "./series-navigation";
 import { StorageCleanup } from "./storage-cleanup";
 import { StudioCorrectionComparison, StudioCorrections } from "./studio-corrections";
+import { StudioGenerationPreviews } from "./studio-generation-previews";
 import { StudioGenerationProgressView } from "./studio-generation-progress";
 import { StudioHistory } from "./studio-history";
 import { StudioLineage } from "./studio-lineage";
@@ -552,6 +553,7 @@ export function StudioPanel({
   const [discarding, setDiscarding] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const latestLoad = useRef(0);
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
   const openedMaster = useRef(Boolean(initialPackageId));
   const [focusPublishing, setFocusPublishing] = useState(false);
   const errorPanel = useRef<HTMLDivElement>(null);
@@ -620,6 +622,7 @@ export function StudioPanel({
       if (generation === latestLoad.current) {
         setLoading(false);
         setRefreshError("");
+        setLastChecked(new Date().toISOString());
       }
     },
     [masterId, selectedId, scope, playlistId, inBundle],
@@ -816,6 +819,23 @@ export function StudioPanel({
           </button>
         </div>
         {error && <p role="alert">{error}</p>}
+        {lastChecked && (
+          <p className="muted">
+            Last checked: <time dateTime={lastChecked}>{formatTimestamp(lastChecked)}</time>
+          </p>
+        )}
+        {refreshError && (
+          <output className="notice">
+            <span>{refreshError} Displayed statuses may be out of date.</span>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void load(undefined, true).catch(() => {})}
+            >
+              Refresh progress
+            </button>
+          </output>
+        )}
         {loading ? (
           <output>Loading playlist files…</output>
         ) : (
@@ -1154,6 +1174,7 @@ export function StudioPanel({
           </button>
         </p>
       )}
+      {value && <StudioGenerationPreviews packages={[value]} />}
       {value?.generationProgress && (
         <div
           id={`${value.generationProgress.errorCode === value.failure ? "generation-issue" : "generation-progress"}-${value.id}`}

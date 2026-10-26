@@ -17,7 +17,7 @@ export async function GET(
       return json({ error: "NOT_FOUND" }, 404);
     z.string().uuid().parse(id);
     z.string().uuid().parse(outputId);
-    const options =
+    const kind =
       action === "captions"
         ? {
             kind: "caption" as const,
@@ -28,6 +28,10 @@ export async function GET(
         : action === "thumbnail"
           ? { kind: "thumbnail" as const }
           : { kind: "asset" as const, forExport: action === "download" };
+    const options = {
+      ...kind,
+      ...(new URL(request.url).searchParams.get("preview") === "1" ? { preview: true } : {}),
+    };
     const repo = studioRepository();
     const descriptor = await repo.getOutputAsset(auth.context, id, outputId, options);
     if (

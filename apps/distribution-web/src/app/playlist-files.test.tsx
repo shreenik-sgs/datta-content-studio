@@ -422,3 +422,42 @@ it.each(["submit", "approve", "post"] as const)(
     }
   },
 );
+
+it("shows completed MP4 previews during generation without adding them to selection or approval", async () => {
+  const { host, root } = setup();
+  const output = value.outputs[0];
+  if (!output) throw Error("missing fixture");
+  try {
+    await act(async () =>
+      root.render(
+        <PlaylistFiles
+          packages={[
+            {
+              ...first,
+              status: "GENERATING",
+              outputs: [],
+              generationPreviews: [{ ...output, title: "First rendered teaching" }],
+            },
+          ]}
+          canCurate
+          canReview
+          canPublish
+          onOpen={vi.fn()}
+          onPreview={vi.fn()}
+        />,
+      ),
+    );
+    const previews = host.querySelector('[aria-label="Completed MP4 previews"]');
+    expect(previews?.textContent).toContain("Ready to preview · 1 MP4");
+    expect(previews?.textContent).toContain("Nothing has been approved or posted");
+    expect(previews?.querySelector("video")?.getAttribute("src")).toBe(
+      `/distribution/api/studio/first/assets/${output.id}/media?preview=1`,
+    );
+    expect(previews?.querySelector("video")?.preload).toBe("none");
+    expect(previews?.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(previews?.querySelector("button")).toBeNull();
+    expect(host.textContent).toContain("0 files across 1 recordings");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

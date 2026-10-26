@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { runIsolatedMediaProcess } from "./renderer.js";
+import { withStudioMediaSlot } from "./studio-media-capacity.js";
 
 const MAX_INPUT_PIXELS = 16777216;
 export function validateStudioSourceDimensions(
@@ -65,18 +66,20 @@ export async function executeStudioSource(input: {
     "fd:",
     ...input.args.slice(index + 1),
   ];
-  const file = await open(input.sourcePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    return await runIsolatedMediaProcess({
-      executable: input.executable,
-      args,
-      cwd: input.directory,
-      deadline: Date.now() + input.timeoutMs,
-      inputFd: file.fd,
-      ...(input.output ? { output: input.output } : {}),
-      ...(input.signal ? { signal: input.signal } : {}),
-    });
-  } finally {
-    await file.close();
-  }
+  return withStudioMediaSlot(async () => {
+    const file = await open(input.sourcePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      return await runIsolatedMediaProcess({
+        executable: input.executable,
+        args,
+        cwd: input.directory,
+        deadline: Date.now() + input.timeoutMs,
+        inputFd: file.fd,
+        ...(input.output ? { output: input.output } : {}),
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+    } finally {
+      await file.close();
+    }
+  }, input.signal);
 }

@@ -28,6 +28,8 @@ import {
   studioSourceWithoutTeaching,
 } from "../lib/studio-source-outcome";
 import { useHubTimestamp } from "./hub-locale";
+import { SeriesGenerationProgress } from "./series-generation-progress";
+import { StudioGenerationPreviews } from "./studio-generation-previews";
 import { StudioSeriesActions } from "./studio-series-actions";
 import { WorkspaceName } from "./workspace-name";
 import "./studio-lineage.css";
@@ -199,6 +201,16 @@ export function PlaylistFiles({
             .join("")}
         </p>
       </div>
+      <SeriesGenerationProgress
+        items={packages.map((value) => ({
+          id: value.id,
+          title: studioSourceName(value),
+          status: value.status,
+          generationProgress: value.generationProgress,
+          failure: value.failure,
+        }))}
+      />
+      <StudioGenerationPreviews packages={packages} />
       {showHandoff && (canCurate || canReview) && (drafts.length > 0 || submitted.length > 0) && (
         <section className="panel" aria-label="Review handoff" style={{ marginBlock: 16 }}>
           <h4>Next action</h4>

@@ -1037,6 +1037,14 @@ select {
 .studio-video-frame video {
   display: block;
 }
+.generation-preview {
+  margin-block: 1rem;
+}
+.generation-preview .studio-video-frame video {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
 .studio-card-download {
   position: absolute;
   left: 13%;

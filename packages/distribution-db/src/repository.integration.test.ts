@@ -478,13 +478,30 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
     );
     expect(await studio.renewGeneration(claim)).toBe(true);
     await studio.checkpointGeneration(claim, {
-      progress: { phase: "reviewing", provider: "gemini", completed: 0, total: 1 },
+      progress: {
+        phase: "reviewing",
+        provider: "gemini",
+        completed: 0,
+        total: 1,
+        discoverySection: 27,
+        discoverySections: 29,
+      },
     });
     await studio.checkpointGeneration(claim, {
       key: "saved-analysis",
       fingerprint: "a".repeat(64),
       value: { complete: true },
     });
+    const live = (await imports.list(ctx, { rootId: parent.id })).find(
+      (item) => item.id === parent.id,
+    );
+    expect(live?.curation?.items[parent.childIds[0]]).toMatchObject({
+      status: "GENERATING",
+      outputCount: 0,
+      generationProgress: { phase: "reviewing", discoverySection: 27, discoverySections: 29 },
+    });
+    expect(JSON.stringify(live)).not.toContain("saved-analysis");
+    expect(await imports.list(other, { rootId: parent.id })).toEqual([]);
     await expect(studio.pausePlaylistSettings(reviewer, parent.id)).rejects.toThrow("FORBIDDEN");
     await expect(studio.pausePlaylistSettings(other, parent.id)).rejects.toThrow(
       "PLAYLIST_NOT_READY",
@@ -497,6 +514,10 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
     ).toBeNull();
     const paused = await studio.get(ctx, pkg.id);
     expect(paused.status).toBe("DRAFT");
+    const pausedPlan = (await imports.list(ctx, { rootId: parent.id })).find(
+      (item) => item.id === parent.id,
+    );
+    expect(pausedPlan?.curation?.items[parent.childIds[0]]?.generationProgress).toBeNull();
     await expect(
       studio.enqueueGeneration(ctx, pkg.id, { expectedRevision: paused.revision }),
     ).rejects.toThrow("PLAYLIST_SETTINGS_PAUSED");

@@ -42,6 +42,15 @@ export function publicStudioPackage(
 ): PublicStudioPackage {
   return {
     ...value,
+    generationPreviews: (value.generationPreviews ?? []).map((output) => ({
+      ...output,
+      asset: output.asset ? publicAsset(output.asset) : null,
+      ...(output.thumbnail ? { thumbnail: publicAsset(output.thumbnail) } : {}),
+      captions: output.captions.map((caption) => ({
+        ...caption,
+        asset: publicAsset(caption.asset),
+      })),
+    })),
     ...(workspaceName ? { workspaceName } : {}),
     failure:
       value.failure && /^[A-Z][A-Z0-9_]{0,99}$/.test(value.failure)

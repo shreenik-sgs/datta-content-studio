@@ -307,3 +307,91 @@ it("clears a transient progress failure after recovery without showing it as a f
     vi.useRealTimers();
   }
 });
+
+it("refreshes queued series into visible section progress and warns on a stale connection", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("React", React);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let phase = "queued";
+  const packages = Array.from({ length: 7 }, (_, index) => ({
+    ...value,
+    id: `job-${index}`,
+    outputs: [],
+    status: "QUEUED" as const,
+    source: { ...value.source, masterId: `master-${index}`, title: `Recording ${index + 1}` },
+  }));
+  const fetcher = vi.fn(async (_url: string, options?: RequestInit) => {
+    expect(options?.method ?? "GET").toBe("GET");
+    if (phase === "failed") throw Error("private provider diagnostic");
+    return Response.json({
+      packages: packages.map((pkg, index) =>
+        index === 0 && phase === "running"
+          ? {
+              ...pkg,
+              status: "GENERATING",
+              generationProgress: {
+                phase: "reviewing",
+                provider: "gemini",
+                completed: 0,
+                total: 1,
+                discoverySection: 27,
+                discoverySections: 29,
+              },
+            }
+          : pkg,
+      ),
+      publications: [],
+      readiness: {
+        generation: { available: true, translation: true },
+        publishing: { available: false },
+        channels: [],
+      },
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <StudioPanel
+          capabilities={["content.create"]}
+          bundle={{
+            title: "Bhagavat Katha",
+            playlistId: "series",
+            totalRecordings: 7,
+            masterIds: packages.map((pkg) => pkg.source.masterId),
+          }}
+        />,
+      ),
+    );
+    expect(host.textContent).toContain("0 processing · 7 queued");
+    phase = "running";
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    const progress = host.querySelector('[aria-label="Series generation progress"]');
+    expect(progress?.closest("details")).toBeNull();
+    expect(progress?.textContent).toContain("1 processing · 6 queued");
+    expect(progress?.textContent).toContain("Recording 1");
+    expect(progress?.textContent).toContain("Reviewing section 27 of 29");
+    expect(progress?.textContent).not.toContain("0 of 1 steps");
+    expect(progress?.querySelector("progress")?.value).toBe(26);
+    expect(host.textContent).toContain("Last checked:");
+    phase = "failed";
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(host.textContent).toContain("Displayed statuses may be out of date");
+    expect(host.textContent).not.toContain("private provider diagnostic");
+    expect(host.textContent).toContain("1 processing · 6 queued");
+    phase = "running";
+    await act(async () =>
+      [...host.querySelectorAll("button")]
+        .find((b) => b.textContent === "Refresh progress")
+        ?.click(),
+    );
+    expect(host.textContent).not.toContain("Displayed statuses may be out of date");
+    expect(host.textContent).toContain("1 processing · 6 queued");
+  } finally {
+    await act(async () => root.unmount());
+    vi.useRealTimers();
+  }
+});

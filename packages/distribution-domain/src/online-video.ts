@@ -1,5 +1,9 @@
 import type { ContentRights } from "./content";
-import type { StudioGenerationRequest, StudioPackage } from "./intelligent-content";
+import type {
+  StudioGenerationProgress,
+  StudioGenerationRequest,
+  StudioPackage,
+} from "./intelligent-content";
 
 export type PlaylistCuration = {
   pausedForCleanup?: boolean;
@@ -16,6 +20,8 @@ export type PlaylistCuration = {
       error?: string;
       status?: string;
       outputCount?: number;
+      /** Read-only live job progress; not a saved generation setting. */
+      generationProgress?: StudioGenerationProgress | null;
     }
   >;
 };

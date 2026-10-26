@@ -173,6 +173,8 @@ export function studioNeedsSuitabilityReview(code?: string | null): boolean {
   return code === "STUDIO_NO_SUITABLE_CHANNELS";
 }
 export type StudioPackage = {
+  /** Read-only renders from the current initial job; never eligible for editing or posting. */
+  generationPreviews?: StudioGenerationPreview[];
   id: string;
   isTest: boolean;
   revision: number;
@@ -197,6 +199,18 @@ export type StudioPackage = {
   createdAt: string;
   updatedAt: string;
 };
+export type StudioGenerationPreview = Pick<
+  StudioOutput,
+  | "id"
+  | "title"
+  | "channel"
+  | "language"
+  | "format"
+  | "generatedAt"
+  | "asset"
+  | "captions"
+  | "thumbnail"
+>;
 export type StudioPublicationStatus =
   | "QUEUED"
   | "RUNNING"

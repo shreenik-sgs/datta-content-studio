@@ -1,6 +1,7 @@
 import type {
   PostingCheck,
   StudioAsset,
+  StudioGenerationPreview,
   StudioOutput,
   StudioPackage,
   StudioPublication,
@@ -15,7 +16,13 @@ export type PublicStudioOutput = Omit<StudioOutput, "asset" | "captions" | "thum
   thumbnail?: PublicStudioAsset;
   captions: { language: StudioOutput["language"]; asset: PublicStudioAsset; translated: boolean }[];
 };
-export type PublicStudioPackage = Omit<StudioPackage, "outputs"> & {
+export type PublicStudioGenerationPreview = Omit<
+  StudioGenerationPreview,
+  "asset" | "captions" | "thumbnail"
+> &
+  Pick<PublicStudioOutput, "asset" | "captions" | "thumbnail">;
+export type PublicStudioPackage = Omit<StudioPackage, "outputs" | "generationPreviews"> & {
+  generationPreviews?: PublicStudioGenerationPreview[];
   /** Display-only organizing label, outside the immutable source snapshot. */
   workspaceName?: string | null;
   outputs: PublicStudioOutput[];

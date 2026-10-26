@@ -447,3 +447,69 @@ it("lets the curator pause an unfinished bundle and resume selected channels wit
   expect(locked.host.textContent).not.toContain("Pause and change channels");
   await act(async () => locked.root.unmount());
 });
+
+it("shows active discovery in the overview without expanding video details, and hides it when paused", async () => {
+  const item: OnlineImport = {
+    ...parent,
+    childIds: parent.childIds?.slice(0, 7) ?? [],
+    curation: {
+      requestedBy: "curator",
+      confirmedAt: parent.createdAt,
+      rights: {
+        owner: "owner",
+        authorizationBasis: "permission",
+        privacyClass: "PUBLIC",
+        territories: ["WORLDWIDE"],
+        channels: ["youtube"],
+        releaseAt: null,
+        expiresAt: null,
+      },
+      request: { languages: ["en"], channels: ["youtube"], captions: true, instructions: "" },
+      items: Object.fromEntries(
+        items.slice(0, 7).map((child, index) => [
+          child.id,
+          {
+            packageId: `package-${index}`,
+            status: index === 0 ? "GENERATING" : "QUEUED",
+            outputCount: 0,
+            generationProgress:
+              index === 0
+                ? {
+                    phase: "reviewing",
+                    provider: "gemini",
+                    completed: 0,
+                    total: 1,
+                    discoverySection: 27,
+                    discoverySections: 29,
+                  }
+                : null,
+          },
+        ]),
+      ),
+    },
+  };
+  const { host, root } = await mount(item, items.slice(0, 7));
+  try {
+    const progress = host.querySelector('[aria-label="Series generation progress"]');
+    expect(progress?.textContent).toContain("1 processing · 6 queued");
+    expect(progress?.textContent).toContain("Reviewing section 27 of 29");
+    expect(progress?.closest("details")).toBeNull();
+    if (!item.curation) throw Error("missing curation");
+    const paused = { ...item, curation: { ...item.curation, pausedForSettings: true } };
+    await act(async () =>
+      root.render(
+        <PlaylistCuration
+          item={paused}
+          items={items.slice(0, 7)}
+          busy={false}
+          send={vi.fn()}
+          open={vi.fn()}
+        />,
+      ),
+    );
+    expect(host.querySelector('[aria-label="Series generation progress"]')).toBeNull();
+    expect(host.textContent).toContain("Generation is paused");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

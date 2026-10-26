@@ -408,6 +408,9 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
     expect(
       JSON.stringify(publicStudioPackage({ ...pkg, failure: "secret account token" })),
     ).not.toContain("secret account token");
+    const rendered = publicStudioPackage({ ...pkg, generationPreviews: pkg.outputs });
+    expect(JSON.stringify(rendered.generationPreviews)).not.toContain("storageKey");
+    expect(JSON.stringify(rendered.generationPreviews)).not.toContain("identityKey");
     const publication = publicStudioPublication({
       id,
       packageId: id,

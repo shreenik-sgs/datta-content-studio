@@ -17,6 +17,7 @@ import { type FormEvent, useState } from "react";
 import { STUDIO_STATUS_LABELS, studioMessage } from "../lib/studio-model";
 import { BundleWorkflow } from "./bundle-workflow";
 import { ImportRecovery } from "./import-recovery";
+import { SeriesGenerationProgress } from "./series-generation-progress";
 
 export function PlaylistCuration({
   item,
@@ -235,6 +236,16 @@ export function PlaylistCuration({
             </p>
           )}
         </div>
+      )}
+      {plan && !plan.pausedForSettings && !removedContent && !completeOnly && (
+        <SeriesGenerationProgress
+          items={children.map((child) => ({
+            id: child.id,
+            title: child.workspaceName ?? child.title ?? "Recording",
+            ...plan.items[child.id],
+            failure: plan.items[child.id]?.error,
+          }))}
+        />
       )}
       {service && (
         <div className="notice" aria-live="polite">
@@ -511,16 +522,18 @@ export function PlaylistCuration({
             </button>
           </section>
         )}
-      {reviewable && onReview && (
+      {(reviewable || (planned > 0 && !plan?.pausedForSettings)) && onReview && (
         <div className="playlist-next-action">
           <p>
-            {canReview
-              ? "Review the files for each recording, approve or return them with comments, then publish approved content."
-              : "Check the generated files, make any corrections, then send each recording's content to the Content Approver."}{" "}
-            Approved files stay locked against editing.
+            {!reviewable
+              ? "Open the live workspace to watch completed MP4s as they become available."
+              : canReview
+                ? "Review the files for each recording, approve or return them with comments, then publish approved content."
+                : "Check the generated files, make any corrections, then send each recording's content to the Content Approver."}{" "}
+            {reviewable && "Approved files stay locked against editing."}
           </p>
           <button type="button" className="button primary" disabled={busy} onClick={onReview}>
-            Review curated content
+            {reviewable ? "Review curated content" : "View generation & previews"}
           </button>
         </div>
       )}

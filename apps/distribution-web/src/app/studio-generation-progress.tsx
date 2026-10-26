@@ -1,7 +1,6 @@
 import { DISTRIBUTION_LANGUAGE_NAMES } from "@satsang/distribution-contracts";
 import {
   type StudioGenerationProgress,
-  type StudioPackage,
   studioChannelLabel,
   studioContentReviewIssues,
   studioNeedsSuitabilityReview,
@@ -23,10 +22,11 @@ export function StudioGenerationProgressView({
   formatTimestamp,
 }: {
   value: StudioGenerationProgress;
-  status: StudioPackage["status"];
+  status: string;
   formatTimestamp: (value: string) => string;
 }) {
   const waiting = status === "QUEUED" || (status === "GENERATING" && Boolean(value.retryAt));
+  const discovering = Boolean(value.discoverySection && value.discoverySections);
   const issues = value.reviewIssues?.filter((issue) => studioContentReviewIssues([issue]).length);
   if (studioNeedsSuitabilityReview(value.errorCode))
     return (
@@ -75,19 +75,30 @@ export function StudioGenerationProgressView({
       ) : null}
       <progress
         style={{ width: "100%", maxWidth: 480 }}
-        aria-label="Completed work in this stage"
-        max={Math.max(1, value.total)}
-        value={value.completed}
+        aria-label={
+          discovering
+            ? "Sections before the current discovery section"
+            : "Completed work in this stage"
+        }
+        max={Math.max(1, discovering ? (value.discoverySections ?? 1) : value.total)}
+        value={discovering ? Math.max(0, (value.discoverySection ?? 1) - 1) : value.completed}
       />
-      <p>
-        {value.completed} of {value.total}{" "}
-        {value.phase === "drafting"
-          ? "drafting groups"
-          : value.phase === "rendering"
-            ? "files"
-            : "steps"}{" "}
-        complete.
-      </p>
+      {discovering ? (
+        <p>
+          Teaching discovery comes before video rendering. Files appear after rendering and quality
+          checks.
+        </p>
+      ) : (
+        <p>
+          {value.completed} of {value.total}{" "}
+          {value.phase === "drafting"
+            ? "drafting groups"
+            : value.phase === "rendering"
+              ? "files"
+              : "steps"}{" "}
+          complete.
+        </p>
+      )}
       {waiting && value.retryAt ? (
         <p>
           Waiting for the service. Retry scheduled for {formatTimestamp(value.retryAt)}. Completed

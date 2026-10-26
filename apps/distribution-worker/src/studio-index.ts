@@ -17,12 +17,14 @@ import { Pool } from "pg";
 import { runLiveCurationLoop } from "./live-curation-worker.js";
 import { runStorageCleanupLoop } from "./storage-cleanup-worker.js";
 import { studioCapacity } from "./studio-capacity.js";
+import { studioMediaCapacity } from "./studio-media-capacity.js";
 import { runStudioLoop } from "./studio-worker.js";
 import { runVerifiedOnlineImports } from "./verified-online-imports.js";
 
 async function main() {
   const env = process.env;
   const capacity = studioCapacity(env);
+  studioMediaCapacity(env);
   const mode = env.STUDIO_WORKER_MODE ?? "all";
   if (!["all", "imports", "generation"].includes(mode)) throw Error("INVALID_WORKER_MODE");
   if (
