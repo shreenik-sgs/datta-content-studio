@@ -40,6 +40,7 @@ export function StudioSeriesActions({
   const [confirmed, setConfirmed] = useState(false);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [error, setError] = useState("");
+  const [loadProgress, setLoadProgress] = useState({ completed: 0, total: 0 });
   const [results, setResults] = useState<SeriesResult[]>([]);
   const [finished, setFinished] = useState(false);
   const [accounts, setAccounts] = useState<Partial<Record<StudioChannel, string>>>({});
@@ -111,12 +112,15 @@ export function StudioSeriesActions({
     setConfirmed(false);
     setRightsConfirmed(false);
     setRows([]);
+    setLoadProgress({ completed: 0, total: 0 });
     setRequestedCount(selectedOutputIds.size);
     setAccounts({});
     try {
       const selectedIds = new Set(selectedOutputIds);
       const candidates = packages.filter((p) => p.outputs.some((o) => selectedIds.has(o.id)));
-      const prepared = await prepareSeriesRows(candidates, kind);
+      const prepared = await prepareSeriesRows(candidates, kind, (completed, total) =>
+        setLoadProgress({ completed, total }),
+      );
       setRows(
         prepared
           .filter((row) =>
@@ -138,7 +142,7 @@ export function StudioSeriesActions({
     } catch (e) {
       setError(
         e instanceof Error && e.message === "STUDIO_SERIES_LOAD_FAILED"
-          ? "Could not load the whole selection. No action was taken. Retry after the connection recovers."
+          ? "Could not finish checking the selection. No files were submitted or changed. Retry the check."
           : studioMessage(e instanceof Error ? e.message : "unavailable"),
       );
     } finally {
@@ -257,10 +261,15 @@ export function StudioSeriesActions({
             <output>
               {running
                 ? `Processing selection… ${results.length} results received. Keep this page open.`
-                : "Checking current states and permissions…"}
+                : `Checking current states and permissions… ${loadProgress.completed} of ${loadProgress.total} recordings checked.`}
             </output>
           )}
           {error && <p role="alert">{error}</p>}
+          {error && !busy && !finished && !rows.length && (
+            <button type="button" className="button" onClick={() => void prepare(action)}>
+              Retry check
+            </button>
+          )}
           {!busy && !rows.length && !error && (
             <p>
               {action === "retract"

@@ -32,26 +32,37 @@ export async function seriesRequest<T>(
   body?: unknown,
   timeoutMs = 30000,
 ): Promise<T> {
-  let response: Response;
-  let data: T & { error?: string };
-  try {
-    response = await fetch(path, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(timeoutMs),
-      ...(body === undefined
-        ? {}
-        : {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-    });
-    data = await response.json();
-  } catch {
-    throw Error(body === undefined ? "STUDIO_SERIES_LOAD_FAILED" : "STUDIO_ACTION_UNCONFIRMED");
+  // Retry only read-only preflight requests. A lost mutation response must
+  // remain unconfirmed, since the server may already have applied the action.
+  const attempts = body === undefined ? 2 : 1;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    let response: Response;
+    let data: T & { error?: string };
+    try {
+      response = await fetch(path, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
+        ...(body === undefined
+          ? {}
+          : {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            }),
+      });
+      if (!response.ok && [502, 503, 504].includes(response.status) && attempt + 1 < attempts) {
+        await response.body?.cancel();
+        continue;
+      }
+      data = await response.json();
+    } catch {
+      if (attempt + 1 < attempts) continue;
+      throw Error(body === undefined ? "STUDIO_SERIES_LOAD_FAILED" : "STUDIO_ACTION_UNCONFIRMED");
+    }
+    if (!response.ok) throw Error(data.error ?? "STUDIO_ACTION_UNCONFIRMED");
+    return data;
   }
-  if (!response.ok) throw Error(data.error ?? "STUDIO_ACTION_UNCONFIRMED");
-  return data;
+  throw Error("STUDIO_SERIES_LOAD_FAILED");
 }
 
 export const seriesActionName = {
@@ -79,14 +90,18 @@ export function seriesCandidates(packages: readonly PublicStudioPackage[], actio
 export async function prepareSeriesRows(
   packages: readonly PublicStudioPackage[],
   action: SeriesAction,
+  onProgress?: (completed: number, total: number) => void,
 ): Promise<SeriesRow[]> {
   const rows: SeriesRow[] = [];
   const candidates = seriesCandidates(packages, action);
+  onProgress?.(0, candidates.length);
   // On-demand, bounded reads; no channel polling and no mutation during selection.
   for (let i = 0; i < candidates.length; i += 4) {
     const chunk = await Promise.all(
       candidates.slice(i, i + 4).map(async (pkg) => {
-        const detail = await seriesRequest<StudioDetail>(`/distribution/api/studio/${pkg.id}`);
+        const detail = await seriesRequest<StudioDetail>(
+          `/distribution/api/studio/${pkg.id}?view=action`,
+        );
         const current = detail.package;
         if (!seriesCandidates([current], action).length) return [];
         const outputs = current.outputs.filter((o) => seriesFileEligible(current, o, action));
@@ -141,6 +156,7 @@ export async function prepareSeriesRows(
       }),
     );
     rows.push(...chunk.flat());
+    onProgress?.(Math.min(i + 4, candidates.length), candidates.length);
   }
   return rows;
 }
@@ -197,7 +213,7 @@ export async function runSeriesAction(
           });
       } else {
         const response = await seriesRequest<{ publications?: PublicStudioPublication[] }>(
-          `${base}/${action === "approve" ? "review" : action === "post" ? "publish" : "submit"}`,
+          `${base}/${action === "approve" ? "review?view=action" : action === "post" ? "publish" : "submit?view=action"}`,
           {
             expectedRevision: pkg.revision,
             outputIds: group.map((r) => r.outputId),

@@ -1,7 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { value } from "../app/studio-workflow-fixture";
 import type { StudioDetail } from "./studio-model";
-import { type SeriesRow, prepareSeriesRows, runSeriesAction } from "./studio-series-actions";
+import {
+  type SeriesRow,
+  prepareSeriesRows,
+  runSeriesAction,
+  seriesRequest,
+} from "./studio-series-actions";
 const detail: StudioDetail = {
   package: value,
   publications: [],
@@ -32,17 +37,42 @@ afterEach(() => vi.unstubAllGlobals());
 
 it("prepares all 49 recordings using reads only, ignoring excluded/empty or already submitted packages", async () => {
   const packages = Array.from({ length: 49 }, (_, i) => ({ ...value, id: `p-${i}` }));
-  const fetcher = vi.fn(async () => response(detail));
+  const fetcher = vi.fn(async (_url: string) => response(detail));
   vi.stubGlobal("fetch", fetcher);
+  const progress = vi.fn();
   const prepared = await prepareSeriesRows(
     [...packages, { ...value, outputs: [] }, { ...value, status: "IN_REVIEW" }],
     "submit",
+    progress,
   );
   expect(prepared).toHaveLength(49);
   expect(fetcher).toHaveBeenCalledTimes(49);
   expect(
     fetcher.mock.calls.every((args) => !(args as unknown as [string, RequestInit])[1]?.method),
   ).toBe(true);
+  expect(fetcher.mock.calls.every((args) => String(args[0]).endsWith("?view=action"))).toBe(true);
+  expect(progress).toHaveBeenLastCalledWith(49, 49);
+});
+it("recovers a transient preflight read without retrying authorization failures", async () => {
+  const fetcher = vi
+    .fn()
+    .mockRejectedValueOnce(new TypeError("connection interrupted"))
+    .mockResolvedValueOnce(response(detail))
+    .mockResolvedValueOnce(response({ error: "FORBIDDEN" }, 403));
+  vi.stubGlobal("fetch", fetcher);
+  expect(await seriesRequest("/read")).toEqual(detail);
+  await expect(seriesRequest("/read")).rejects.toThrow("FORBIDDEN");
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});
+it("retries a temporary gateway read once but fails closed if it still cannot load", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(new Response("Unavailable", { status: 502 }))
+    .mockRejectedValueOnce(new TypeError("connection interrupted"));
+  vi.stubGlobal("fetch", fetcher);
+  await expect(prepareSeriesRows([value], "submit")).rejects.toThrow("STUDIO_SERIES_LOAD_FAILED");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(fetcher.mock.calls.every((args) => args[1]?.method !== "POST")).toBe(true);
 });
 it("does not offer draft approval and reports pending corrections before submission", async () => {
   const fetcher = vi.fn(async () =>

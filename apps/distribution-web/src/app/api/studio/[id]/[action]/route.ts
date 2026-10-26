@@ -20,6 +20,7 @@ import { access } from "../../../../../lib/runtime";
 import {
   publicStudioPackage,
   publicStudioPublication,
+  publicStudioSummary,
   studioJson,
   studioProblem,
   studioRepository,
@@ -96,7 +97,11 @@ export async function POST(
             : action === "review"
               ? await repo.review(auth.context, id, studioReviewSchema.parse(body))
               : await repo.discard(auth.context, id, studioDiscardSchema.parse(body));
-    return json({ package: publicStudioPackage(value) });
+    return json({
+      package: (new URL(request.url).searchParams.get("view") === "action"
+        ? publicStudioSummary
+        : publicStudioPackage)(value),
+    });
   } catch (error) {
     return studioProblem(error);
   }

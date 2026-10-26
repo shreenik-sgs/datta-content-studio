@@ -6,6 +6,7 @@ import { access, distributionPool } from "../../../../lib/runtime";
 import {
   publicStudioPackage,
   publicStudioPublication,
+  publicStudioSummary,
   studioProblem,
   studioReadiness,
   studioRepository,
@@ -27,7 +28,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       studioReadiness(auth.context),
     ]);
     return json({
-      package: publicStudioPackage(value, master.workspaceName ?? undefined),
+      // Selection needs current revisions and eligibility, not every transcript and
+      // caption cue. Compute the same blockers below from the complete evidence.
+      package: (new URL(request.url).searchParams.get("view") === "action"
+        ? publicStudioSummary
+        : publicStudioPackage)(value, master.workspaceName ?? undefined),
       publications: publications.map(publicStudioPublication),
       readiness,
       reviewAssignment: auth.capabilities.includes("content.review")

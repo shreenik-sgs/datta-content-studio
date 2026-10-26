@@ -296,6 +296,28 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
     expect(complete.outputs[0].presentationReview).toEqual(output.presentationReview);
     expect(complete.outputs[0].captionCues).toEqual(output.captionCues);
     expect(complete.feedback).toEqual(sample.feedback);
+    const fullResponse = await (
+      await detail(new Request("http://localhost/api/studio"), {
+        params: Promise.resolve({ id }),
+      })
+    ).json();
+    const preflight = await (
+      await detail(new Request("http://localhost/api/studio?view=action"), {
+        params: Promise.resolve({ id }),
+      })
+    ).json();
+    expect(preflight.package.summaryOnly).toBe(true);
+    expect(preflight.package.provenance).toBeNull();
+    expect(preflight.package.outputs[0].captionCues).toBeUndefined();
+    expect(preflight.package.outputs[0].aiReview).toBeUndefined();
+    expect(preflight.package.id).toBe(fullResponse.package.id);
+    expect(preflight.package.revision).toBe(fullResponse.package.revision);
+    expect(preflight.outputBlockers).toEqual(fullResponse.outputBlockers);
+    expect(preflight.blockers).toEqual(fullResponse.blockers);
+    expect(preflight.publications).toEqual(fullResponse.publications);
+    expect(preflight.readiness).toEqual(fullResponse.readiness);
+    expect(preflight.reviewAssignment).toEqual(fullResponse.reviewAssignment);
+    expect(JSON.stringify(preflight).length).toBeLessThan(JSON.stringify(fullResponse).length);
     expect(sample).toEqual(before);
   });
   it("keeps series polling compact while preserving complete evidence on the detail endpoint", async () => {
@@ -479,6 +501,26 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
       (await action(request({ expectedRevision: 2, recipients: ["someone"] }), params("publish")))
         .status,
     ).toBe(400);
+  });
+  it("returns a compact bulk submission receipt after the same checked mutation", async () => {
+    const command = { expectedRevision: 2, outputIds: [outputId] };
+    const response = await action(
+      new Request("http://localhost/api/studio?view=action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(command),
+      }),
+      params("submit"),
+    );
+    expect(response.status).toBe(200);
+    const { package: receipt } = await response.json();
+    expect(receipt.id).toBe(pkg.id);
+    expect(receipt.revision).toBe(pkg.revision);
+    expect(receipt.provenance).toBeNull();
+    expect(receipt.outputs.map((o: { id: string }) => o.id)).toEqual([outputId]);
+    expect(m.submit).toHaveBeenCalledExactlyOnceWith(context, id, { ...command, comment: "" });
+    expect(m.access).toHaveBeenLastCalledWith(expect.any(Request), "content.create");
+    expect(pkg.provenance).not.toBeNull();
   });
   it("allows a creator or reviewer to discard but refuses unrelated capabilities", async () => {
     expect(

@@ -36,7 +36,7 @@ async function render(
         package: value,
         publications: [{ outputId: "file-two", packageRevision: 4, status: "QUEUED" }],
       });
-    const pkg = packages.find((p) => url.endsWith(p.id)) ?? packages[0] ?? value;
+    const pkg = packages.find((p) => url.split("?")[0]?.endsWith(p.id)) ?? packages[0] ?? value;
     if (url.includes("/content/"))
       return response({ content: { id: pkg.source.masterId, state: sourceState } });
     return response({
@@ -98,6 +98,22 @@ const posts = (fetcher: ReturnType<typeof vi.fn>) =>
   fetcher.mock.calls.filter((call) => call[1]?.method === "POST");
 const checks = (host: HTMLElement) =>
   host.querySelectorAll<HTMLInputElement>('dialog input[type="checkbox"]');
+
+it("lets the curator retry failed preparation without submitting any files", async () => {
+  await render([value], "curator", async (host, fetcher) => {
+    fetcher
+      .mockRejectedValueOnce(new TypeError("network"))
+      .mockRejectedValueOnce(new TypeError("network"));
+    await act(async () => button(host, "Submit Selected").click());
+    expect(host.textContent).toContain("No files were submitted or changed");
+    expect(button(host, "Confirm submit · 1 file")).toBeUndefined();
+    expect(posts(fetcher)).toHaveLength(0);
+    await act(async () => button(host, "Retry check").click());
+    expect(host.textContent).toContain("1 file in 1 recording ready");
+    expect(button(host, "Confirm submit · 1 file").disabled).toBe(true);
+    expect(posts(fetcher)).toHaveLength(0);
+  });
+});
 
 it("has one selected action, no All shortcut or second selection list, and submits only selected recordings", async () => {
   const second = {
@@ -227,9 +243,11 @@ it("cancel returns to the table; reopening requires fresh review and source-righ
 
 it("reports an unavailable preflight and allows returning to the unchanged selection", async () => {
   await render([value], "curator", async (host, fetcher) => {
-    fetcher.mockRejectedValueOnce(Error("offline"));
+    fetcher.mockRejectedValueOnce(Error("offline")).mockRejectedValueOnce(Error("offline"));
     await act(async () => button(host, "Submit Selected").click());
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain("No action was taken");
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      "No files were submitted or changed",
+    );
     expect(host.querySelector("dialog .primary")).toBeNull();
     await act(async () => button(host, "Cancel").click());
     expect(button(host, "Submit Selected").disabled).toBe(false);
