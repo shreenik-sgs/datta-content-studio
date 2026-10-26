@@ -78,7 +78,7 @@ export function StudioSeriesActions({
     ),
   ];
   const readiness = rows[0]?.detail.readiness;
-  const isTest = packages.every((p) => p.isTest);
+  const isTest = packages.length > 0 && packages.every((p) => p.isTest);
   const targets = channels.map((channel) => {
     const connection = readiness?.channels.find((c) => c.channel === channel);
     const id = accounts[channel] ?? connection?.accounts?.find((a) => a.isDefault)?.id;

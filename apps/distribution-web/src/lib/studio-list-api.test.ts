@@ -41,7 +41,7 @@ describe("Studio package list withdrawal visibility", () => {
         new Request(`http://localhost:3020/distribution/api/studio${query}`),
       );
       expect(response.status).toBe(200);
-      expect(m.list).toHaveBeenCalledWith(context, { includeWithdrawn });
+      expect(m.list).toHaveBeenCalledWith(context, { includeWithdrawn, summaryOnly: true });
     },
   );
   it.each(["yes", "1", "TRUE", ""])("refuses invalid withdrawal visibility %s", async (value) => {
@@ -66,6 +66,7 @@ describe("Studio package list withdrawal visibility", () => {
       masterId,
       status: "DISCARDED",
       includeWithdrawn: true,
+      summaryOnly: true,
     });
   });
 });

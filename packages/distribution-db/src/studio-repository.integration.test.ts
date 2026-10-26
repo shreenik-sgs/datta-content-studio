@@ -809,6 +809,24 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     await studio.failGeneration(c, "synthetic provider detail with secret");
     expect((await studio.get(f.ctx, f.pkg.id)).failure).toBe("GENERATION_FAILED");
   });
+  it("lists summary files without full transcripts while preserving detail evidence and generated dates", async () => {
+    const f = await fixture({ channels: ["youtube"] });
+    const completed = await draft(f);
+    const full = await studio.list(f.ctx, { masterId: f.master.id });
+    const summary = await studio.list(f.ctx, { masterId: f.master.id, summaryOnly: true });
+    expect(full).toHaveLength(1);
+    expect(summary).toHaveLength(1);
+    expect(full[0]?.provenance?.transcript.segments).toHaveLength(1);
+    expect(summary[0]?.provenance).toBeNull();
+    expect(summary[0]?.outputs.map((o) => o.id)).toEqual(completed.outputs.map((o) => o.id));
+    expect(summary[0]?.outputs[0]?.generatedAt).toBe(completed.provenance?.generatedAt);
+    expect(summary[0]?.feedback).toEqual(full[0]?.feedback);
+    expect(summary[0]?.status).toBe("DRAFT");
+    expect((await studio.get(f.ctx, f.pkg.id)).provenance).toEqual(full[0]?.provenance);
+    expect(
+      await studio.list({ ...f.ctx, isTest: false }, { masterId: f.master.id, summaryOnly: true }),
+    ).toEqual([]);
+  });
   it("retains checked MP4 previews across failures and retries without making them submittable or exportable", async () => {
     const f = await fixture({ channels: ["youtube"] });
     const c = await claim(f.pkg);
@@ -941,6 +959,10 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     const failed = await studio.get(f.ctx, f.pkg.id);
     expect(failed.status).toBe("FAILED");
     expect(failed.generationPreviews).toHaveLength(1);
+    const listed = await studio.list(f.ctx, { masterId: f.master.id, summaryOnly: true });
+    expect(listed[0]?.generationPreviews).toEqual(failed.generationPreviews);
+    expect(listed[0]?.generationProgress).toEqual(failed.generationProgress);
+    expect(listed[0]?.status).toBe("FAILED");
     expect(
       await studio.getOutputAsset(f.ctx, f.pkg.id, output.id, { kind: "asset", preview: true }),
     ).toEqual(output.asset);

@@ -20,6 +20,7 @@ function input() {
   const output = {
     id: "preview",
     channel: "youtube",
+    language: "en",
     generatedAt: "2026-10-25T00:00:00Z",
     body: `Teaching\nSubscribe to ${old.label}: ${old.url}`,
     presentationReview: {
@@ -51,6 +52,31 @@ it("repairs a saved card before resuming and invalidates render-cache reuse with
     }),
   );
   expect(entries["output:youtube:en"].value).toBe(output);
+});
+it("ignores preserved history and cache entries sharing a current preview's ID", () => {
+  const { pkg, entries, output } = input();
+  const current = {
+    ...output,
+    presentationReview: {
+      ...output.presentationReview,
+      closingCard: { ...output.presentationReview?.closingCard, youtubeClosing: target },
+    },
+  } as StudioOutput;
+  const history = { fingerprint: "saved-history", value: output };
+  expect(
+    studioPreviewClosingCandidates(pkg, {
+      ...entries,
+      "preview-history:preview:old": history,
+      "closing-refresh:preview": history,
+    }),
+  ).toHaveLength(1);
+  expect(
+    studioPreviewClosingCandidates(pkg, {
+      "output:youtube:en": { fingerprint: "current", value: current },
+      "preview-history:preview:old": history,
+      "closing-refresh:preview": history,
+    }),
+  ).toEqual([]);
 });
 it("does not re-render a matching card, change approved previews, or guess an absent footer", () => {
   const { pkg, entries, output } = input();

@@ -1,7 +1,7 @@
 import type { PrivateAssetStore } from "@satsang/distribution-assets";
 import { studioGenerationPreviews } from "@satsang/distribution-db";
 import type { StudioOutput, StudioPackage } from "@satsang/distribution-domain";
-import { replaceStudioYoutubeFooter } from "@satsang/distribution-domain";
+import { replaceStudioYoutubeFooter, studioOutputKey } from "@satsang/distribution-domain";
 import { studioFingerprint } from "./studio-checkpoints.js";
 import { refreshStudioClosingOutputs } from "./studio-closing-refresh.js";
 
@@ -19,6 +19,8 @@ export function studioPreviewClosingCandidates(pkg: StudioPackage, entries: Reco
     const target = pkg.request.youtubeClosing;
     if (
       !target ||
+      !output ||
+      key !== `output:${studioOutputKey(output)}` ||
       !visible.has(output?.id) ||
       output.channel !== "youtube" ||
       !before?.youtubeClosing ||

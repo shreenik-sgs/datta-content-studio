@@ -69,6 +69,24 @@ it("does not overwrite another worker's results after losing the lease", async (
   expect(repository.failGeneration).not.toHaveBeenCalled();
   expect(repository.completeGeneration).not.toHaveBeenCalled();
 });
+it("records safe failure locations without logging raw provider messages or tokens", async () => {
+  const error = new TypeError("Private token must never be logged");
+  error.stack =
+    "TypeError: Private token must never be logged\n at parse (/repo/apps/distribution-worker/src/studio-intelligence.ts:123:4)\n at https://example.test/?token=secret";
+  vi.mocked(generateStudioPackage).mockRejectedValue(error);
+  const onFailureDiagnostic = vi.fn();
+  await runStudioGenerationOnce({ ...input(), onFailureDiagnostic });
+  expect(onFailureDiagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      code: "GENERATION_FAILED",
+      errorType: "TypeError",
+      sourceLocations: ["apps/distribution-worker/src/studio-intelligence.ts:123:4"],
+    }),
+  );
+  expect(JSON.stringify(onFailureDiagnostic.mock.calls)).not.toMatch(
+    /Private token|example.test|secret/,
+  );
+});
 it("queues a timed retry for a drafting rate limit while retaining checkpoints", async () => {
   vi.mocked(generateStudioPackage).mockImplementation(async ({ checkpoints }) => {
     await checkpoints?.set("transcript", "a".repeat(64), { synthetic: true });

@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   try {
     const query = studioListSchema.parse(Object.fromEntries(new URL(request.url).searchParams));
     const repo = studioRepository();
-    const packages = (await repo.list(auth.context, query)).filter(
+    const packages = (await repo.list(auth.context, { ...query, summaryOnly: true })).filter(
       (item) => !query.status || item.status === query.status,
     );
     const [publications, readiness, names] = await Promise.all([

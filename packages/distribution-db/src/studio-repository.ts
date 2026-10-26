@@ -360,6 +360,95 @@ export function createIntelligentContentRepository(
     }
     return result;
   }
+  // A playlist must not perform four queries per recording or transfer every
+  // full transcript just to show its files. Detail/review reads still use load().
+  async function loadMany(
+    client: PoolClient,
+    isTest: boolean,
+    ids: string[],
+    summaryOnly: boolean,
+  ): Promise<StudioPackage[]> {
+    if (!ids.length) return [];
+    const rows = await client.query(
+      `SELECT p.id,CASE WHEN $3::boolean THEN r.snapshot - 'provenance'
+        ELSE r.snapshot END AS snapshot,
+        CASE WHEN $3::boolean THEN r.snapshot #>> '{provenance,generatedAt}' END AS generated_at
+       FROM distribution.studio_package p JOIN distribution.studio_revision r
+         ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision
+       WHERE p.id=ANY($1::uuid[]) AND p.is_test=$2 AND p.deleted_at IS NULL`,
+      [ids, isTest, summaryOnly],
+    );
+    const packages = new Map<string, StudioPackage>();
+    for (const row of rows.rows) {
+      const pkg = row.snapshot as StudioPackage;
+      pkg.feedback = [];
+      if (summaryOnly) {
+        pkg.provenance = null;
+        pkg.outputs = pkg.outputs.map((output) =>
+          output.generatedAt || !row.generated_at
+            ? output
+            : { ...output, generatedAt: row.generated_at },
+        );
+      }
+      packages.set(row.id, pkg);
+    }
+    if (packages.size !== ids.length) throw Error("NOT_FOUND");
+    const feedback = await client.query(
+      `SELECT * FROM distribution.studio_feedback WHERE package_id=ANY($1::uuid[])
+        AND is_test=$2 ORDER BY package_id,revision,created_at,id`,
+      [ids, isTest],
+    );
+    for (const row of feedback.rows)
+      packages.get(row.package_id)?.feedback.push({
+        id: row.id,
+        actorId: row.actor_id,
+        action: row.action,
+        comment: row.comment,
+        revision: row.revision,
+        createdAt: iso(row.created_at),
+      });
+    const pendingIds = [...packages.values()]
+      .filter((pkg) => ["QUEUED", "GENERATING", "FAILED"].includes(pkg.status))
+      .map((pkg) => pkg.id);
+    if (pendingIds.length) {
+      const jobs = await client.query(
+        `SELECT j.*,CASE WHEN j.status IN ('RUNNING','QUEUED','FAILED')
+          AND jsonb_array_length(r.snapshot->'outputs')=0
+          AND COALESCE(r.snapshot->'generation','null'::jsonb)='null'::jsonb
+          AND COALESCE(r.snapshot->'approval','null'::jsonb)='null'::jsonb
+          THEN (SELECT jsonb_object_agg(e.key,e.value)
+            FROM jsonb_each(p.generation_checkpoint) e WHERE e.key LIKE 'output:%')
+          ELSE NULL END AS previews
+         FROM (SELECT DISTINCT ON (package_id) package_id,package_revision,status,progress,created_at
+           FROM distribution.studio_generation_job WHERE package_id=ANY($1::uuid[]) AND is_test=$2
+           ORDER BY package_id,package_revision DESC) j
+         JOIN distribution.studio_package p ON p.id=j.package_id AND p.is_test=$2
+         JOIN distribution.studio_revision r ON r.package_id=p.id AND r.is_test=p.is_test AND r.revision=p.revision`,
+        [pendingIds, isTest],
+      );
+      const latest = new Map(jobs.rows.map((job) => [job.package_id, job]));
+      for (const id of pendingIds) {
+        const pkg = packages.get(id);
+        if (!pkg) throw Error("NOT_FOUND");
+        const job = latest.get(id);
+        if (job?.status === "RUNNING") pkg.status = "GENERATING";
+        pkg.generationProgress = job?.progress ?? null;
+        pkg.generationPreviews =
+          job &&
+          (job.package_revision === pkg.revision ||
+            (pkg.status === "FAILED" &&
+              job.status === "FAILED" &&
+              job.package_revision === pkg.revision - 1))
+            ? studioGenerationPreviews(pkg, iso(job.created_at), job.previews)
+            : [];
+      }
+    }
+    return ids.map((id) => {
+      const pkg = packages.get(id);
+      if (!pkg) throw Error("NOT_FOUND");
+      return pkg;
+    });
+  }
   async function save(
     client: PoolClient,
     pkg: StudioPackage,
@@ -1611,6 +1700,7 @@ export function createIntelligentContentRepository(
         status?: StudioPackage["status"] | undefined;
         includeWithdrawn?: boolean | undefined;
         playlistId?: string | undefined;
+        summaryOnly?: boolean;
       } = {},
     ) =>
       transaction(async (client) => {
@@ -1629,7 +1719,12 @@ export function createIntelligentContentRepository(
             input.playlistId ?? null,
           ],
         );
-        const values = await Promise.all(rows.rows.map((row) => load(client, ctx.isTest, row.id)));
+        const values = await loadMany(
+          client,
+          ctx.isTest,
+          rows.rows.map((row) => row.id),
+          input.summaryOnly ?? false,
+        );
         return input.status ? values.filter((value) => value.status === input.status) : values;
       }),
     enqueueGeneration: (

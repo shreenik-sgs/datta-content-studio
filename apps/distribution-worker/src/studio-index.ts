@@ -149,6 +149,10 @@ async function main() {
             isTest,
             workerId: `studio-${randomUUID()}`,
             signal: controller.signal,
+            onFailureDiagnostic: (diagnostic) =>
+              console.error(
+                JSON.stringify({ event: "studio.generation.diagnostic", ...diagnostic }),
+              ),
             onError: (code) =>
               console.error(JSON.stringify({ event: "studio.worker.error", code })),
           }),

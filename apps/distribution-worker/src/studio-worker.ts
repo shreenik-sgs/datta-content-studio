@@ -19,6 +19,14 @@ export type StudioWorkerInput = {
   env: Record<string, string | undefined>;
   signal: AbortSignal;
   onError?: (code: string) => void;
+  onFailureDiagnostic?: (diagnostic: {
+    code: string;
+    packageId?: string;
+    phase: string;
+    provider: string;
+    errorType: string;
+    sourceLocations: string[];
+  }) => void;
 };
 export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise<boolean> {
   const claim = await input.repository.claimGeneration({
@@ -93,6 +101,30 @@ export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise
       error instanceof Error && /^[A-Z_]{1,100}$/.test(error.message)
         ? error.message
         : "GENERATION_FAILED";
+    // Log source locations, never provider payloads, credentials, or raw error messages.
+    input.onFailureDiagnostic?.({
+      code,
+      ...(claim.package?.id ? { packageId: claim.package.id } : {}),
+      phase: progress.phase,
+      provider: progress.provider,
+      errorType:
+        error instanceof Error &&
+        ["Error", "TypeError", "RangeError", "SyntaxError", "AbortError", "TimeoutError"].includes(
+          error.name,
+        )
+          ? error.name
+          : "Error",
+      sourceLocations:
+        error instanceof Error
+          ? [
+              ...new Set(
+                error.stack?.match(
+                  /(?:apps\/distribution-worker|packages\/distribution-(?:db|domain|assets))\/src\/[a-zA-Z0-9_.-]+\.(?:ts|js):\d+:\d+/g,
+                ) ?? [],
+              ),
+            ].slice(0, 5)
+          : [],
+    });
     const retryDelay = error instanceof StudioProviderError ? error.retryAfterMs : 0;
     // Resume the same saved job at any setup stage; never recreate an uncertain creation POST.
     const resumable =

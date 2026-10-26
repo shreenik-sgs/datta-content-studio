@@ -582,8 +582,8 @@ export function StudioPanel({
   const load = useCallback(
     async (signal?: AbortSignal, preserveEdits = false) => {
       const requestSignal = signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
-        : AbortSignal.timeout(15000);
+        ? AbortSignal.any([signal, AbortSignal.timeout(30000)])
+        : AbortSignal.timeout(30000);
       const generation = ++latestLoad.current;
       const query = new URLSearchParams({ includeWithdrawn: "false" });
       if (masterId) query.set("masterId", masterId);
@@ -851,8 +851,12 @@ export function StudioPanel({
             </button>
           </output>
         )}
-        {loading ? (
-          <output>Loading playlist files…</output>
+        {!listing ? (
+          <output>
+            {loading
+              ? "Loading saved playlist files…"
+              : "The saved file list could not be loaded. Your files have not been removed. Use Refresh progress to try again."}
+          </output>
         ) : (
           <>
             {scope !== "complete" && (
