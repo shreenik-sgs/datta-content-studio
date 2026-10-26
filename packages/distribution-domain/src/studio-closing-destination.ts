@@ -29,6 +29,8 @@ export function prepareStudioYoutubeClosingRefresh(
   )
     throw Error("STUDIO_CLOSING_RETARGET_REQUIRES_RENDER");
   if (before.url === target.url && before.label === target.label) return pkg;
+  // A destination change cannot repair a recording with no suitable excerpt.
+  if (!pkg.outputs.length) return { ...pkg, request: { ...pkg.request, youtubeClosing: target } };
   const oldFooter = `Subscribe to ${before.label}: ${before.url}`;
   const newFooter = `Subscribe to ${target.label}: ${target.url}`;
   const outputs = pkg.outputs.map((output) => {

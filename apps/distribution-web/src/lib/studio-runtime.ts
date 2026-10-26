@@ -69,6 +69,25 @@ export function publicStudioPackage(
     })),
   };
 }
+/** Series polling must not transfer every full recording's transcript repeatedly.
+ * Detail and review endpoints still read the complete, unmodified evidence. */
+export function publicStudioSummary(
+  value: StudioPackage,
+  workspaceName?: string,
+): PublicStudioPackage {
+  const result = publicStudioPackage(value, workspaceName);
+  return {
+    ...result,
+    summaryOnly: true,
+    provenance: null,
+    outputs: result.outputs.map((output) => ({
+      ...output,
+      ...(output.generatedAt || !value.provenance?.generatedAt
+        ? {}
+        : { generatedAt: value.provenance.generatedAt }),
+    })),
+  };
+}
 export function publicStudioPublication(value: StudioPublication): PublicStudioPublication {
   const { accountId: _accountId, ...result } = value;
   let remoteUrl: string | null = null;

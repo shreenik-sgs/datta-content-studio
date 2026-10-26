@@ -4,6 +4,7 @@ import { access } from "../../../lib/runtime";
 import {
   publicStudioPackage,
   publicStudioPublication,
+  publicStudioSummary,
   studioJson,
   studioProblem,
   studioReadiness,
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
       ),
     ]);
     return json({
-      packages: packages.map((p) => publicStudioPackage(p, names[p.source.masterId])),
+      packages: packages.map((p) => publicStudioSummary(p, names[p.source.masterId])),
       publications: publications.map(publicStudioPublication),
       readiness,
     });

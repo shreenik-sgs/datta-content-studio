@@ -22,6 +22,8 @@ export type PublicStudioGenerationPreview = Omit<
 > &
   Pick<PublicStudioOutput, "asset" | "captions" | "thumbnail">;
 export type PublicStudioPackage = Omit<StudioPackage, "outputs" | "generationPreviews"> & {
+  /** Lists omit transcript/analysis evidence; open the package to load review details. */
+  summaryOnly?: true;
   generationPreviews?: PublicStudioGenerationPreview[];
   /** Display-only organizing label, outside the immutable source snapshot. */
   workspaceName?: string | null;

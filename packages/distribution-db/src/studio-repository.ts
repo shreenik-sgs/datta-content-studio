@@ -1010,6 +1010,10 @@ export function createIntelligentContentRepository(
           ).rowCount
         )
           throw Error("STUDIO_DESTINATION_BUSY");
+        if (!prepared.outputs.length)
+          return save(client, pkg, ctx.userId, "CLOSING_DESTINATION_UPDATED", {
+            request: prepared.request,
+          });
         // Reopen review without changing any reviewed content, then append the new
         // destination and enqueue its closing-only render in the SAME transaction.
         const reopened = await save(client, pkg, ctx.userId, "CLOSING_REVIEW_REOPENED", {

@@ -193,6 +193,26 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
     expect(data.blockers).not.toContain("NATIVE_REVIEWER_REQUIRED");
     expect(m.review).not.toHaveBeenCalled();
   });
+  it("keeps series polling compact while preserving complete evidence on the detail endpoint", async () => {
+    const original = structuredClone(pkg);
+    const listing = await (await GET(new Request("http://localhost/api/studio"))).json();
+    const summary = listing.packages[0];
+    expect(summary.summaryOnly).toBe(true);
+    expect(summary.provenance).toBeNull();
+    expect(summary.outputs[0].generatedAt).toBe(pkg.provenance?.generatedAt);
+    expect(summary.outputs[0].id).toBe(outputId);
+    expect(summary.outputs[0].asset.sha256).toBe(descriptor.sha256);
+    expect(summary.status).toBe(pkg.status);
+    expect(summary.revision).toBe(pkg.revision);
+    const response = await detail(new Request("http://localhost/api/studio"), {
+      params: Promise.resolve({ id }),
+    });
+    const complete = await response.json();
+    expect(complete.package.summaryOnly).toBeUndefined();
+    expect(complete.package.provenance).toEqual(pkg.provenance);
+    expect(pkg).toEqual(original);
+    expect(m.review).not.toHaveBeenCalled();
+  });
   it("requires publishing authority for retraction and rejects empty selections", async () => {
     const result = await action(
       request({ expectedRevision: 2, publicationIds: [] }),

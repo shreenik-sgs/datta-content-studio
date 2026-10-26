@@ -109,6 +109,22 @@ it("prepares a handle-bearing card for rendering without rewriting old visual ev
     ),
   ).toThrow("INVALID_STUDIO_TRANSITION");
 });
+it("does not claim that changing the destination repairs a failed excerpt selection", () => {
+  const pkg = {
+    ...fixture(),
+    outputs: [],
+    status: "FAILED" as const,
+    failure: "STUDIO_NO_SUITABLE_CHANNELS",
+  };
+  const next = prepareStudioYoutubeClosingRefresh(pkg, STUDIO_BALA_YOUTUBE_CLOSING, {
+    userId: "admin",
+    at: "2026-10-26T00:00:00Z",
+  });
+  expect(next.status).toBe("FAILED");
+  expect(next.failure).toBe(pkg.failure);
+  expect(next.request.youtubeClosing).toEqual(STUDIO_BALA_YOUTUBE_CLOSING);
+  expect(next.outputs).toEqual([]);
+});
 it.each<StudioStatus>(["APPROVED", "IN_REVIEW", "DISCARDED", "QUEUED", "GENERATING"])(
   "refuses changes to %s packages",
   (status) => {
