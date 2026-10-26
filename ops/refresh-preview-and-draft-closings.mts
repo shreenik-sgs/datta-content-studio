@@ -60,6 +60,8 @@ const store = createAssetStore(env);
 const identity = `${Date.now()}`;
 let backedUp = false;
 const completed: unknown[] = [];
+const reportedFailures = new Set<string>();
+let finished = false;
 const evidence = (pkg: StudioPackage, output: StudioOutput) => ({
   packageId: pkg.id,
   outputId: output.id,
@@ -121,6 +123,7 @@ try {
       backedUp = true;
     }
     let pending = 0;
+    const blocked: { packageId: string; failure: unknown }[] = [];
     for (const { snapshot: pkg, generation_checkpoint: entries } of rows) {
       try {
         if (["QUEUED", "GENERATING", "FAILED"].includes(pkg.status) && !pkg.outputs.length) {
@@ -157,8 +160,14 @@ try {
                 console.info(JSON.stringify({ previewUpdated: (after.value as StudioOutput).id }));
               },
             });
-          if (pkg.status === "FAILED") throw Error(`SOURCE_FAILED:${pkg.id}:${pkg.failure}`);
-          pending++;
+          if (pkg.status === "FAILED") {
+            const failure = { packageId: pkg.id, failure: pkg.failure };
+            blocked.push(failure);
+            if (!reportedFailures.has(pkg.id)) {
+              console.info(JSON.stringify({ sourceFailed: failure, generationUnchanged: true }));
+              reportedFailures.add(pkg.id);
+            }
+          } else pending++;
           continue;
         }
         const mismatched = pkg.outputs.filter(
@@ -213,10 +222,22 @@ try {
       JSON.stringify({
         at: new Date().toISOString(),
         pendingRecordings: pending,
+        blockedRecordings: blocked,
         verifiedReplacements: completed.length,
       }),
     );
     if (!pending) {
+      if (blocked.length) {
+        if (apply)
+          await writeFile(
+            join(directory ?? "", "blocked-recordings.json"),
+            JSON.stringify({ at: new Date().toISOString(), bundleId, target, blocked, completed }),
+            { mode: 0o600 },
+          );
+        if (apply) throw Error("SOURCE_GENERATION_FAILED_AVAILABLE_CARDS_REPAIRED");
+        finished = true;
+        break;
+      }
       if (apply) {
         if (rows.some(({ snapshot: p }) => p.approval || p.status !== "DRAFT"))
           throw Error("REVIEW_STATE_CHANGED");
@@ -243,10 +264,12 @@ try {
           { mode: 0o600 },
         );
       }
+      finished = true;
       break;
     }
     if (watch) await wait(60000);
   }
+  if (watch && !finished) throw Error("CLOSING_MAINTENANCE_TIMED_OUT");
 } finally {
   await pool.end();
 }
