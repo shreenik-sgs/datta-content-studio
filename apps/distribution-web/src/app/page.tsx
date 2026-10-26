@@ -53,7 +53,8 @@ export default async function DistributionHome({
       ["content.create", "content.review", "content.publish"].includes(capability),
     )
   ) {
-    redirect("/distribution/settings");
+    // Next adds the configured /distribution basePath to server-page redirects.
+    redirect("/settings");
   }
   return (
     <ContentLibrary

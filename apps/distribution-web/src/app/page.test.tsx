@@ -40,8 +40,8 @@ it("lands settings-only Admins in Settings even when an old bookmark selects cur
         bundle: "87aac715-58c4-444c-913b-0780ab5106a6",
       }),
     }),
-  ).rejects.toThrow("Redirect: /distribution/settings");
-  expect(mocks.redirect).toHaveBeenCalledWith("/distribution/settings");
+  ).rejects.toThrow("Redirect: /settings");
+  expect(mocks.redirect).toHaveBeenCalledWith("/settings");
   expect(mocks.access).toHaveBeenCalledTimes(1);
 });
 
