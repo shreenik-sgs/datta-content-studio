@@ -37,6 +37,7 @@ import {
   studioKnownPostingMatch,
   studioNeedsSuitabilityReview,
   studioPackageBlockers,
+  studioPublishingFormatBlock,
   studioRetractionDecision,
   studioSelectedOutputs,
   studioSourceMatches,
@@ -727,6 +728,12 @@ export function createIntelligentContentRepository(
     publishing = true,
     outputIds?: string[],
   ) {
+    if (publishing) {
+      for (const output of studioSelectedOutputs(pkg.outputs, outputIds)) {
+        const block = studioPublishingFormatBlock(output);
+        if (block) throw Error(block);
+      }
+    }
     if (pkg.outputs.some((o) => o.workflow)) {
       active(pkg);
       const selected = studioSelectedOutputs(pkg.outputs, outputIds);
@@ -914,6 +921,7 @@ export function createIntelligentContentRepository(
       channels: [...input.request.channels],
       instructions: input.request.instructions.trim(),
       captions: input.request.captions,
+      ...(input.request.youtubeFormat ? { youtubeFormat: input.request.youtubeFormat } : {}),
       ...(input.request.sourceBranding ? { sourceBranding: input.request.sourceBranding } : {}),
       ...(input.request.youtubeClosing
         ? { youtubeClosing: studioYoutubeClosing(input.request.youtubeClosing) }
@@ -1881,7 +1889,7 @@ export function createIntelligentContentRepository(
             included: edit.included,
             sourceSegmentIds,
             ...(sourceTrim !== undefined ? { sourceTrim } : {}),
-            ...(["short", "reel"].includes(output.format)
+            ...(["short", "reel", "video"].includes(output.format)
               ? { startMs: range.startMs, endMs: range.endMs }
               : {}),
             ...(captionCues ? { captionCues } : {}),

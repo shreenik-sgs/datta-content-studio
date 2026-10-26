@@ -23,7 +23,7 @@ export function appendStudioMessage(
 ): StudioOutput[] {
   if (!studioCanEdit(pkg.status, ["content.create"])) throw new Error("INVALID_STUDIO_TRANSITION");
   if (!pkg.provenance) throw new Error("GENERATION_REQUIRED");
-  if (!input.messageId || !["short", "reel"].includes(input.format))
+  if (!input.messageId || !["short", "reel", "video"].includes(input.format))
     throw new Error("INVALID_STUDIO_MESSAGE");
   const range = studioSourceRange(input.sourceSegmentIds, pkg.provenance.transcript, input.format);
   if (

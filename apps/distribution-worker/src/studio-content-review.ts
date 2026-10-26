@@ -151,7 +151,7 @@ export async function reviewStudioContent(
       ...input.transcript,
       // A reviewer with the entire story can unconsciously supply missing setup
       // or overlook an interruption. Assess exactly what this viewer will hear.
-      segments: videos.every((video) => ["short", "reel"].includes(video.format))
+      segments: videos.every((video) => ["short", "reel", "video"].includes(video.format))
         ? input.transcript.segments.filter((segment) =>
             videos.some((video) => video.sourceSegmentIds.includes(segment.id)),
           )
@@ -160,7 +160,7 @@ export async function reviewStudioContent(
     // Excluded speech is never part of the viewer's experience. It can reveal a qualification
     // which makes a superficially complete final assertion misleading when heard alone.
     excludedBoundaryContext: videos
-      .filter((video) => ["short", "reel"].includes(video.format))
+      .filter((video) => ["short", "reel", "video"].includes(video.format))
       .map((video) => {
         const first = input.transcript.segments.findIndex(
           (s) => s.id === video.sourceSegmentIds[0],
@@ -193,7 +193,7 @@ export async function reviewStudioContent(
     captionGenerationRequested: input.pkg.request.captions,
     outputs: videos.map(({ rationale: _rationale, ...video }) => ({
       ...video,
-      selectedClip: ["short", "reel"].includes(video.format)
+      selectedClip: ["short", "reel", "video"].includes(video.format)
         ? (() => {
             const range = studioSourceRange(
               video.sourceSegmentIds,
@@ -204,11 +204,11 @@ export async function reviewStudioContent(
             return { ...range, durationMs: range.endMs - range.startMs };
           })()
         : null,
-      maximumVideoDurationMs: ["short", "reel"].includes(video.format)
-        ? studioVideoDurationLimitMs(video.channel)
+      maximumVideoDurationMs: ["short", "reel", "video"].includes(video.format)
+        ? studioVideoDurationLimitMs(video.channel, video.format)
         : null,
       captions:
-        ["short", "reel"].includes(video.format) && input.pkg.request.captions
+        ["short", "reel", "video"].includes(video.format) && input.pkg.request.captions
           ? studioSourceRange(
               video.sourceSegmentIds,
               input.transcript,
@@ -310,7 +310,7 @@ export async function reviewStudioContent(
     if (
       !input.pkg.request.captions ||
       output?.language !== "en" ||
-      !["short", "reel"].includes(output.format)
+      !["short", "reel", "video"].includes(output.format)
     )
       return check;
     const untranslated = studioSourceRange(

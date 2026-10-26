@@ -58,12 +58,17 @@ export const STUDIO_COPY_LIMITS: Record<StudioChannel, number> = {
 };
 /** Facebook is published as a Reel through Buffer, which accepts at most 90 seconds.
  * https://support.buffer.com/articles/sharing-videos-through-buffer-LOe2p2rnAI */
-export function studioVideoDurationLimitMs(channel: StudioChannel): number {
+export const STUDIO_STORY_MAX_DURATION_MS = 30 * 60_000;
+export function studioVideoDurationLimitMs(channel: StudioChannel, format?: StudioFormat): number {
+  if (channel === "youtube" && format === "video") return STUDIO_STORY_MAX_DURATION_MS;
   return channel === "facebook" ? 90_000 : 180_000;
 }
 /** New source selection reserves the clean ending without truncating speech later. */
-export function studioVideoSourceDurationLimitMs(channel: StudioChannel): number {
-  return studioVideoDurationLimitMs(channel) - STUDIO_CLOSING_HOLD_MS;
+export function studioVideoSourceDurationLimitMs(
+  channel: StudioChannel,
+  format?: StudioFormat,
+): number {
+  return studioVideoDurationLimitMs(channel, format) - STUDIO_CLOSING_HOLD_MS;
 }
 export function studioCopyLength(channel: StudioChannel, text: string): number {
   return ["telegram", "whatsapp"].includes(channel) ? text.length : [...text].length;
@@ -275,7 +280,7 @@ export function studioSourceRange(
   const segments = indices.map((i) => transcript.segments[i] as StudioSegment);
   if (trim != null) {
     if (
-      !["short", "reel"].includes(format) ||
+      !["short", "reel", "video"].includes(format) ||
       !Number.isSafeInteger(trim.startMs) ||
       !Number.isSafeInteger(trim.endMs) ||
       trim.startMs < (segments[0] as StudioSegment).startMs ||
@@ -299,9 +304,12 @@ export function studioSourceRange(
     segments,
   };
 }
-export const studioFormatForChannel = (channel: StudioChannel): StudioFormat =>
+export const studioFormatForChannel = (
+  channel: StudioChannel,
+  request?: StudioGenerationRequest,
+): StudioFormat =>
   channel === "youtube"
-    ? "short"
+    ? (request?.youtubeFormat ?? "short")
     : ["instagram", "facebook", "tiktok"].includes(channel)
       ? "reel"
       : channel === "website" || channel === "reddit"
@@ -329,7 +337,7 @@ export function validateStudioPlan(
       !pkg.request.languages.includes(output.language) ||
       !STUDIO_CHANNELS.includes(output.channel) ||
       !STUDIO_LANGUAGES.includes(output.language) ||
-      output.format !== studioFormatForChannel(output.channel)
+      output.format !== studioFormatForChannel(output.channel, pkg.request)
     )
       throw new Error("INVALID_STUDIO_PLAN");
     if (
@@ -364,10 +372,12 @@ export function validateStudioPlan(
     if (pkg.source.liveWindow && range.startMs >= pkg.source.liveWindow.ownedEndMs)
       throw new Error("STUDIO_LIVE_OVERLAP");
     if (
-      (output.format === "short" || output.format === "reel") &&
-      range.endMs - range.startMs > studioVideoDurationLimitMs(output.channel)
+      ["short", "reel", "video"].includes(output.format) &&
+      range.endMs - range.startMs > studioVideoDurationLimitMs(output.channel, output.format)
     )
       throw new Error("STUDIO_CLIP_TOO_LONG");
+    if (output.format === "video" && range.endMs - range.startMs <= 180_000)
+      throw new Error("STUDIO_STORY_TOO_SHORT");
   }
   if (pkg.request.allCompleteMessages) validateStudioMessagePassages(plan.outputs);
   const translated = new Set<string>();
@@ -392,7 +402,7 @@ export function validateStudioPlan(
       ids.add(segment.id);
     }
     for (const o of plan.outputs.filter(
-      (o) => o.language === translation.language && (o.format === "short" || o.format === "reel"),
+      (o) => o.language === translation.language && ["short", "reel", "video"].includes(o.format),
     )) {
       if (
         studioSourceRange(o.sourceSegmentIds, transcript, o.format, o.sourceTrim).segments.some(
@@ -405,7 +415,7 @@ export function validateStudioPlan(
   for (const o of plan.outputs) {
     if (
       o.language !== transcript.language &&
-      (o.format === "short" || o.format === "reel") &&
+      ["short", "reel", "video"].includes(o.format) &&
       !translated.has(o.language)
     )
       throw new Error("STUDIO_TRANSLATION_INCOMPLETE");
@@ -438,7 +448,7 @@ export function validateStudioPlan(
 export function validateStudioMessagePassages(outputs: StudioPlan["outputs"]): void {
   const passages = new Set<string>();
   const messages = new Map<string, string>();
-  for (const output of outputs.filter((o) => ["short", "reel"].includes(o.format))) {
+  for (const output of outputs.filter((o) => ["short", "reel", "video"].includes(o.format))) {
     if (!output.messageId) throw new Error("INVALID_STUDIO_MESSAGE");
     const ids = JSON.stringify(output.sourceSegmentIds);
     const key = `${output.channel}:${output.language}:${ids}`;
@@ -457,6 +467,7 @@ export function createLocalStudioPlan(
 ): StudioPlan {
   if (pkg.request.languages.some((l) => l !== transcript.language))
     throw new Error("STUDIO_TRANSLATION_PROVIDER_REQUIRED");
+  if (pkg.request.youtubeFormat === "video") throw Error("STUDIO_STORY_PROVIDER_REQUIRED");
   const first = transcript.segments[0];
   if (!first) throw new Error("STUDIO_TRANSCRIPT_REQUIRED");
   const selected: StudioSegment[] = [];
@@ -476,11 +487,11 @@ export function createLocalStudioPlan(
       });
       continue;
     }
-    const format = studioFormatForChannel(channel);
+    const format = studioFormatForChannel(channel, pkg.request);
     if (
-      (format === "short" || format === "reel") &&
+      ["short", "reel", "video"].includes(format) &&
       (selected[selected.length - 1]?.endMs ?? first.endMs) - first.startMs >
-        studioVideoSourceDurationLimitMs(channel)
+        studioVideoSourceDurationLimitMs(channel, format)
     ) {
       plan.skippedChannels.push({
         channel,
@@ -512,4 +523,13 @@ export function createLocalStudioPlan(
   }
   validateStudioPlan(plan, pkg, transcript);
   return plan;
+}
+
+/** Buffer currently accepts only Shorts for YouTube; regular videos remain downloadable drafts. */
+export function studioPublishingFormatBlock(
+  output: Pick<import("./intelligent-content").StudioOutput, "channel" | "format">,
+): string | null {
+  return output.channel === "youtube" && output.format === "video"
+    ? "STUDIO_LONG_VIDEO_MANUAL_UPLOAD"
+    : null;
 }

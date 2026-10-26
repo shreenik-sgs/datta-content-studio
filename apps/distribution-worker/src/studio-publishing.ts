@@ -15,6 +15,7 @@ import {
   studioChannelPostingMatches,
   studioFileApproval,
   studioPublicationMatchesFile,
+  studioPublishingFormatBlock,
 } from "@satsang/distribution-domain";
 import {
   type StudioProviderCheckpoint,
@@ -183,6 +184,11 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
       });
       return true;
     }
+    const formatBlock = studioPublishingFormatBlock(claim.output);
+    if (formatBlock) {
+      await finish({ status: "BLOCKED", error: formatBlock });
+      return true;
+    }
     const config = await loadStudioProviderConfig(studioSettingsPath(ports.env, false));
     const candidates = config.accounts.filter((entry) => entry.platform === claim.output.channel);
     // A queued choice is immutable. Legacy unbound jobs are safe only with one destination.
@@ -216,12 +222,11 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
         savedCheckpoint.providerPostId !== claim.publication.remoteId)
     )
       throw new Error("PUBLISHING_ACCOUNT_CHANGED");
-    const kind =
-      claim.output.format === "short" || claim.output.format === "reel"
-        ? "video"
-        : claim.output.asset.mimeType.startsWith("image/")
-          ? "image"
-          : "text";
+    const kind = ["short", "reel", "video"].includes(claim.output.format)
+      ? "video"
+      : claim.output.asset.mimeType.startsWith("image/")
+        ? "image"
+        : "text";
     let media: StudioPublicationInput["media"];
     if (kind === "video" || kind === "image") {
       const expiresAt = Date.parse(claim.publication.createdAt) + 24 * 60 * 60 * 1000;

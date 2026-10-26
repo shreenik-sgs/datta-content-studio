@@ -28,6 +28,7 @@ export const studioGenerationRequestSchema = z
     channels: z.array(z.enum(STUDIO_CHANNELS)).min(1).max(STUDIO_CHANNELS.length).refine(unique),
     captions: z.boolean(),
     allCompleteMessages: z.boolean().optional(),
+    youtubeFormat: z.enum(["short", "video"]).optional(),
     youtubeClosing: youtubeClosing.optional(),
     sourceBranding: z.literal("bala-swamiji").optional(),
   })

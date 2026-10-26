@@ -23,7 +23,7 @@ export const STUDIO_CHANNELS = [
 export type StudioChannel = (typeof STUDIO_CHANNELS)[number];
 export const STUDIO_LANGUAGES = ["en", "hi", "te", "kn", "ta", "ml", "gu", "sa"] as const;
 export type StudioLanguage = (typeof STUDIO_LANGUAGES)[number];
-export type StudioFormat = "short" | "reel" | "post" | "blog";
+export type StudioFormat = "short" | "reel" | "video" | "post" | "blog";
 export type StudioStatus =
   | "QUEUED"
   | "GENERATING"
@@ -101,6 +101,8 @@ export type StudioOutput = {
   warnings: string[];
 };
 export type StudioGenerationRequest = {
+  /** Format for newly discovered YouTube passages; omitted legacy requests remain Shorts. */
+  youtubeFormat?: "short" | "video" | undefined;
   sourceBranding?: import("./studio-source-branding").StudioSourceBranding | undefined;
   youtubeClosing?: import("./studio-ending").StudioYoutubeClosing | undefined;
   /** Legacy requests omit this; new curation discovers every suitable complete message. */
@@ -344,4 +346,10 @@ export function studioPublishingAccounts(
     if (account) result[channel] = account.id;
   }
   return result;
+}
+
+export function studioOutputChannelLabel(output: Pick<StudioOutput, "channel" | "format">): string {
+  return output.channel === "youtube" && output.format === "video"
+    ? "YouTube video"
+    : studioChannelLabel(output.channel);
 }

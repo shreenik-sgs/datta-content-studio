@@ -128,6 +128,10 @@ const messages: Record<string, string> = {
     "The account chosen for this publishing request is no longer available. Ask an administrator to restore its connection; the request will not switch to another account.",
   PUBLISHING_DISABLED: "Live publishing is turned off for this environment.",
   TEST_PUBLICATION_NO_EXTERNAL_SEND: "Test completed. Nothing was posted to a social channel.",
+  STUDIO_LONG_VIDEO_MANUAL_UPLOAD:
+    "Download this longer video and upload it through YouTube Studio. Buffer supports YouTube Shorts only.",
+  STUDIO_STORY_TOO_SHORT:
+    "A longer story must contain more than three minutes of complete original narration.",
   STUDIO_SELECT_OUTPUTS: "Select the file or files that need correction.",
   STUDIO_TARGET_SETTINGS_CHANGED:
     "Keep existing channel, language and caption settings when correcting selected files.",

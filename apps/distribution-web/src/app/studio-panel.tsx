@@ -19,6 +19,7 @@ import {
   studioExternalProcessingDecision,
   studioFileStatus,
   studioNeedsSuitabilityReview,
+  studioOutputChannelLabel,
   studioWorkflow,
 } from "@satsang/distribution-domain";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
@@ -216,8 +217,8 @@ export function StudioOutputPreview({
       ? studioAppDestination(studioAppLinks(closing.appLinks), viewerPlatform)
       : undefined;
   const media = `${API}/${value.id}/assets/${output.id}`;
-  const video = output.format === "short" || output.format === "reel";
-  const channel = studioChannelLabel(output.channel);
+  const video = ["short", "reel", "video"].includes(output.format);
+  const channel = studioOutputChannelLabel(output);
   const writtenLanguage = DISTRIBUTION_LANGUAGE_NAMES[output.language];
   const sourceLanguage = value.provenance?.transcript.language ?? value.source.language;
   const spokenLanguage =
@@ -239,6 +240,9 @@ export function StudioOutputPreview({
       {output.asset?.mimeType === "video/mp4" ? (
         <section aria-labelledby={`media-heading-${output.id}`}>
           <h4 id={`media-heading-${output.id}`}>Video file</h4>
+          {output.format === "video" ? (
+            <p>Longer story · Download the MP4 for YouTube Studio. Buffer accepts Shorts only.</p>
+          ) : null}
           <div className="studio-video-frame">
             {/* biome-ignore lint/a11y/useMediaCaption: Each available source or translated caption is rendered as an optional track below. */}
             <video
@@ -1730,7 +1734,7 @@ export function StudioPanel({
                     style={{ opacity: output.included ? 1 : 0.65 }}
                   >
                     <div className="actions wrap">
-                      <strong>{studioChannelLabel(output.channel)}</strong>
+                      <strong>{studioOutputChannelLabel(output)}</strong>
                       <span className="badge">
                         {output.format} · {output.language}
                       </span>

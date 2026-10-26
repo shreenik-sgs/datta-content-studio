@@ -14,6 +14,7 @@ import {
   preserveStudioEditorialEdits,
   studioFormatForChannel,
   studioGenerationReadiness,
+  studioPublishingFormatBlock,
   studioSourceRange,
   validateStudioPlan,
 } from "./studio-planner";
@@ -578,4 +579,51 @@ it("requires translations only for the speech kept by a precise trim", () => {
       transcript,
     ),
   ).not.toThrow();
+});
+
+it("accepts a complete longer YouTube story without relaxing Shorts limits or allowing missing captions", () => {
+  const source: StudioTranscript = {
+    ...transcript,
+    durationMs: 600000,
+    segments: [
+      { id: "one", startMs: 0, endMs: 300000, text: "The story's setup and events." },
+      { id: "two", startMs: 300000, endMs: 600000, text: "Its complete conclusion and teaching." },
+    ],
+  };
+  const request = {
+    ...pkg.request,
+    channels: ["youtube" as const],
+    youtubeFormat: "video" as const,
+  };
+  const plan = createLocalStudioPlan(
+    { ...pkg, request: { ...request, youtubeFormat: "short" } },
+    transcript,
+  );
+  const output = plan.outputs[0];
+  if (!output) throw Error("Missing fixture");
+  output.format = "video";
+  expect(studioFormatForChannel("youtube", request)).toBe("video");
+  expect(studioFormatForChannel("youtube")).toBe("short");
+  expect(() => validateStudioPlan(plan, { ...pkg, request }, source)).not.toThrow();
+  expect(() =>
+    validateStudioPlan(plan, { ...pkg, request: { ...request, youtubeFormat: "short" } }, source),
+  ).toThrow("INVALID_STUDIO_PLAN");
+  const translated = { ...source, language: "te" };
+  expect(() => validateStudioPlan(plan, { ...pkg, request }, translated)).toThrow(
+    "STUDIO_TRANSLATION_INCOMPLETE",
+  );
+  expect(() => validateStudioPlan(plan, { ...pkg, request }, transcript)).toThrow(
+    "STUDIO_STORY_TOO_SHORT",
+  );
+  output.sourceSegmentIds = ["two", "one"];
+  expect(() => validateStudioPlan(plan, { ...pkg, request }, source)).toThrow(
+    "STUDIO_SOURCE_EVIDENCE_REQUIRED",
+  );
+});
+
+it("keeps longer stories downloadable without sending them to the Shorts-only publishing integration", () => {
+  expect(studioPublishingFormatBlock({ channel: "youtube", format: "video" })).toBe(
+    "STUDIO_LONG_VIDEO_MANUAL_UPLOAD",
+  );
+  expect(studioPublishingFormatBlock({ channel: "youtube", format: "short" })).toBeNull();
 });

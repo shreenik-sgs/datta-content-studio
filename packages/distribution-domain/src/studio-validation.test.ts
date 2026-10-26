@@ -579,3 +579,53 @@ it("binds alternate speaker identity and subscription target to request, provena
   pkg.request = { ...pkg.request, youtubeClosing: { ...target, label: "Another channel" } };
   expect(() => check(pkg)).toThrow("STUDIO_CLOSING_CARD_INVALID");
 });
+
+it("keeps existing Shorts valid when appending a longer story and protects the same media evidence", () => {
+  const p = fixture();
+  p.request.youtubeFormat = "video";
+  p.request.allCompleteMessages = true;
+  if (p.outputs[0]) p.outputs[0].messageId = "short-original";
+  expect(() => check(p)).not.toThrow();
+  const first = p.outputs[0];
+  if (!first || !p.provenance) throw Error("Missing fixture");
+  const id = "55555555-5555-4555-8555-555555555555";
+  p.provenance.transcript.segments.push({
+    id: "story",
+    startMs: 2000,
+    endMs: 602000,
+    text: "A full story with its conclusion.",
+  });
+  p.provenance.transcript.durationMs = 602000;
+  const story = {
+    ...structuredClone(first),
+    id,
+    messageId: "story-new",
+    format: "video" as const,
+    sourceSegmentIds: ["story"],
+    startMs: 2000,
+    endMs: 602000,
+    asset: {
+      ...studioAssetName(
+        {
+          masterId,
+          sourceVersionId: versionId,
+          packageId,
+          outputId: id,
+          channel: "youtube",
+          format: "video",
+          language: "en",
+          aspect: "9:16",
+        },
+        "mp4",
+      ),
+      sha256: "d".repeat(64),
+      byteSize: 100,
+      mimeType: "video/mp4",
+    },
+  };
+  p.outputs.push(story);
+  expect(() => check(p)).not.toThrow();
+  expect(studioPackageBlockers(p)).not.toContain("STUDIO_CLIP_TOO_LONG");
+  story.asset.sha256 = "invalid";
+  expect(() => check(p)).toThrow("INVALID_STUDIO_ASSET");
+});

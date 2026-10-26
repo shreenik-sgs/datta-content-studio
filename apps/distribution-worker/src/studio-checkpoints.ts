@@ -122,7 +122,7 @@ export async function generateCheckpointedStudioPlan(
             ...new Set([
               ...selected,
               ...combined.outputs
-                .filter((o) => ["short", "reel"].includes(o.format))
+                .filter((o) => ["short", "reel", "video"].includes(o.format))
                 .map((o) => o.channel),
             ]),
           ]

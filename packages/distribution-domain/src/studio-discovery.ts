@@ -2,6 +2,7 @@ import type { StudioOutput, StudioTranscript } from "./intelligent-content";
 import { type StudioPlannedOutput, studioSourceRange } from "./studio-planner";
 
 export const STUDIO_DISCOVERY_POLICY = "section-discovery-v1" as const;
+export const STUDIO_STORY_DISCOVERY_POLICY = "story-discovery-v1" as const;
 export type StudioDiscoverySection = {
   index: number;
   startMs: number;
@@ -10,7 +11,7 @@ export type StudioDiscoverySection = {
   contextEndMs: number;
 };
 export type StudioDiscoveryCoverage = {
-  policy: typeof STUDIO_DISCOVERY_POLICY;
+  policy: typeof STUDIO_DISCOVERY_POLICY | typeof STUDIO_STORY_DISCOVERY_POLICY;
   sections: (StudioDiscoverySection & {
     candidates: number;
     accepted: number;
@@ -49,10 +50,13 @@ export function validateStudioDiscoveryCoverage(
   value: StudioDiscoveryCoverage,
   transcript: StudioTranscript,
 ): void {
-  const expected = studioDiscoverySections(transcript);
+  const expected = studioDiscoverySections(
+    transcript,
+    value?.policy === STUDIO_STORY_DISCOVERY_POLICY,
+  );
   if (
     !value ||
-    value.policy !== STUDIO_DISCOVERY_POLICY ||
+    ![STUDIO_DISCOVERY_POLICY, STUDIO_STORY_DISCOVERY_POLICY].includes(value.policy) ||
     !Array.isArray(value.sections) ||
     value.sections.length !== expected.length ||
     !Number.isFinite(Date.parse(value.completedAt))
@@ -75,8 +79,11 @@ export function validateStudioDiscoveryCoverage(
   }
 }
 
-/** Every segment start belongs to one five-minute section; context never cuts source speech. */
-export function studioDiscoverySections(transcript: StudioTranscript): StudioDiscoverySection[] {
+/** Every start belongs to one section; longer story context retains whole narratives across edges. */
+export function studioDiscoverySections(
+  transcript: StudioTranscript,
+  stories = false,
+): StudioDiscoverySection[] {
   if (
     !Number.isSafeInteger(transcript.durationMs) ||
     transcript.durationMs < 1 ||
@@ -84,16 +91,18 @@ export function studioDiscoverySections(transcript: StudioTranscript): StudioDis
   )
     throw Error("INVALID_STUDIO_TRANSCRIPT");
   const sections: StudioDiscoverySection[] = [];
-  for (let startMs = 0; startMs < transcript.durationMs; startMs += 300000) {
-    const endMs = Math.min(startMs + 300000, transcript.durationMs);
+  const windowMs = stories ? 900000 : 300000;
+  const contextMs = stories ? 1800000 : 180000;
+  for (let startMs = 0; startMs < transcript.durationMs; startMs += windowMs) {
+    const endMs = Math.min(startMs + windowMs, transcript.durationMs);
     // Empty/silent intervals need no paid AI request. Every spoken segment is still covered.
     if (!transcript.segments.some((s) => s.startMs >= startMs && s.startMs < endMs)) continue;
     sections.push({
       index: sections.length,
       startMs,
       endMs,
-      contextStartMs: Math.max(0, startMs - 180000),
-      contextEndMs: Math.min(transcript.durationMs, endMs + 180000),
+      contextStartMs: Math.max(0, startMs - contextMs),
+      contextEndMs: Math.min(transcript.durationMs, endMs + contextMs),
     });
   }
   return sections;
@@ -124,7 +133,9 @@ export function studioDiscoveryOverlaps(
     candidate.sourceTrim,
   );
   return retained.some((other) => {
-    if (!["short", "reel"].includes(other.format)) return false;
+    if (!["short", "reel", "video"].includes(other.format)) return false;
+    // A complete story may contain a separate Short excerpt; duplicate stories still overlap.
+    if ((candidate.format === "video") !== (other.format === "video")) return false;
     const b = studioSourceRange(other.sourceSegmentIds, transcript, other.format, other.sourceTrim);
     return Math.min(a.endMs, b.endMs) > Math.max(a.startMs, b.startMs);
   });

@@ -98,3 +98,34 @@ it("allows only appended files and protects every existing edit and evidence fie
       "STUDIO_DISCOVERY_ISOLATION_REQUIRED",
     );
 });
+
+it("covers longer story boundaries exactly once and validates separate story coverage", () => {
+  const source = {
+    ...transcript,
+    durationMs: 4000000,
+    segments: [
+      {
+        id: "setup",
+        startMs: 895000,
+        endMs: 920000,
+        text: "The story begins before the boundary.",
+      },
+      { id: "conclusion", startMs: 2000000, endMs: 2200000, text: "Its complete conclusion." },
+    ],
+  };
+  const sections = studioDiscoverySections(source, true);
+  expect(sections[0]?.contextEndMs).toBeGreaterThanOrEqual(2200000);
+  for (const segment of source.segments)
+    expect(
+      sections.filter((s) => segment.startMs >= s.startMs && segment.startMs < s.endMs),
+    ).toHaveLength(1);
+  const coverage = {
+    policy: "story-discovery-v1" as const,
+    completedAt: new Date().toISOString(),
+    sections: sections.map((s) => ({ ...s, candidates: 1, accepted: 1, duplicates: 0 })),
+  };
+  expect(() => validateStudioDiscoveryCoverage(coverage, source)).not.toThrow();
+  expect(() =>
+    validateStudioDiscoveryCoverage({ ...coverage, policy: "section-discovery-v1" }, source),
+  ).toThrow("INVALID_STUDIO_DISCOVERY_COVERAGE");
+});

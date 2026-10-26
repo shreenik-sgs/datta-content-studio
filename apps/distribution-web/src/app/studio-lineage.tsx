@@ -2,7 +2,11 @@
 import { studioSourceName } from "../lib/studio-model";
 
 import { DISTRIBUTION_LANGUAGE_NAMES } from "@satsang/distribution-contracts";
-import { STUDIO_CHANNELS, studioChannelLabel } from "@satsang/distribution-domain";
+import {
+  STUDIO_CHANNELS,
+  studioChannelLabel,
+  studioOutputChannelLabel,
+} from "@satsang/distribution-domain";
 import { useId, useState } from "react";
 import { studioLatestReview, studioOutputLength, studioOutputState } from "../lib/studio-lineage";
 import type { PublicStudioPackage, PublicStudioPublication } from "../lib/studio-model";
@@ -190,7 +194,7 @@ export function StudioLineage({
                       </small>
                     )}
                   </th>
-                  <td>{studioChannelLabel(output.channel)}</td>
+                  <td>{studioOutputChannelLabel(output)}</td>
                   <td>
                     <strong className="lineage-format">{output.format}</strong>
                     <small>{DISTRIBUTION_LANGUAGE_NAMES[output.language]}</small>

@@ -22,7 +22,7 @@ export type LineageState = {
 
 /** These are source clip boundaries, not measured encoded-video duration. */
 export function studioOutputLength(output: PublicStudioOutput): { label: string; detail: string } {
-  if (output.format === "short" || output.format === "reel") {
+  if (["short", "reel", "video"].includes(output.format)) {
     if (
       output.startMs === null ||
       output.endMs === null ||

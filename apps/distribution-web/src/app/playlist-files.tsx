@@ -6,6 +6,7 @@ import {
   studioChannelLabel,
   studioFileStatus,
   studioFileWorkflowStep,
+  studioOutputChannelLabel,
 } from "@satsang/distribution-domain";
 import { useId, useState } from "react";
 import { studioOutputLength, studioOutputState } from "../lib/studio-lineage";
@@ -529,7 +530,7 @@ export function PlaylistFiles({
                         <small>{output.asset?.filename ?? output.title}</small>
                       </details>
                     </th>
-                    <td>{studioChannelLabel(output.channel)}</td>
+                    <td>{studioOutputChannelLabel(output)}</td>
                     <td>
                       {output.format}
                       <small>{DISTRIBUTION_LANGUAGE_NAMES[output.language]}</small>

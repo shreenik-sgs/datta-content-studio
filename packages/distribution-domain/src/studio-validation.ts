@@ -89,6 +89,8 @@ export function validateStudioGenerationRequest(input: StudioGenerationRequest):
     input.channels.some((value) => !STUDIO_CHANNELS.includes(value)) ||
     typeof input.captions !== "boolean" ||
     (input.allCompleteMessages !== undefined && typeof input.allCompleteMessages !== "boolean") ||
+    (input.youtubeFormat !== undefined && !["short", "video"].includes(input.youtubeFormat)) ||
+    (input.youtubeFormat === "video" && !input.channels.includes("youtube")) ||
     !bounded(input.instructions, 8000, true)
   )
     throw new Error("INVALID_STUDIO_REQUEST");
@@ -236,11 +238,12 @@ export function validateStudioOutputs(
     if (
       output.closingDestination !== undefined &&
       (!["app", "youtube"].includes(output.closingDestination) ||
-        !["short", "reel"].includes(output.format))
+        !["short", "reel", "video"].includes(output.format))
     )
       throw Error("INVALID_STUDIO_OUTPUTS");
     if (output.mediaEdits !== undefined) {
-      if (!["short", "reel"].includes(output.format)) throw Error("INVALID_STUDIO_MEDIA_EDITS");
+      if (!["short", "reel", "video"].includes(output.format))
+        throw Error("INVALID_STUDIO_MEDIA_EDITS");
       validateStudioMediaEdits(output.mediaEdits);
     }
     if (
@@ -250,7 +253,7 @@ export function validateStudioOutputs(
       ids.has(output.id) ||
       !input.request.channels.includes(output.channel) ||
       !input.request.languages.includes(output.language) ||
-      !["short", "reel", "post", "blog"].includes(output.format) ||
+      !["short", "reel", "video", "post", "blog"].includes(output.format) ||
       !["9:16", "4:5", "1:1", "16:9", "prose"].includes(output.aspect) ||
       !bounded(output.title, 200) ||
       !bounded(output.body, 40000, true) ||
@@ -322,7 +325,7 @@ export function validateStudioOutputs(
       });
     const format = studioFormatForChannel(output.channel);
     if (
-      output.format !== format ||
+      (output.format !== format && !(output.channel === "youtube" && output.format === "video")) ||
       output.title.length > STUDIO_TITLE_LIMITS[output.channel] ||
       !(
         output.body.includes(studioSourceBranding(input.request.sourceBranding).signature) ||
@@ -347,12 +350,13 @@ export function validateStudioOutputs(
     );
     if (input.source.liveWindow && range.startMs >= input.source.liveWindow.ownedEndMs)
       throw new Error("STUDIO_LIVE_OVERLAP");
-    const video = output.format === "short" || output.format === "reel";
+    const video = ["short", "reel", "video"].includes(output.format);
     if (
       video &&
       (output.startMs !== range.startMs ||
         output.endMs !== range.endMs ||
-        studioRenderedDurationMs(output) > studioVideoDurationLimitMs(output.channel))
+        studioRenderedDurationMs(output) >
+          studioVideoDurationLimitMs(output.channel, output.format))
     )
       throw new Error("INVALID_STUDIO_SPAN");
     if (
@@ -497,10 +501,11 @@ export function studioPackageBlockers(
     pkg.outputs.some(
       (output) =>
         output.included &&
-        (output.format === "short" || output.format === "reel") &&
+        ["short", "reel", "video"].includes(output.format) &&
         output.startMs !== null &&
         output.endMs !== null &&
-        studioRenderedDurationMs(output) > studioVideoDurationLimitMs(output.channel),
+        studioRenderedDurationMs(output) >
+          studioVideoDurationLimitMs(output.channel, output.format),
     )
   )
     reasons.push("STUDIO_CLIP_TOO_LONG");

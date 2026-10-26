@@ -39,7 +39,7 @@ export function studioAssetName(
     (identity.renderId !== undefined && identity.fileVersion === undefined) ||
     !STUDIO_CHANNELS.includes(identity.channel) ||
     !STUDIO_LANGUAGES.includes(identity.language) ||
-    !["short", "reel", "post", "blog"].includes(identity.format) ||
+    !["short", "reel", "video", "post", "blog"].includes(identity.format) ||
     !["9:16", "4:5", "1:1", "16:9", "prose"].includes(identity.aspect) ||
     !["mp4", "png", "md", "json", "vtt"].includes(extension) ||
     (extension === "vtt" && (!captionLanguage || !STUDIO_LANGUAGES.includes(captionLanguage))) ||
@@ -62,7 +62,7 @@ export function parseStudioAssetKey(key: string): {
   const p = key.split("/");
   if (p.length !== 7 || p[0] !== "distribution" || p[1] !== "studio") return null;
   const match =
-    /^SGS_m([a-f0-9-]{36})_([a-z]+)_(short|reel|post|blog)_([a-z]{2})_(9x16|4x5|1x1|16x9|prose)_([a-f0-9]{8})(?:_v([1-9][0-9]*)_r([a-f0-9]{8}))?(?:_cc-([a-z]{2}))?\.(mp4|png|md|json|vtt)$/.exec(
+    /^SGS_m([a-f0-9-]{36})_([a-z]+)_(short|reel|video|post|blog)_([a-z]{2})_(9x16|4x5|1x1|16x9|prose)_([a-f0-9]{8})(?:_v([1-9][0-9]*)_r([a-f0-9]{8}))?(?:_cc-([a-z]{2}))?\.(mp4|png|md|json|vtt)$/.exec(
       p[6] ?? "",
     );
   if (!match || match[1] !== p[2] || match[6] !== p[5]?.slice(0, 8)) return null;

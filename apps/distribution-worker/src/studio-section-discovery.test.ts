@@ -234,3 +234,60 @@ it.each(["request", "source", "transcript", "retained", "model", "review-policy"
     expect(run).toHaveBeenCalled();
   },
 );
+
+it("discovers a longer complete story containing an existing Short without rewriting it or reusing Shorts checkpoints", async () => {
+  const old = planFor("crossing").outputs;
+  const saved = structuredClone(old);
+  const source = { ...transcript, durationMs: 650000 };
+  const story = planFor("crossing");
+  const output = story.outputs[0];
+  if (!output) throw Error("Missing fixture");
+  output.format = "video";
+  output.sourceSegmentIds = ["crossing", "next", "repeat"];
+  const cache = recovery();
+  const set = vi.spyOn(cache, "set");
+  const reviewer = vi
+    .spyOn(novelty, "reviewStudioDiscoveryNovelty")
+    .mockImplementation(async (_input, candidates, retained) => {
+      expect(retained).toEqual([]);
+      return candidates.map((_o, i) => ({
+        key: `candidate-${i}`,
+        duplicateOf: null,
+        reason: "A complete longer story, distinct from other stories.",
+      }));
+    });
+  const result = await generateStudioSectionPlan(
+    {
+      ...input,
+      transcript: source,
+      pkg: { ...pkg, request: { ...pkg.request, youtubeFormat: "video" } },
+      discoveryExcludedOutputs: old,
+    },
+    cache,
+    {},
+    async () => story,
+  );
+  expect(result.outputs).toHaveLength(1);
+  expect(result.outputs[0]?.messageId).toMatch(/^story-/);
+  expect(result.discovery?.policy).toBe("story-discovery-v1");
+  expect(set.mock.calls.every(([key]) => key.startsWith("story-discovery:"))).toBe(true);
+  expect(old).toEqual(saved);
+  expect(reviewer).toHaveBeenCalledOnce();
+  reviewer.mockImplementation(async (_input, candidates, retained) => {
+    expect(candidates).toEqual([]);
+    expect(retained).toHaveLength(1);
+    return [];
+  });
+  const second = await generateStudioSectionPlan(
+    {
+      ...input,
+      transcript: source,
+      pkg: { ...pkg, request: { ...pkg.request, youtubeFormat: "video" } },
+      discoveryExcludedOutputs: [...old, ...result.outputs],
+    },
+    recovery(),
+    {},
+    async () => story,
+  );
+  expect(second.outputs).toEqual([]);
+});

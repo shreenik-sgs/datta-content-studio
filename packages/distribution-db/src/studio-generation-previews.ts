@@ -37,7 +37,7 @@ export function studioGenerationPreviews(
         key !== `output:${studioOutputKey(output)}` ||
         !output.generatedAt ||
         !Number.isFinite(Date.parse(output.generatedAt)) ||
-        !["short", "reel"].includes(output.format) ||
+        !["short", "reel", "video"].includes(output.format) ||
         output.asset?.mimeType !== "video/mp4" ||
         !pkg.request.channels.includes(output.channel) ||
         !pkg.request.languages.includes(output.language) ||

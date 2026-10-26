@@ -7,8 +7,8 @@ import {
   type StudioSegment,
   studioCanEditFile,
   studioCaptionsEnabled,
-  studioChannelLabel,
   studioClosingCardPlan,
+  studioOutputChannelLabel,
   studioSourceRange,
   studioVideoDurationLimitMs,
 } from "@satsang/distribution-domain";
@@ -65,7 +65,7 @@ export function StudioCorrections({
       {requested.map((o) => (
         <blockquote key={o.id}>
           <strong>
-            {studioChannelLabel(o.channel)} · {o.language}
+            {studioOutputChannelLabel(o)} · {o.language}
           </strong>
           <p>{o.correction?.comment}</p>
           <small>Requested {formatTime(o.correction?.requestedAt ?? value.updatedAt)}</small>
@@ -120,7 +120,7 @@ export function StudioCorrections({
                   }
                 />
                 <span>
-                  {studioChannelLabel(o.channel)} · {o.language} · {o.title}
+                  {studioOutputChannelLabel(o)} · {o.language} · {o.title}
                   {o.asset && <small>{o.asset.filename}</small>}
                 </span>
               </label>
@@ -162,7 +162,7 @@ export function StudioCorrections({
             >
               {editable.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {studioChannelLabel(o.channel)} · {o.language} · {o.title}
+                  {studioOutputChannelLabel(o)} · {o.language} · {o.title}
                 </option>
               ))}
             </select>
@@ -240,7 +240,7 @@ export function ManualFile({
         This file has no editable source evidence. Refresh the package or run AI correction first.
       </p>
     );
-  const video = ["short", "reel"].includes(output.format);
+  const video = ["short", "reel", "video"].includes(output.format);
   const range = (start: string, end: string) => {
     const a = source.segments.findIndex((s) => s.id === start);
     const b = source.segments.findIndex((s) => s.id === end);
@@ -292,7 +292,8 @@ export function ManualFile({
       "Keep the trim within this video. Use Advanced to choose a different source passage.";
   const duration = selected.endMs - selected.startMs;
   const exportDuration = duration > 0 ? studioClosingCardPlan(duration).endMs : 0;
-  const tooLong = video && exportDuration > studioVideoDurationLimitMs(output.channel);
+  const tooLong =
+    video && exportDuration > studioVideoDurationLimitMs(output.channel, output.format);
   const missingCaption = video && selectedCues.some((cue) => !cue.text.trim());
   return (
     <form
@@ -448,14 +449,14 @@ export function ManualFile({
             <p>
               Captions follow the trimmed video. Check the first and last subtitle and remove any
               words you have cut from the audio. Maximum clip length for{" "}
-              {studioChannelLabel(output.channel)} is{" "}
-              {studioVideoDurationLimitMs(output.channel) / 1000} seconds.
+              {studioOutputChannelLabel(output)} is{" "}
+              {studioVideoDurationLimitMs(output.channel, output.format) / 1000} seconds.
             </p>
             {tooLong && (
               <p role="alert">
                 This selection plus the closing card is {(exportDuration / 1000).toFixed(1)}{" "}
-                seconds. Choose a shorter complete passage; {studioChannelLabel(output.channel)}{" "}
-                allows {studioVideoDurationLimitMs(output.channel) / 1000} seconds.
+                seconds. Choose a shorter complete passage; {studioOutputChannelLabel(output)}{" "}
+                allows {studioVideoDurationLimitMs(output.channel, output.format) / 1000} seconds.
               </p>
             )}
             {missingCaption && (
@@ -519,7 +520,7 @@ export function StudioCorrectionComparison({ value }: { value: PublicStudioPacka
         .map((o) => (
           <details key={o.id}>
             <summary>
-              Compare changes: {studioChannelLabel(o.channel)} · {o.language}
+              Compare changes: {studioOutputChannelLabel(o)} · {o.language}
             </summary>
             <p>
               <strong>Reviewer requested:</strong> {o.correction?.comment}

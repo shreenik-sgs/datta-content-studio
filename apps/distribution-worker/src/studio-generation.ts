@@ -360,6 +360,9 @@ export async function generateStudioPackage(input: {
         outputs: selected,
         request: {
           ...claim.package.request,
+          youtubeFormat: selected.some((output) => output.format === "video")
+            ? ("video" as const)
+            : ("short" as const),
           channels: [...new Set(selected.map((output) => output.channel))],
           languages: [...new Set(selected.map((output) => output.language))],
         },
@@ -715,7 +718,7 @@ export async function generateStudioPackage(input: {
         const planned = plan.outputs.find((o) => studioOutputKey(o) === studioOutputKey(check));
         if (
           !planned ||
-          !["short", "reel"].includes(planned.format) ||
+          !["short", "reel", "video"].includes(planned.format) ||
           studioContentReviewIssues([check]).length
         ) {
           reviewed.push(check);
@@ -800,7 +803,9 @@ export async function generateStudioPackage(input: {
             ...new Set(
               claim.package.outputs
                 .filter(
-                  (o) => o.language !== transcript.language && ["short", "reel"].includes(o.format),
+                  (o) =>
+                    o.language !== transcript.language &&
+                    ["short", "reel", "video"].includes(o.format),
                 )
                 .map((o) => o.language),
             ),
@@ -1034,7 +1039,7 @@ export async function generateStudioPackage(input: {
     });
     for (const planned of plan.outputs) {
       if (signal?.aborted) throw new Error("GENERATION_TIMEOUT");
-      const video = planned.format === "short" || planned.format === "reel";
+      const video = ["short", "reel", "video"].includes(planned.format);
       const prior = claim.package.outputs.find(
         (o) => studioOutputKey(o) === studioOutputKey(planned),
       );
@@ -1228,7 +1233,7 @@ export async function generateStudioPackage(input: {
               : {}),
           }),
         };
-        if (closing.plan.endMs > studioVideoDurationLimitMs(planned.channel))
+        if (closing.plan.endMs > studioVideoDurationLimitMs(planned.channel, planned.format))
           throw Error("STUDIO_CLIP_TOO_LONG");
         let mediaRender = rendered.get(key);
         if (!mediaRender) {

@@ -1,5 +1,6 @@
 import {
   STUDIO_DISCOVERY_POLICY,
+  STUDIO_STORY_DISCOVERY_POLICY,
   type StudioDiscoveryCoverage,
   type StudioPlan,
   studioDiscoveryOverlaps,
@@ -37,23 +38,27 @@ export async function generateStudioSectionPlan(
   options: Options,
   run: Run,
 ): Promise<StudioPlan> {
-  const sections = studioDiscoverySections(input.transcript);
+  const stories = input.pkg.request.youtubeFormat === "video";
+  const policy = stories ? STUDIO_STORY_DISCOVERY_POLICY : STUDIO_DISCOVERY_POLICY;
+  const sections = studioDiscoverySections(input.transcript, stories);
   const videos = input.pkg.request.channels.filter((c) =>
-    ["short", "reel"].includes(studioFormatForChannel(c)),
+    ["short", "reel", "video"].includes(studioFormatForChannel(c, input.pkg.request)),
   );
   const written = input.pkg.request.channels.filter((c) => !videos.includes(c));
   const combined: StudioPlan = { outputs: [], translations: [], skippedChannels: [] };
   const coverage: StudioDiscoveryCoverage = {
-    policy: STUDIO_DISCOVERY_POLICY,
+    policy,
     sections: [],
     completedAt: "",
   };
-  const existing = input.discoveryExcludedOutputs ?? [];
+  const existing = (input.discoveryExcludedOutputs ?? []).filter((o) =>
+    stories ? o.format === "video" : o.format !== "video",
+  );
   for (const section of sections) {
     if (input.signal?.aborted) throw input.signal.reason;
-    const prefix = `discovery:${section.startMs}`;
+    const prefix = `${stories ? "story-discovery" : "discovery"}:${section.startMs}`;
     const identity = (id: string | undefined) =>
-      `section-${section.startMs}-${studioFingerprint(id).slice(0, 16)}`;
+      `${stories ? "story" : "section"}-${section.startMs}-${studioFingerprint(id).slice(0, 16)}`;
     const namespace: StudioCheckpoints | undefined = checkpoints
       ? {
           get: (key, fingerprint) => checkpoints.get(`${prefix}:${key}`, fingerprint),
@@ -79,7 +84,7 @@ export async function generateStudioSectionPlan(
     // during a later render retry so new candidates cannot shift downstream deduplication.
     const emptyFingerprint = studioFingerprint({
       version: 1,
-      discoveryPolicy: STUDIO_DISCOVERY_POLICY,
+      discoveryPolicy: policy,
       editorialPolicy: STUDIO_EDITORIAL_REVIEW_POLICY,
       section,
       source: scoped.pkg.source,
@@ -169,7 +174,7 @@ export async function generateStudioSectionPlan(
         separate.push(o);
     }
     const fingerprint = studioFingerprint({
-      policy: STUDIO_DISCOVERY_POLICY,
+      policy,
       candidates: separate,
       retained,
       model: input.model,

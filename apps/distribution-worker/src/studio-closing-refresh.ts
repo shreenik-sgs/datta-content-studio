@@ -222,7 +222,7 @@ export async function refreshStudioClosingOutputs(input: {
       !prior.aiReview ||
       prior.startMs == null ||
       prior.endMs == null ||
-      !["short", "reel"].includes(prior.format)
+      !["short", "reel", "video"].includes(prior.format)
     )
       throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
     const durationMs = prior.endMs - prior.startMs;
@@ -253,7 +253,7 @@ export async function refreshStudioClosingOutputs(input: {
     if (
       prior.presentationReview.closingCard?.endMs !== plan.endMs ||
       prior.presentationReview.closingCard.startMs !== plan.startMs ||
-      plan.endMs > studioVideoDurationLimitMs(prior.channel)
+      plan.endMs > studioVideoDurationLimitMs(prior.channel, prior.format)
     )
       throw Error("STUDIO_CLOSING_TIMELINE_CHANGED");
     const photo = await readFile(

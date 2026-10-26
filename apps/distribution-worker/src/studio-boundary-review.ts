@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   STUDIO_BOUNDARY_EVIDENCE_POLICY,
   STUDIO_BOUNDARY_REVIEW_POLICY,
+  STUDIO_STORY_MAX_DURATION_MS,
   type StudioBoundaryFinding,
   type StudioBoundaryReview,
   type StudioSegment,
@@ -132,7 +133,7 @@ export async function reviewStudioClipBoundaries(input: {
   fileStartMs?: number;
 }): Promise<StudioBoundaryReview> {
   const duration = input.endMs - input.startMs;
-  if (!Number.isSafeInteger(duration) || duration <= 0 || duration > 180000)
+  if (!Number.isSafeInteger(duration) || duration <= 0 || duration > STUDIO_STORY_MAX_DURATION_MS)
     throw Error("STUDIO_VIDEO_REVIEW_INVALID");
   const extract = async (label: string, offset: number, length: number) => {
     const path = join(input.directory, `boundary-${input.startMs}-${input.endMs}-${label}.mp3`);

@@ -574,53 +574,58 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     ).toHaveLength(1);
   });
 
-  it("queues additional discovery separately, preserves existing drafts and rejects mutation during completion", async () => {
-    const f = await fixture({ channels: ["youtube"], allCompleteMessages: true });
-    const original = await draft(f);
-    await expect(
-      studio.enqueueGeneration(f.reviewer, original.id, {
+  it.each(["short", "video"] as const)(
+    "queues %s discovery separately, preserves existing drafts and rejects mutation during completion",
+    async (youtubeFormat) => {
+      const f = await fixture({ channels: ["youtube"], allCompleteMessages: true });
+      const original = await draft(f);
+      await expect(
+        studio.enqueueGeneration(f.reviewer, original.id, {
+          expectedRevision: original.revision,
+          mode: "discover",
+        }),
+      ).rejects.toThrow();
+      await expect(
+        studio.enqueueGeneration(f.ctx, original.id, {
+          expectedRevision: original.revision,
+          mode: "discover",
+          outputIds: [original.outputs[0]?.id ?? ""],
+        }),
+      ).rejects.toThrow("STUDIO_SELECT_OUTPUTS");
+      const queued = await studio.enqueueGeneration(f.ctx, original.id, {
         expectedRevision: original.revision,
+        request: { ...original.request, youtubeFormat },
         mode: "discover",
-      }),
-    ).rejects.toThrow();
-    await expect(
-      studio.enqueueGeneration(f.ctx, original.id, {
-        expectedRevision: original.revision,
-        mode: "discover",
-        outputIds: [original.outputs[0]?.id ?? ""],
-      }),
-    ).rejects.toThrow("STUDIO_SELECT_OUTPUTS");
-    const queued = await studio.enqueueGeneration(f.ctx, original.id, {
-      expectedRevision: original.revision,
-      mode: "discover",
-    });
-    expect(queued.outputs).toEqual(original.outputs);
-    expect(queued.generation).toEqual({ mode: "discover", outputIds: [] });
-    const lease = await claim(queued);
-    if (!original.provenance) throw Error("Expected original provenance");
-    await expect(
-      studio.completeGeneration(lease, {
-        outputs: original.outputs.map((o) => ({ ...o, title: "Tampered" })),
+      });
+      expect(queued.outputs).toEqual(original.outputs);
+      expect(queued.request.youtubeFormat).toBe(youtubeFormat);
+      expect(queued.generation).toEqual({ mode: "discover", outputIds: [] });
+      const lease = await claim(queued);
+      if (!original.provenance) throw Error("Expected original provenance");
+      await expect(
+        studio.completeGeneration(lease, {
+          outputs: original.outputs.map((o) => ({ ...o, title: "Tampered" })),
+          provenance: original.provenance,
+        }),
+      ).rejects.toThrow("STUDIO_DISCOVERY_ISOLATION_REQUIRED");
+      const finished = await studio.completeGeneration(lease, {
+        outputs: original.outputs,
         provenance: original.provenance,
-      }),
-    ).rejects.toThrow("STUDIO_DISCOVERY_ISOLATION_REQUIRED");
-    const finished = await studio.completeGeneration(lease, {
-      outputs: original.outputs,
-      provenance: original.provenance,
-    });
-    if (!finished.accepted) throw Error(finished.reason);
-    expect(finished.package.outputs).toEqual(original.outputs);
-    expect(finished.package.status).toBe("DRAFT");
-    expect(finished.package.approval).toBeNull();
-    const lockedFixture = await fixture();
-    const locked = await approved(lockedFixture);
-    await expect(
-      studio.enqueueGeneration(lockedFixture.ctx, locked.id, {
-        expectedRevision: locked.revision,
-        mode: "discover",
-      }),
-    ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
-  });
+      });
+      if (!finished.accepted) throw Error(finished.reason);
+      expect(finished.package.outputs).toEqual(original.outputs);
+      expect(finished.package.status).toBe("DRAFT");
+      expect(finished.package.approval).toBeNull();
+      const lockedFixture = await fixture();
+      const locked = await approved(lockedFixture);
+      await expect(
+        studio.enqueueGeneration(lockedFixture.ctx, locked.id, {
+          expectedRevision: locked.revision,
+          mode: "discover",
+        }),
+      ).rejects.toThrow("INVALID_STUDIO_TRANSITION");
+    },
+  );
 
   it("adds a missed teaching without touching existing files, and requires generation and review", async () => {
     const f = await fixture({ channels: ["youtube"] });

@@ -1551,3 +1551,35 @@ it("grounds alternate-source drafting in the selected speaker and preserves its 
   );
   expect(result.outputs[0]?.body).not.toContain("@sgsswamiji");
 });
+
+it("requests longer stories explicitly with their own duration limit and full translations", async () => {
+  const current = pkg();
+  current.request.channels = ["youtube"];
+  current.request.youtubeFormat = "video";
+  const result = plan();
+  result.outputs = result.outputs.filter((o) => o.channel === "youtube");
+  if (!result.outputs[0]) throw Error("Missing fixture");
+  result.outputs[0].format = "video";
+  const source = structuredClone(transcript);
+  source.durationMs = 600000;
+  if (!source.segments[1]) throw Error("Missing fixture");
+  source.segments[1].endMs = 600000;
+  const fetcher = vi.fn(async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    const prompt = JSON.parse(body.input[0].content);
+    expect(prompt.requiredPairs).toEqual([{ channel: "youtube", language: "en", format: "video" }]);
+    expect(prompt.videoDurationLimitsMs.youtube).toBe(1797000);
+    expect(prompt.minimumStoryDurationMs).toBe(180001);
+    expect(body.instructions).toContain("setup, events, conclusion and lesson");
+    return providerResponse(result);
+  }) as unknown as typeof fetch;
+  const generated = await generateStudioPlan({
+    pkg: current,
+    transcript: source,
+    provider: "openai",
+    apiKey: "synthetic",
+    model: "synthetic",
+    fetcher,
+  });
+  expect(generated.outputs[0]?.format).toBe("video");
+});
