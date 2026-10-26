@@ -49,6 +49,9 @@ const target = studioYoutubeClosing({
 });
 const apply = process.argv.includes("--apply");
 const watch = process.argv.includes("--watch");
+const expectedOutputs = env.STUDIO_EXPECTED_OUTPUTS ? Number(env.STUDIO_EXPECTED_OUTPUTS) : null;
+if (expectedOutputs !== null && (!Number.isSafeInteger(expectedOutputs) || expectedOutputs < 1))
+  throw Error("EXPECTED_OUTPUTS_INVALID");
 const directory = env.STUDIO_CLOSING_AUDIT_DIRECTORY;
 if (apply && (!directory || !isAbsolute(directory))) throw Error("BACKUP_REQUIRED");
 if (directory) await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -107,6 +110,20 @@ try {
     }[];
     if (rows.length !== ids.length) throw Error("PACKAGE_COUNT_CHANGED");
     if (
+      expectedOutputs !== null &&
+      rows.reduce((count, row) => count + row.snapshot.outputs.length, 0) !== expectedOutputs
+    )
+      throw Error("OUTPUT_COUNT_CHANGED");
+    if (
+      expectedOutputs !== null &&
+      !backedUp &&
+      rows.some(
+        ({ snapshot: p }) =>
+          p.outputs.length > 0 && (["QUEUED", "GENERATING"].includes(p.status) || p.generation),
+      )
+    )
+      throw Error("PRIOR_CLOSING_BATCH_ACTIVE");
+    if (
       rows.some(
         ({ snapshot: p }) =>
           p.request.youtubeClosing?.url !== target.url ||
@@ -126,6 +143,19 @@ try {
     const blocked: { packageId: string; failure: unknown }[] = [];
     for (const { snapshot: pkg, generation_checkpoint: entries } of rows) {
       try {
+        // Completed-output maintenance must not reinterpret source recordings that
+        // never produced an excerpt. Their existing result and history stay intact.
+        if (
+          expectedOutputs !== null &&
+          !pkg.outputs.length &&
+          pkg.status === "FAILED" &&
+          pkg.failure === "STUDIO_NO_SUITABLE_CHANNELS"
+        )
+          continue;
+        if (pkg.outputs.length && ["QUEUED", "GENERATING"].includes(pkg.status)) {
+          pending++;
+          continue;
+        }
         if (["QUEUED", "GENERATING", "FAILED"].includes(pkg.status) && !pkg.outputs.length) {
           const virtual = { ...pkg, request: { ...pkg.request, youtubeClosing: target } };
           const candidates = studioPreviewClosingCandidates(virtual, entries);
@@ -239,7 +269,13 @@ try {
         break;
       }
       if (apply) {
-        if (rows.some(({ snapshot: p }) => p.approval || p.status !== "DRAFT"))
+        if (
+          rows.some(
+            ({ snapshot: p }) =>
+              (expectedOutputs === null || p.outputs.length > 0) &&
+              (p.approval || p.status !== "DRAFT"),
+          )
+        )
           throw Error("REVIEW_STATE_CHANGED");
         const curation = {
           ...root.curation,
@@ -258,6 +294,7 @@ try {
             bundleId,
             target,
             packages: ids.length,
+            expectedOutputs,
             allUnapproved: true,
             completed,
           }),
@@ -269,7 +306,8 @@ try {
     }
     if (watch) await wait(60000);
   }
-  if (watch && !finished) throw Error("CLOSING_MAINTENANCE_TIMED_OUT");
+  if (!finished)
+    throw Error(watch ? "CLOSING_MAINTENANCE_TIMED_OUT" : "CLOSING_MAINTENANCE_INCOMPLETE");
 } finally {
   await pool.end();
 }
