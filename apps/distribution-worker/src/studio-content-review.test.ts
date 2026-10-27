@@ -89,6 +89,8 @@ it("retains a dangling-story rejection even when its translation and later moral
   expect(policy).toContain("After performing such a sacrifice");
   expect(policy).toContain("Do not repair missing context by inserting a name");
   expect(policy).toContain("A harmless discourse connector");
+  expect(policy).toContain("Fail copySupported for a misleading curiosity hook");
+  expect(policy).toContain("do not require a verbatim quotation");
 });
 it("reviews bounded audio windows at absolute master offsets and retains a failure across windows", async () => {
   const reviewAudio = vi.fn().mockResolvedValue([

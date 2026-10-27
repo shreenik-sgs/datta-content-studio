@@ -168,6 +168,9 @@ describe("Studio intelligence provider contract — no real provider calls", () 
     const prompt = JSON.parse(request.input[0].content);
     expect(prompt.captionGenerationRequested).toBe(false);
     for (const guidance of [
+      "Lead with the actual question answered, practical lesson or story tension",
+      "Curiosity must have a payoff in the included speech",
+      "Preserve supplied currentDraft title edits",
       "website blog should aim for 200-400 words",
       "clear introduction, an explained teaching",
       "Reddit blog should be roughly 150-300 words",
