@@ -1,4 +1,8 @@
-import { studioFileStatus, studioPublicationMatchesFile } from "@satsang/distribution-domain";
+import {
+  studioFileStatus,
+  studioPublicationMatchesFile,
+  studioPublicationRetryDecision,
+} from "@satsang/distribution-domain";
 import type {
   ContentMaster,
   StudioChannel,
@@ -158,7 +162,7 @@ export async function prepareSeriesRows(
             (source && !["APPROVED", "PUBLISHED", "RIGHTS_CLEARED"].includes(source.state)
               ? "Master permissions must be completed by the Curator first."
               : undefined) ??
-            (action === "post" && previous && previous.status !== "BLOCKED"
+            (action === "post" && previous && !studioPublicationRetryDecision(previous, false)
               ? "A posting request already exists. Check its result before sending again."
               : undefined);
           return {

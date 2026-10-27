@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { StudioPublication } from "./intelligent-content";
-import { studioRetractionDecision, studioSelectedOutputs } from "./studio-bulk-actions";
+import {
+  studioPublicationRetryDecision,
+  studioPublishingShouldPause,
+  studioRetractionDecision,
+  studioSelectedOutputs,
+} from "./studio-bulk-actions";
 
 it("treats a selected file list as an exact scope, rejecting stale or empty selections", () => {
   const outputs = [
@@ -44,5 +49,42 @@ describe("truthful retraction", () => {
     expect(studioRetractionDecision({ ...job, status: "PUBLISHED", remoteId: "video" }, true)).toBe(
       "REMOVE_ON_CHANNEL",
     );
+  });
+});
+
+describe("explicit retry of earlier posting requests", () => {
+  it("re-queues a blocked local request and sends a channel-rejected one afresh", () => {
+    expect(studioPublicationRetryDecision({ status: "BLOCKED", remoteId: null }, false)).toBe(
+      "REQUEUE",
+    );
+    expect(studioPublicationRetryDecision({ status: "FAILED", remoteId: "buffer-1" }, true)).toBe(
+      "FRESH_ATTEMPT",
+    );
+    expect(studioPublicationRetryDecision({ status: "FAILED", remoteId: null }, false)).toBe(
+      "FRESH_ATTEMPT",
+    );
+  });
+  it("never repeats a request whose outcome is unknown, active or complete", () => {
+    expect(studioPublicationRetryDecision({ status: "BLOCKED", remoteId: "buffer-1" }, false)).toBe(
+      null,
+    );
+    expect(studioPublicationRetryDecision({ status: "BLOCKED", remoteId: null }, true)).toBe(null);
+    for (const status of [
+      "QUEUED",
+      "RUNNING",
+      "PROCESSING",
+      "PUBLISHED",
+      "SIMULATED",
+      "UNCERTAIN",
+      "CANCELLED",
+    ] as StudioPublication["status"][])
+      expect(studioPublicationRetryDecision({ status, remoteId: null }, false)).toBe(null);
+  });
+  it("pauses an account only after three consecutive channel rejections", () => {
+    expect(studioPublishingShouldPause(["FAILED", "FAILED", "FAILED"])).toBe(true);
+    expect(studioPublishingShouldPause(["FAILED", "FAILED", "FAILED", "PUBLISHED"])).toBe(true);
+    expect(studioPublishingShouldPause(["FAILED", "FAILED"])).toBe(false);
+    expect(studioPublishingShouldPause(["FAILED", "PUBLISHED", "FAILED"])).toBe(false);
+    expect(studioPublishingShouldPause([])).toBe(false);
   });
 });

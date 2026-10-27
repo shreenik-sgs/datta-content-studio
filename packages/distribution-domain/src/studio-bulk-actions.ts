@@ -36,3 +36,29 @@ export function studioRetractionDecision(
   // A worker may already have sent a request. Its lease must not be revoked here.
   return "CHECK_CHANNEL";
 }
+
+export type StudioPublicationRetry = "REQUEUE" | "FRESH_ATTEMPT" | null;
+/** Which earlier posting request an explicit Post may send again.
+ * A blocked request never reached the channel: queue the same request. A failed
+ * request was rejected by the channel after the provider created it; that provider
+ * record is never published, so a fresh attempt creates a new one and keeps the
+ * old id in the attempt history. Unknown or completed outcomes are never repeated. */
+export function studioPublicationRetryDecision(
+  job: Pick<StudioPublication, "status" | "remoteId">,
+  hasCheckpoint: boolean,
+): StudioPublicationRetry {
+  if (job.status === "BLOCKED" && !job.remoteId && !hasCheckpoint) return "REQUEUE";
+  if (job.status === "FAILED") return "FRESH_ATTEMPT";
+  return null;
+}
+/** Consecutive channel rejections on one account that pause the rest of its queue,
+ * so a plan or daily upload limit is not discovered one failed post at a time. */
+export const STUDIO_PUBLISHING_PAUSE_REJECTIONS = 3;
+export function studioPublishingShouldPause(recentStatuses: readonly string[]): boolean {
+  return (
+    recentStatuses.length >= STUDIO_PUBLISHING_PAUSE_REJECTIONS &&
+    recentStatuses
+      .slice(0, STUDIO_PUBLISHING_PAUSE_REJECTIONS)
+      .every((status) => status === "FAILED")
+  );
+}

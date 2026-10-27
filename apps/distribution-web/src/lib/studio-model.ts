@@ -118,6 +118,16 @@ const messages: Record<string, string> = {
     "The channel history could not be read completely. Nothing was sent. Retry the check before publishing.",
   STUDIO_POSTING_CHECK_STALE:
     "The channel check expired before sending. Refresh and try again; nothing was posted.",
+  STUDIO_PUBLISHING_PAUSED_AFTER_REJECTIONS:
+    "Posting paused after three consecutive channel rejections for this account. Nothing more was sent. Fix the cause shown on the failed posts, then Post again to resume.",
+  BUFFER_PUBLISH_FAILED:
+    "The channel rejected this upload after Buffer created the post, for example a Buffer plan limit or YouTube's daily upload limit. Read the error on the post in Buffer, fix the cause, then Post again; Studio sends a fresh request. The rejected Buffer post is never published and can be deleted in Buffer.",
+  BUFFER_APPROVAL_REQUIRED:
+    "Buffer is holding this post as a draft or for approval. Release it in Buffer, or change the Buffer queue settings and Post again.",
+  BUFFER_STATUS_UNKNOWN:
+    "Buffer reported a post state Studio does not recognise. Check the post in Buffer before retrying.",
+  BUFFER_RECEIPT_UNAVAILABLE:
+    "Buffer did not answer when Studio checked this post. Studio keeps checking; nothing is sent twice.",
 
   STUDIO_ACTION_UNCONFIRMED:
     "The Hub could not confirm this action. It may already have been saved. Refresh the package and check its current status before retrying. Existing sources, drafts and approvals are retained.",

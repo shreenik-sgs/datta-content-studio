@@ -112,6 +112,7 @@ function fixture(isTest = false) {
     completePublication: vi.fn<StudioPublishingPorts["repository"]["completePublication"]>(
       async (_claim, result) => ({ ...publication, status: result.status }),
     ),
+    pausePublicationsAfterRejections: vi.fn(async () => 0),
   };
   const fetcher = vi.fn<typeof fetch>();
   const store = { readDerivedDescriptor: vi.fn(async () => bytes) };
@@ -332,6 +333,22 @@ describe("durable Studio publication worker", () => {
     expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body)).query).toContain(
       "query HubReceipt",
     );
+  });
+  it("records a channel rejection as failed and asks for the account's queue to be paused", async () => {
+    const { ports, repository, fetcher, claim, output } = fixture();
+    await configure(ports);
+    fetcher
+      .mockResolvedValueOnce(channel())
+      .mockResolvedValueOnce(
+        Response.json({ data: { createPost: { post: providerPost(output.body, "error") } } }),
+      );
+    await runStudioPublicationOnce(ports);
+    expect(repository.completePublication.mock.calls[0]?.[1]).toMatchObject({
+      status: "FAILED",
+      error: "BUFFER_PUBLISH_FAILED",
+      remoteId: "provider-post-1",
+    });
+    expect(repository.pausePublicationsAfterRejections).toHaveBeenCalledWith(claim, "account-1");
   });
   it("uses the pinned second account even if the first remains default", async () => {
     const { ports, repository, fetcher, claim, output } = fixture();

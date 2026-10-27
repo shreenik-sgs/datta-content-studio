@@ -64,6 +64,45 @@ it("shows the server's fresh contributor-role blocker before posting without cre
   ).toBe(true);
 });
 
+it("offers Post again for a channel-rejected file but not for one with an unknown outcome", async () => {
+  const pkg = { ...value, status: "APPROVED" as const };
+  const publication = {
+    id: "pub-1",
+    packageId: pkg.id,
+    packageRevision: pkg.revision,
+    outputId: output.id,
+    channel: output.channel,
+    isTest: true,
+    status: "FAILED" as const,
+    attempt: 1,
+    error: "BUFFER_PUBLISH_FAILED",
+    remoteId: "buffer-rejected",
+    remoteUrl: null,
+    createdAt: "2026-10-27T13:09:00.000Z",
+    updatedAt: "2026-10-27T13:09:08.000Z",
+  };
+  for (const [status, expectBlocker] of [
+    ["FAILED", false],
+    ["UNCERTAIN", true],
+  ] as const) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        response(
+          url.includes("publication-preflight")
+            ? { blocker: null, operatorId: null }
+            : { ...detail, package: pkg, publications: [{ ...publication, status }] },
+        ),
+      ),
+    );
+    const rows = await prepareSeriesRows([pkg], "post");
+    expect(rows).toHaveLength(1);
+    if (expectBlocker) expect(rows[0]?.blocker).toContain("A posting request already exists");
+    else expect(rows[0]?.blocker).toBeUndefined();
+    vi.unstubAllGlobals();
+  }
+});
+
 it("prepares all 49 recordings using reads only, ignoring excluded/empty or already submitted packages", async () => {
   const packages = Array.from({ length: 49 }, (_, i) => ({ ...value, id: `p-${i}` }));
   const fetcher = vi.fn(async (_url: string) => response(detail));

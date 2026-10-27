@@ -2779,6 +2779,99 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       ).rows[0]?.total,
     ).toBe(1);
   });
+  it("explicit Publish sends a channel-rejected file again as a fresh request and never repeats an uncertain one", async () => {
+    const f = await fixture({ channels: ["youtube"] });
+    const pkg = await approved(f);
+    const queued = await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision });
+    const first = await studio.claimPublication({
+      isTest: true,
+      workerId: "publish-test",
+      publicationId: queued[0]?.id,
+    });
+    if (!first) throw new Error("MISSING_CLAIM");
+    await studio.completePublication(first, {
+      status: "FAILED",
+      accountId: "acc-1",
+      remoteId: "buffer-rejected",
+      error: "BUFFER_PUBLISH_FAILED",
+      checkpoint: { providerPostId: "buffer-rejected" },
+    });
+    const retried = await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision });
+    expect(retried.find((value) => value.id === first.publication.id)).toMatchObject({
+      status: "QUEUED",
+      remoteId: null,
+      error: null,
+    });
+    const retries = (
+      await migration.query(
+        "SELECT detail FROM distribution.studio_publication_attempt WHERE publication_id=$1 AND detail->>'action'='EXPLICIT_RETRY'",
+        [first.publication.id],
+      )
+    ).rows;
+    expect(retries).toHaveLength(1);
+    expect(retries[0]?.detail).toMatchObject({
+      previousRemoteId: "buffer-rejected",
+      previousError: "BUFFER_PUBLISH_FAILED",
+    });
+    const second = await studio.claimPublication({
+      isTest: true,
+      workerId: "publish-test",
+      publicationId: first.publication.id,
+    });
+    if (!second) throw new Error("MISSING_CLAIM");
+    expect(second.checkpoint).toBeNull();
+    await studio.completePublication(second, {
+      status: "UNCERTAIN",
+      error: "PUBLICATION_OUTCOME_UNKNOWN",
+    });
+    const repeated = await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision });
+    expect(repeated.find((value) => value.id === first.publication.id)?.status).toBe("UNCERTAIN");
+  });
+  it("pauses an account's remaining queue after three consecutive channel rejections until an explicit Post", async () => {
+    const claims: NonNullable<Awaited<ReturnType<typeof studio.claimPublication>>>[] = [];
+    for (let i = 0; i < 3; i++) {
+      const f = await fixture({ channels: ["youtube"] });
+      const pkg = await approved(f);
+      const queued = await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision });
+      const claim = await studio.claimPublication({
+        isTest: true,
+        workerId: "publish-test",
+        publicationId: queued[0]?.id,
+      });
+      if (!claim) throw new Error("MISSING_CLAIM");
+      await studio.completePublication(claim, {
+        status: "FAILED",
+        accountId: "acc-pause",
+        remoteId: `buffer-${i}`,
+        error: "BUFFER_PUBLISH_FAILED",
+      });
+      claims.push(claim);
+    }
+    const g = await fixture({ channels: ["youtube"] });
+    const waiting = await approved(g);
+    const queued = await studio.publish(g.reviewer, waiting.id, {
+      expectedRevision: waiting.revision,
+    });
+    const [firstClaim, , lastClaim] = claims;
+    if (!firstClaim || !lastClaim) throw new Error("MISSING_CLAIM");
+    // Two rejections on another account pause nothing.
+    expect(await studio.pausePublicationsAfterRejections(firstClaim, "acc-other")).toBe(0);
+    expect(
+      await studio.pausePublicationsAfterRejections(lastClaim, "acc-pause"),
+    ).toBeGreaterThanOrEqual(queued.length);
+    const paused = await studio.listPublications(g.reviewer, waiting.id);
+    expect(paused.length).toBe(queued.length);
+    for (const job of paused)
+      expect(job).toMatchObject({
+        status: "BLOCKED",
+        error: "STUDIO_PUBLISHING_PAUSED_AFTER_REJECTIONS",
+        remoteId: null,
+      });
+    const resumed = await studio.publish(g.reviewer, waiting.id, {
+      expectedRevision: waiting.revision,
+    });
+    expect(resumed.every((job) => job.status === "QUEUED")).toBe(true);
+  });
   it("expired publication leases become uncertain and never repeat the create operation", async () => {
     const f = await fixture();
     const pkg = await approved(f);

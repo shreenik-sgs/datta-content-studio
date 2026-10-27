@@ -30,6 +30,7 @@ type Repository = Pick<
   | "revalidatePublication"
   | "completePublication"
   | "reservePublicationDestination"
+  | "pausePublicationsAfterRejections"
 >;
 export type StudioPublishingPorts = {
   repository: Repository;
@@ -348,7 +349,7 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
         error: claim.publication.attempt <= 20 ? result.code : "RECEIPT_RETRY_EXHAUSTED",
         retryAfterSeconds: 30,
       });
-    else
+    else {
       await finish({
         status:
           result.kind === "UNKNOWN"
@@ -362,6 +363,11 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
           ? { checkpoint: { ...result.checkpoint }, remoteId: result.checkpoint.providerPostId }
           : {}),
       });
+      // Repeated channel rejections pause the rest of this account's queue, so a
+      // plan or daily upload limit is not discovered one failed post at a time.
+      if (result.kind === "REJECTED" && !eligibilityLost)
+        await ports.repository.pausePublicationsAfterRejections(claim, account.id).catch(() => 0);
+    }
   } catch (error) {
     const known = new Set([
       "APPROVED_PUBLICATION_CHANGED",

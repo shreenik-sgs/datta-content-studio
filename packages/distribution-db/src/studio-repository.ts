@@ -7,6 +7,7 @@ import {
   type DistributionChannel,
   type PlaylistCuration,
   type PostingCheck,
+  STUDIO_PUBLISHING_PAUSE_REJECTIONS,
   type StudioAdditionalMessage,
   type StudioChannel,
   type StudioFeedback,
@@ -37,7 +38,9 @@ import {
   studioKnownPostingMatch,
   studioNeedsSuitabilityReview,
   studioPackageBlockers,
+  studioPublicationRetryDecision,
   studioPublishingFormatBlock,
+  studioPublishingShouldPause,
   studioRetractionDecision,
   studioSelectedOutputs,
   studioSourceMatches,
@@ -2668,15 +2671,23 @@ export function createIntelligentContentRepository(
               )
             ).rows[0];
           if (!row) throw Error("STUDIO_ACTION_UNCONFIRMED");
-          if (row.status === "BLOCKED" && !row.remote_id && !row.checkpoint) {
+          const retry = studioPublicationRetryDecision(publication(row), Boolean(row.checkpoint));
+          if (retry) {
+            // A channel-rejected request gets a fresh provider post. The rejected
+            // provider record is never published; its id stays in the attempt history.
             await attempt(client, row, "QUEUED", {
               action: "EXPLICIT_RETRY",
               requestedBy: ctx.userId,
               previousError: row.last_error,
+              ...(retry === "FRESH_ATTEMPT"
+                ? { previousRemoteId: row.remote_id, previousAttempt: row.attempts }
+                : {}),
             });
             row = (
               await client.query(
-                "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *",
+                retry === "FRESH_ATTEMPT"
+                  ? "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,remote_id=NULL,remote_url=NULL,checkpoint=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *"
+                  : "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *",
                 [row.id, pkg.isTest],
               )
             ).rows[0] as QueryResultRow;
@@ -2963,6 +2974,26 @@ export function createIntelligentContentRepository(
         );
         await attempt(client, row, input.status, { remoteId, error: input.error ?? null });
         return publication(rows.rows[0] as QueryResultRow);
+      }),
+    /** After repeated channel rejections, hold the rest of that account's queue.
+     * Paused requests are BLOCKED without a provider record, so an explicit Post resumes them. */
+    pausePublicationsAfterRejections: (claim: StudioPublicationClaim, accountId: string) =>
+      transaction(async (client) => {
+        const recent = await client.query(
+          "SELECT status FROM distribution.studio_publication_job WHERE is_test=$1 AND account_id=$2 AND status IN ('PUBLISHED','SIMULATED','FAILED','UNCERTAIN') ORDER BY updated_at DESC,id LIMIT $3",
+          [claim.publication.isTest, accountId, STUDIO_PUBLISHING_PAUSE_REJECTIONS],
+        );
+        if (!studioPublishingShouldPause(recent.rows.map((row) => String(row.status)))) return 0;
+        const paused = await client.query(
+          "UPDATE distribution.studio_publication_job SET status='BLOCKED',last_error='STUDIO_PUBLISHING_PAUSED_AFTER_REJECTIONS',updated_at=clock_timestamp() WHERE is_test=$1 AND status='QUEUED' AND channel=$3 AND (account_id=$2 OR account_id IS NULL) AND lease_token IS NULL RETURNING *",
+          [claim.publication.isTest, accountId, claim.publication.channel],
+        );
+        for (const row of paused.rows)
+          await attempt(client, row, "BLOCKED", {
+            error: "STUDIO_PUBLISHING_PAUSED_AFTER_REJECTIONS",
+            afterPublicationId: claim.publication.id,
+          });
+        return paused.rowCount ?? 0;
       }),
     publicationMedia: (id: string) =>
       transaction(async (client) => {
