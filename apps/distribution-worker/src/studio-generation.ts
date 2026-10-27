@@ -53,6 +53,7 @@ import {
   studioClosingCardPlan,
   studioContentReviewIssues,
   studioDiscoveryOverlaps,
+  studioFullPictureRegion,
   studioGenerationReadiness,
   studioOpeningCardPlan,
   studioOutputKey,
@@ -1062,7 +1063,7 @@ export async function generateStudioPackage(input: {
         (o) => studioOutputKey(o) === studioOutputKey(planned),
       );
       const cacheKey = `output:${studioOutputKey(planned)}`;
-      const fingerprint = studioFingerprint({
+      const legacyFingerprint = studioFingerprint({
         renderFingerprint,
         ...(video
           ? {
@@ -1074,12 +1075,17 @@ export async function generateStudioPackage(input: {
         prior,
         translations: plan.translations.find((value) => value.language === planned.language),
       });
+      // Repair only unfinished media. Previously passing, hash-verified exports retain
+      // their IDs and bytes; failed presentation/render caches must run the new path.
+      const fingerprint = video
+        ? studioFingerprint({ legacyFingerprint, renderer: "full-picture-clean-hold-v1" })
+        : legacyFingerprint;
       const rejectionKey = `render-boundary-rejection:${studioOutputKey(planned)}`;
       const excludeBoundary = async (reason: string) => {
         if (!canExcludeBoundary) throw Error("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
         const finding = reason.slice(0, 3000);
         rejectedBoundaries.set(studioOutputKey(planned), finding);
-        await checkpoints?.set(rejectionKey, fingerprint, { reason: finding });
+        await checkpoints?.set(rejectionKey, legacyFingerprint, { reason: finding });
       };
       const presentationRejectionKey = `render-presentation-rejection:${studioOutputKey(planned)}`;
       const rejectedPresentation = canExcludeBoundary
@@ -1093,7 +1099,7 @@ export async function generateStudioPackage(input: {
         continue;
       }
       const rejected = canExcludeBoundary
-        ? checkpoints?.get<{ reason: string }>(rejectionKey, fingerprint)
+        ? checkpoints?.get<{ reason: string }>(rejectionKey, legacyFingerprint)
         : undefined;
       if (rejected && typeof rejected.reason === "string" && rejected.reason.trim()) {
         rejectedBoundaries.set(studioOutputKey(planned), rejected.reason.slice(0, 3000));
@@ -1112,7 +1118,9 @@ export async function generateStudioPackage(input: {
         ? { ...review, fileVersion: (prior?.fileVersion ?? (prior ? 1 : 0)) + 1 }
         : undefined;
       if (provider !== "local" && !aiReview) throw new Error("STUDIO_VIDEO_REVIEW_INVALID");
-      const saved = checkpoints?.get<StudioOutput>(cacheKey, fingerprint);
+      const saved =
+        checkpoints?.get<StudioOutput>(cacheKey, fingerprint) ??
+        (video ? checkpoints?.get<StudioOutput>(cacheKey, legacyFingerprint) : undefined);
       if (saved?.asset) {
         // Recheck stored bytes: metadata alone is not evidence that rendering survived.
         const assets = [
@@ -1121,6 +1129,19 @@ export async function generateStudioPackage(input: {
           ...saved.captions.map((caption) => caption.asset),
         ];
         let intact = true;
+        if (video && provider !== "local") {
+          try {
+            if (!saved.presentationReview) throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
+            validateStudioPresentationReview(saved.presentationReview, {
+              sourceSha256: claim.source.sha256,
+              renderedSha256: saved.asset.sha256,
+              fileVersion: saved.fileVersion ?? 1,
+              durationMs: (saved.endMs ?? 0) - (saved.startMs ?? 0),
+            });
+          } catch {
+            intact = false;
+          }
+        }
         for (const asset of assets) {
           try {
             if (sha(await store.readDerivedDescriptor(asset)) !== asset.sha256) intact = false;
@@ -1407,7 +1428,7 @@ export async function generateStudioPackage(input: {
             }
             const bytes = await readFile(path);
             const qualityFingerprint = studioFingerprint({
-              reviewerVersion: 5,
+              reviewerVersion: 6,
               renderedBoundaryPolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
               framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
               policy: STUDIO_PRESENTATION_POLICY,
@@ -1421,17 +1442,10 @@ export async function generateStudioPackage(input: {
               qualityFingerprint,
             );
             if (!checks) {
-              const fitHeight = Math.min(
-                STUDIO_VIDEO_FRAME.height,
-                (STUDIO_VIDEO_FRAME.width * (videoStream?.height ?? 720)) /
-                  (videoStream?.width ?? 1280),
+              const fitRegion = studioFullPictureRegion(
+                videoStream?.width ?? 1280,
+                videoStream?.height ?? 720,
               );
-              const fitRegion = {
-                x: 0,
-                y: STUDIO_VIDEO_FRAME.y + (STUDIO_VIDEO_FRAME.height - fitHeight) / 2,
-                width: STUDIO_VIDEO_FRAME.width,
-                height: fitHeight,
-              };
               const proxy = await studioReviewProxy({
                 ffmpeg: env.DISTRIBUTION_FFMPEG_PATH ?? "ffmpeg",
                 sourcePath: path,
@@ -1449,19 +1463,22 @@ export async function generateStudioPackage(input: {
                 startMs: range.startMs,
                 durationMs: closing.plan.endMs,
                 sourceDurationMs: range.endMs - range.startMs,
-                ...(!scenes.length
-                  ? {
-                      fullPicture: {
-                        region: fitRegion,
-                        covered: [
-                          ...illustrations,
-                          closing.plan,
-                          ...(opening ? [opening.plan] : []),
-                        ],
-                      },
-                    }
-                  : {}),
+                fullPicture: {
+                  region: fitRegion,
+                  covered: [
+                    ...scenes,
+                    ...illustrations,
+                    closing.plan,
+                    ...(opening ? [opening.plan] : []),
+                  ],
+                },
                 timesMs: [
+                  ...(closing.plan.speechEndMs !== undefined && closing.plan.cleanHoldMs
+                    ? [
+                        closing.plan.speechEndMs,
+                        closing.plan.speechEndMs + closing.plan.cleanHoldMs / 2,
+                      ]
+                    : []),
                   ...(opening
                     ? [opening.plan.transitionStartMs - 250, opening.plan.endMs + 250]
                     : []),
@@ -1538,6 +1555,21 @@ export async function generateStudioPackage(input: {
                 checks,
               );
             }
+            await checkpoints?.set(
+              `render-presentation-evidence:${studioOutputKey(planned)}:${qualityFingerprint}`,
+              qualityFingerprint,
+              {
+                renderer: "full-picture-clean-hold-v1",
+                sourceRange: { startMs: range.startMs, endMs: range.endMs },
+                renderedSha256: sha(bytes),
+                attempt,
+                framing: scenes.length ? "screened-portrait" : "full-picture",
+                scenes,
+                speechEndMs: closing.plan.speechEndMs,
+                cleanHoldMs: closing.plan.cleanHoldMs,
+                checks,
+              },
+            );
             if (
               ![
                 checks.illustrationsRelevant,
@@ -1591,7 +1623,7 @@ export async function generateStudioPackage(input: {
               break;
             }
             if (!checks.illustrationsRelevant) throw Error("STUDIO_IMAGE_REVIEW_REQUIRED");
-            if (!input.closingOnly && !wantsOpening && attempt === 0 && scenes.length) {
+            if (!input.closingOnly && attempt === 0 && scenes.length) {
               scenes = [];
             } else {
               if (!canExcludeBoundary) throw Error("STUDIO_PRESENTATION_REPAIR_REQUIRED");

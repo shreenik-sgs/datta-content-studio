@@ -18,6 +18,7 @@ import { STUDIO_PICTURE } from "@satsang/distribution-domain";
 import sharp from "sharp";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as boundaries from "./studio-boundary-review";
+import * as checkpointHelpers from "./studio-checkpoints";
 import * as quality from "./studio-content-review";
 import * as contextualImages from "./studio-context-images";
 import { generateStudioPackage } from "./studio-generation";
@@ -452,6 +453,162 @@ describe("automatic Studio generation with real media", () => {
     },
     90000,
   );
+  it.each(["recommended", "requested"] as const)(
+    "retries a rejected portrait with the full source when its opening card was %s",
+    async (opening) => {
+      const sourcePath = join(root, `opening-repair-${opening}.mp4`);
+      execFileSync(ffmpeg, [
+        "-nostdin",
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=320x180:rate=30",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:sample_rate=48000",
+        "-t",
+        "8",
+        "-c:v",
+        "libx264",
+        "-threads",
+        "1",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        sourcePath,
+      ]);
+      const asset = await store.write({
+        bytes: await readFile(sourcePath),
+        mimeType: "video/mp4",
+        originalName: `opening-repair-${opening}.mp4`,
+      });
+      if (!claim.transcript) throw Error("Missing fixture transcript");
+      const transcript = {
+        ...claim.transcript,
+        durationMs: 8000,
+        segments: [
+          { id: "one", startMs: 0, endMs: 4000, text: "Practice kindness." },
+          { id: "two", startMs: 4000, endMs: 8000, text: "Serve with care." },
+        ],
+      };
+      vi.spyOn(intelligence, "generateStudioPlan").mockImplementation(async ({ pkg, transcript }) =>
+        createLocalStudioPlan(pkg, transcript),
+      );
+      vi.spyOn(quality, "reviewStudioContent").mockResolvedValue([
+        {
+          channel: "youtube",
+          language: "en",
+          openingComplete: true,
+          endingComplete: true,
+          contextComplete: true,
+          attributionCorrect: true,
+          captionsFaithful: true,
+          copySupported: true,
+          reason: "Complete synthetic source.",
+        },
+      ]);
+      vi.spyOn(presentation, "screenStudioSource").mockResolvedValue({
+        openingComplete: true,
+        endingComplete: true,
+        naturalStart: true,
+        naturalEnd: true,
+        openingCardRecommended: opening === "recommended",
+        reason: "An opening poster precedes the speaker; preserve all opening speech.",
+        scenes: [{ startMs: 1000, endMs: 8000, bodyTop: 0, bodyBottom: 0.9 }],
+        illustrations: [],
+      });
+      const checks = {
+        illustrationsRelevant: true,
+        textIntact: true,
+        subjectIntact: true,
+        captionsClear: true,
+        naturalBoundaries: true,
+        reason: "Complete source retained.",
+      };
+      const review = vi
+        .spyOn(presentation, "reviewStudioPresentation")
+        .mockResolvedValueOnce({
+          ...checks,
+          textIntact: false,
+          reason: "Title edges lost at 00:04 in the portrait.",
+        })
+        .mockResolvedValueOnce(checks);
+      const render = vi.spyOn(mediaRenderer, "renderStudioVideo");
+      const framePairs = vi.spyOn(presentation, "studioReviewFramePairs");
+      const result = await generateStudioPackage({
+        ...(opening === "requested" ? { steadyOpening: true } : {}),
+        claim: {
+          ...claim,
+          source: { ...claim.source, ...asset },
+          transcript,
+          externalProcessing: { allowed: true, reason: null },
+          package: {
+            ...claim.package,
+            source: { ...claim.package.source, sha256: asset.sha256 },
+            request: { ...claim.package.request, channels: ["youtube"] },
+          },
+        },
+        store,
+        env: {
+          ...env,
+          STUDIO_INTELLIGENCE_PROVIDER: "gemini",
+          STUDIO_GEMINI_API_KEY: "synthetic",
+          STUDIO_GEMINI_MODEL: "gemini-test",
+        },
+      });
+      expect(render).toHaveBeenCalledTimes(2);
+      expect(review).toHaveBeenCalledTimes(2);
+      const first = render.mock.calls[0]?.[0];
+      const retry = render.mock.calls[1]?.[0];
+      if (!first?.scenes || !first.openingCard || !first.closingCard)
+        throw Error("Expected the initial screened portrait and opening/closing cards");
+      expect(first?.openingCard?.plan).toMatchObject({ startMs: 0, endMs: 2400 });
+      expect(first?.scenes).toEqual([{ startMs: 2000, endMs: 8000, bodyTop: 0, bodyBottom: 0.9 }]);
+      expect(retry).toMatchObject({
+        startMs: 0,
+        endMs: 8000,
+        scenes: [],
+        captions: transcript.segments,
+      });
+      expect(retry?.openingCard).toBeUndefined();
+      expect(review.mock.calls[0]?.[0].context).toMatchObject({
+        sourceSpeaker: { portrait: true },
+      });
+      const firstEvidence = framePairs.mock.calls[0]?.[0];
+      expect(firstEvidence?.fullPicture?.covered).toEqual(
+        expect.arrayContaining([...first.scenes, first.openingCard.plan, first.closingCard.plan]),
+      );
+      for (const [evidence] of framePairs.mock.calls) {
+        expect(evidence.sourceDurationMs).toBe(8000);
+        expect(evidence.durationMs).toBe(11000);
+        // Explicit hold evidence must survive the frame budget, independently
+        // of the generic final-boundary sample.
+        expect(evidence.timesMs.some((time) => time > 8000 && time < 10750)).toBe(true);
+      }
+      const reviewEvidence = result.outputs[0]?.presentationReview;
+      expect(reviewEvidence).toMatchObject({
+        framing: "full-picture",
+        repairs: 1,
+        source: { scenes: [] },
+        closingCard: { speechEndMs: 8000, cleanHoldMs: 3000, endMs: 11000 },
+      });
+      expect(reviewEvidence?.openingCard).toBeUndefined();
+      expect(result.outputs[0]?.captionCues).toEqual(transcript.segments);
+      const renderedBoundaries = vi
+        .mocked(boundaries.reviewStudioClipBoundaries)
+        .mock.calls.filter(([input]) => input.fileStartMs === 0);
+      expect(renderedBoundaries).toHaveLength(2);
+      expect(
+        renderedBoundaries.every(([input]) => input.startMs === 0 && input.endMs === 8000),
+      ).toBe(true);
+    },
+    60000,
+  );
+
   it("holds the finished file when blind audio review contradicts a passed source and presentation", async () => {
     vi.spyOn(intelligence, "generateStudioPlan").mockImplementation(async ({ pkg, transcript }) =>
       createLocalStudioPlan(pkg, transcript),
@@ -1813,3 +1970,199 @@ it("supports Bala Swamiji video, image and blog destinations with independent co
   expect(text).toContain("Sri Datta Vijayananda Teertha Swamiji");
   expect(text).not.toContain("Sri Ganapathy Sachchidananda Swamiji");
 }, 30000);
+
+describe("presentation renderer checkpoint compatibility", () => {
+  function fixture(rejectSecond: boolean) {
+    const draft = vi
+      .spyOn(intelligence, "generateStudioPlan")
+      .mockImplementation(async ({ pkg, transcript }) => {
+        const plan = createLocalStudioPlan(
+          { ...pkg, request: { ...pkg.request, allCompleteMessages: false } },
+          transcript,
+        );
+        const template = plan.outputs[0];
+        if (!template) throw Error("Missing fixture output");
+        return {
+          ...plan,
+          outputs: (rejectSecond ? transcript.segments : [transcript.segments[0]])
+            .filter((segment) => segment !== undefined)
+            .map((segment, index) => ({
+              ...template,
+              messageId: `message-${index + 1}`,
+              title: index ? "Second teaching" : "First teaching",
+              sourceSegmentIds: [segment.id],
+            })),
+        };
+      });
+    vi.spyOn(quality, "reviewStudioContent").mockImplementation(async ({ plan }) =>
+      plan.outputs.map((output) => ({
+        channel: output.channel,
+        language: output.language,
+        ...(output.messageId ? { messageId: output.messageId } : {}),
+        openingComplete: true,
+        endingComplete: true,
+        contextComplete: true,
+        attributionCorrect: true,
+        captionsFaithful: true,
+        copySupported: true,
+        reason: "Synthetic complete source.",
+      })),
+    );
+    vi.spyOn(presentation, "screenStudioSource").mockResolvedValue({
+      openingComplete: true,
+      endingComplete: true,
+      naturalStart: true,
+      naturalEnd: true,
+      reason: "Synthetic source is complete.",
+      scenes: [],
+      illustrations: [],
+    });
+    const checks = {
+      illustrationsRelevant: true,
+      textIntact: true,
+      subjectIntact: true,
+      captionsClear: true,
+      naturalBoundaries: true,
+      reason: "Synthetic rendered media passed.",
+    };
+    const review = vi
+      .spyOn(presentation, "reviewStudioPresentation")
+      .mockImplementation(async ({ context }) => ({
+        ...checks,
+        captionsClear: !(
+          rejectSecond && (context as { title: string }).title === "Second teaching"
+        ),
+        reason: rejectSecond ? "The final hold needs repair." : checks.reason,
+      }));
+    const render = vi.spyOn(mediaRenderer, "renderStudioVideo");
+    const entries = new Map<string, { fingerprint: string; value: unknown }>();
+    const outputReads = new Map<string, string[]>();
+    const oldReviews = new Map<string, string>();
+    const fingerprint = checkpointHelpers.studioFingerprint;
+    vi.spyOn(checkpointHelpers, "studioFingerprint").mockImplementation((value) => {
+      const result = fingerprint(value);
+      if (
+        value &&
+        typeof value === "object" &&
+        "reviewerVersion" in value &&
+        value.reviewerVersion === 6
+      )
+        oldReviews.set(result, fingerprint({ ...value, reviewerVersion: 5 }));
+      return result;
+    });
+    const checkpoints: checkpointHelpers.StudioCheckpoints = {
+      get: <T>(key: string, requested: string) => {
+        if (key.startsWith("output:")) {
+          const reads = outputReads.get(key) ?? [];
+          if (!reads.includes(requested)) reads.push(requested);
+          outputReads.set(key, reads);
+        }
+        const saved = entries.get(key);
+        return saved?.fingerprint === requested ? (structuredClone(saved.value) as T) : undefined;
+      },
+      set: async (key, savedFingerprint, value) => {
+        entries.set(key, { fingerprint: savedFingerprint, value: structuredClone(value) });
+      },
+      progress: async () => {},
+    };
+    const attempt = () =>
+      generateStudioPackage({
+        claim: {
+          ...claim,
+          externalProcessing: { allowed: true, reason: null },
+          package: {
+            ...claim.package,
+            request: { ...claim.package.request, channels: ["youtube"], allCompleteMessages: true },
+          },
+        },
+        store,
+        checkpoints,
+        env: {
+          ...env,
+          STUDIO_INTELLIGENCE_PROVIDER: "gemini",
+          STUDIO_GEMINI_API_KEY: "synthetic",
+          STUDIO_GEMINI_MODEL: "gemini-test",
+        },
+      });
+    const restoreLegacyCheckpoint = () => {
+      for (const [key, saved] of [...entries]) {
+        const outputKey = key.startsWith("render-presentation-rejection:")
+          ? key.replace("render-presentation-rejection:", "output:")
+          : key;
+        if (outputKey.startsWith("output:")) {
+          const legacy = outputReads.get(outputKey)?.[1];
+          if (!legacy || legacy === saved.fingerprint) throw Error("Missing legacy fingerprint");
+          entries.set(key, { ...saved, fingerprint: legacy });
+        }
+        if (key.startsWith("render-screen:")) {
+          const legacy = oldReviews.get(saved.fingerprint);
+          if (!legacy) throw Error("Missing reviewer v5 fingerprint");
+          entries.delete(key);
+          entries.set(`render-screen:${legacy}`, { ...saved, fingerprint: legacy });
+        }
+      }
+    };
+    return { attempt, entries, restoreLegacyCheckpoint, render, review, draft, checks };
+  }
+
+  it("keeps legacy passing exports and retries only the old presentation rejection", async () => {
+    const test = fixture(true);
+    const first = await test.attempt();
+    expect(first.outputs).toHaveLength(1);
+    const saved = first.outputs[0];
+    if (!saved?.asset) throw Error("Missing saved export");
+    const bytes = await store.readDerivedDescriptor(saved.asset);
+    expect(
+      [...test.entries.keys()].some((key) => key.startsWith("render-presentation-rejection:")),
+    ).toBe(true);
+    test.restoreLegacyCheckpoint();
+    test.render.mockClear();
+    test.review.mockClear().mockResolvedValue(test.checks);
+    test.draft.mockClear();
+    const resumed = await test.attempt();
+    expect(resumed.outputs).toHaveLength(2);
+    const retained = resumed.outputs.find((output) => output.id === saved.id);
+    expect(retained?.asset).toEqual(saved.asset);
+    expect(retained?.fileVersion).toBe(saved.fileVersion);
+    expect(retained?.captionCues).toEqual(saved.captionCues);
+    expect(retained?.presentationReview).toEqual(saved.presentationReview);
+    expect(await store.readDerivedDescriptor(saved.asset)).toEqual(bytes);
+    expect(test.render).toHaveBeenCalledTimes(1);
+    expect(test.review).toHaveBeenCalledTimes(1);
+    expect(test.draft).not.toHaveBeenCalled();
+    expect(resumed.outputs.every((output) => output.presentationReview?.checks.captionsClear)).toBe(
+      true,
+    );
+  }, 30000);
+
+  it.each(["asset bytes", "presentation evidence"])(
+    "refuses to reuse a legacy export with invalid %s",
+    async (invalid) => {
+      const test = fixture(false);
+      const first = await test.attempt();
+      const saved = first.outputs[0];
+      if (!saved?.asset) throw Error("Missing saved export");
+      test.restoreLegacyCheckpoint();
+      if (invalid === "asset bytes") {
+        const read = store.readDerivedDescriptor.bind(store);
+        vi.spyOn(store, "readDerivedDescriptor").mockImplementation(async (asset) =>
+          asset.sha256 === saved.asset?.sha256 ? Buffer.from("corrupted fixture") : read(asset),
+        );
+      } else {
+        for (const [key, entry] of test.entries) {
+          if (!key.startsWith("output:")) continue;
+          const output = entry.value as (typeof first.outputs)[number];
+          if (!output.presentationReview) throw Error("Missing presentation evidence");
+          output.presentationReview.checks.captionsClear = false;
+        }
+      }
+      // A failed fresh render must remain a failure, never return the invalid cache.
+      test.render.mockClear().mockRejectedValue(Error("SYNTHETIC_FRESH_RENDER_FAILED"));
+      test.review.mockClear();
+      await expect(test.attempt()).rejects.toThrow("SYNTHETIC_FRESH_RENDER_FAILED");
+      expect(test.render).toHaveBeenCalledOnce();
+      expect(test.review).not.toHaveBeenCalled();
+    },
+    30000,
+  );
+});

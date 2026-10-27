@@ -9,6 +9,7 @@ import {
   type StudioPortraitScene,
   type StudioSegment,
   type StudioSourceBranding,
+  studioFullPictureRegion,
   studioSourceBranding,
   studioSpeechTarget,
   studioSubtitleSize,
@@ -390,14 +391,8 @@ export async function renderStudioVideo(input: {
     await writeFile(path, await studioIllustrationFrame(shot.bytes), { mode: 0o600 });
     illustrationFiles.push(path);
   }
-  const fitHeight = Math.min(
-    STUDIO_VIDEO_FRAME.height,
-    (STUDIO_VIDEO_FRAME.width * height) / width,
-  );
-  const fitCaptionTop = Math.min(
-    STUDIO_CAPTION_TOP,
-    Math.round(STUDIO_VIDEO_FRAME.y + (STUDIO_VIDEO_FRAME.height + fitHeight) / 2 + 12),
-  );
+  const fitRegion = studioFullPictureRegion(width, height);
+  const fitCaptionTop = Math.min(STUDIO_CAPTION_TOP, fitRegion.y + fitRegion.height + 12);
   const timeline = await captionTimeline(
     input.directory,
     input.captions,
@@ -421,15 +416,15 @@ export async function renderStudioVideo(input: {
     filter.push(
       // tpad needs an explicit filter frame rate on FFmpeg 7; output -r alone does not
       // supply it, and clips ending at source EOF can otherwise lose the closing hold.
-      `[1:v:0]trim=duration=${durationMs / 1000},setpts=PTS-STARTPTS,fps=30,tpad=stop_mode=clone:stop_duration=${holdMs / 1000},split=${branches.length}${branches.map((b) => `[${b}]`).join("")}`,
+      // Extend to the requested timeline, not by a duration from the last decoded
+      // source frame: seeking between source frames can leave that frame short.
+      `[1:v:0]trim=duration=${durationMs / 1000},setpts=PTS-STARTPTS,fps=30,tpad=stop_mode=clone:stop=-1,trim=duration=${(durationMs + holdMs) / 1000},split=${branches.length}${branches.map((b) => `[${b}]`).join("")}`,
     );
     filter.push(
       "[blur]scale=1080:1920:force_original_aspect_ratio=increase:force_divisible_by=2,crop=1080:1920,boxblur=30:2,eq=brightness=-0.30,setsar=1[bg]",
     );
-    filter.push(
-      `[fit]scale=${frame.width}:${frame.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[whole]`,
-    );
-    filter.push(`[bg][whole]overlay=0:${frame.y}+(${frame.height}-h)/2:shortest=1[stage0]`);
+    filter.push(`[fit]scale=${fitRegion.width}:${fitRegion.height},setsar=1[whole]`);
+    filter.push(`[bg][whole]overlay=${fitRegion.x}:${fitRegion.y}:shortest=1[stage0]`);
     for (const [i, scene] of scenes.entries()) {
       const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
       const top = scene.bodyTop === 0 ? 0 : even(height * scene.bodyTop);
@@ -440,7 +435,10 @@ export async function renderStudioVideo(input: {
       const parts = [`body${i}`, ...(top ? [`top${i}`] : []), ...(bottom ? [`bottom${i}`] : [])];
       filter.push(`[shot${i}]split=${parts.length}${parts.map((p) => `[${p}]`).join("")}`);
       filter.push(
-        `[body${i}]crop=iw:${height - top - bottom}:0:${top},scale=${frame.width}:${bodyH}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${frame.width}:${bodyH}:(iw-ow)*${input.mediaEdits?.portraitFocus ?? 0.5},pad=${frame.width}:${frame.height}:0:${topH},setsar=1[portrait${i}]`,
+        // A screened portrait permits horizontal reframing only. Scaling to fill
+        // both axes can silently crop the head on a tall source; preserve its
+        // complete body height and pad narrow pictures instead.
+        `[body${i}]crop=iw:${height - top - bottom}:0:${top},scale=-2:${bodyH},crop=w='min(iw,${frame.width})':h=${bodyH}:x='(iw-ow)*${input.mediaEdits?.portraitFocus ?? 0.5}':y=0,pad=${frame.width}:${frame.height}:(ow-iw)/2:${topH},setsar=1[portrait${i}]`,
       );
       let sceneLabel = `portrait${i}`;
       if (top) {
@@ -545,7 +543,10 @@ export async function renderStudioVideo(input: {
     "-filter_complex_threads",
     "1",
     "-filter_complex",
-    `${source}[${finalBase}][2:v]overlay=0:0:shortest=1,format=yuv420p[out]`,
+    // The PNG concat stream has its own time base. Its final transparent frame can
+    // land after a speech boundary between PNG ticks; never carry that cue into
+    // the clean hold, even for one encoded frame.
+    `${source}[${finalBase}][2:v]overlay=0:0:shortest=1:enable='lt(t,${durationMs / 1000})',format=yuv420p[out]`,
     "-map",
     "[out]",
     ...(input.hasAudio ? ["-map", "[voice]"] : []),

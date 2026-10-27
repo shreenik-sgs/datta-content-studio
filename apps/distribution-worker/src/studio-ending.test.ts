@@ -171,7 +171,7 @@ it("holds one opening picture then reveals the portrait with full speech and cap
 }, 60000);
 
 it.each([24, 30])(
-  "keeps a caption-free closing hold after a %i fps source reaches EOF",
+  "keeps every closing-hold frame caption-free after a %i fps source reaches EOF",
   async (rate) => {
     const { execFileSync } = await import("node:child_process");
     const { mkdtemp, rm } = await import("node:fs/promises");
@@ -231,11 +231,18 @@ it.each([24, 30])(
         hasAudio: true,
         sourceWidth: 320,
         sourceHeight: 180,
-        startMs: 0,
+        // A non-zero source offset produces a 3900ms excerpt, between the PNG
+        // concat stream's 40ms ticks. Its blank frame can otherwise arrive late.
+        startMs: 100,
         endMs: 4000,
-        closingCard: { bytes: card, plan: studioClosingCardPlan(4000) },
+        closingCard: { bytes: card, plan: studioClosingCardPlan(3900) },
         captions: [
-          { id: "last", text: "The final spoken words remain complete.", startMs: 0, endMs: 4000 },
+          {
+            id: "last",
+            text: "The final spoken words remain complete.",
+            startMs: 100,
+            endMs: 4000,
+          },
         ],
       });
       const metadata = JSON.parse(
@@ -244,7 +251,49 @@ it.each([24, 30])(
         }),
       );
       const video = metadata.streams.find((s: { codec_type: string }) => s.codec_type === "video");
-      expect(Number(video.duration)).toBeCloseTo(7, 1); // Check actual video, not container/audio duration.
+      expect(Number(video.duration)).toBeCloseTo(6.9, 1); // Check actual video, not container/audio duration.
+      const holdPixels = execFileSync(
+        ffmpeg,
+        [
+          "-v",
+          "error",
+          "-i",
+          output,
+          "-an",
+          "-vf",
+          `select='gte(t,3.9)',crop=884:200:64:${STUDIO_SUBTITLE_TOP}`,
+          "-fps_mode",
+          "passthrough",
+          "-pix_fmt",
+          "gray",
+          "-f",
+          "rawvideo",
+          "pipe:1",
+        ],
+        { maxBuffer: 20_000_000 },
+      );
+      // Decode the entire hold, including its first frame. A tail snapshot alone
+      // misses a brief remnant of the last spoken caption at the transition.
+      expect(holdPixels.length / (884 * 200)).toBe(90);
+      expect(holdPixels.every((value) => value < 100)).toBe(true);
+      const finalCaption = execFileSync(ffmpeg, [
+        "-v",
+        "error",
+        "-ss",
+        "3.8",
+        "-i",
+        output,
+        "-frames:v",
+        "1",
+        "-vf",
+        `crop=884:200:64:${STUDIO_SUBTITLE_TOP}`,
+        "-pix_fmt",
+        "gray",
+        "-f",
+        "rawvideo",
+        "pipe:1",
+      ]);
+      expect(finalCaption.some((value) => value > 200)).toBe(true);
       const tail = execFileSync(
         ffmpeg,
         [
