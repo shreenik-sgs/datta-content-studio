@@ -8,7 +8,11 @@ import {
   studioReviseSchema,
   studioSubmitSchema,
 } from "@satsang/distribution-contracts";
-import { loadStudioProviderConfig, studioSettingsPath } from "@satsang/distribution-db";
+import {
+  loadStudioProviderConfig,
+  studioBlockedOperatorId,
+  studioSettingsPath,
+} from "@satsang/distribution-db";
 import {
   type DistributionCapability,
   studioFileStatus,
@@ -24,6 +28,7 @@ import {
   publicStudioSummary,
   studioJson,
   studioProblem,
+  studioRefusalDetail,
   studioRepository,
 } from "../../../../../lib/studio-runtime";
 
@@ -111,6 +116,9 @@ export async function POST(
         : publicStudioPackage)(value),
     });
   } catch (error) {
-    return studioProblem(error);
+    return studioProblem(
+      error,
+      await studioRefusalDetail(studioBlockedOperatorId(error), auth.context.isTest),
+    );
   }
 }

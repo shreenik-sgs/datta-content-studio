@@ -107,3 +107,29 @@ export async function currentStudioAuthority(
   );
   return !!rows[0] && distributionRoleCapabilities(rows[0].roles).includes(input.capability);
 }
+export type StudioOperatorSummary = {
+  id: string;
+  displayName: string;
+  roles: string[];
+  active: boolean;
+};
+/** Who an operator id belongs to, for naming the account a refusal concerns. */
+export async function describeStudioOperator(
+  pool: Query,
+  id: string,
+  isTest: boolean,
+): Promise<StudioOperatorSummary | null> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+  const { rows } = await pool.query(
+    'SELECT id::text AS id, display_name AS "displayName", roles, active FROM distribution.operator WHERE id=$1 AND is_test=$2',
+    [id, isTest],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    displayName: String(row.displayName),
+    roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
+    active: Boolean(row.active),
+  };
+}

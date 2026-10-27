@@ -1220,6 +1220,12 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       confirmTranscript: true,
       confirmTeachingIntegrity: true,
     });
+    // The posting preflight names the contributor whose curator role is missing.
+    roles.set(`${f.ctx.isTest}:${f.ctx.userId}`, []);
+    expect(
+      await studio.publicationPreflight(f.reviewer, f.pkg.id, original.revision, [output.id]),
+    ).toEqual({ blocker: "REQUESTER_ROLE_REVOKED", operatorId: f.ctx.userId });
+    roles.set(`${f.ctx.isTest}:${f.ctx.userId}`, f.ctx.roles);
     const target = { ...prior, url: "https://www.youtube.com/@dattavijayam" };
     await expect(
       studio.refreshYoutubeDestination(f.ctx, f.pkg.id, {
@@ -1251,6 +1257,8 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     expect(next.outputs[0]?.presentationReview).toEqual(original.outputs[0]?.presentationReview);
     expect(next.outputs[0]?.workflow?.status).toBe("DRAFT");
     expect(next.outputs[0]?.body).toContain(target.url);
+    // Administrative maintenance never makes the administrator a contributor.
+    expect(next.contributorIds).toEqual(original.contributorIds);
     expect(
       (await studio.history(f.ctx, f.pkg.id)).revisions.find(
         (r) => r.revision === original.revision,

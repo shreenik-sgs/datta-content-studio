@@ -301,6 +301,10 @@ export function createIntelligentContentRepository(
     if (!options.authorize) throw new Error("OPERATOR_AUTHORITY_UNAVAILABLE");
     return options.authorize({ userId, isTest, capability });
   }
+  /** A revoked-authority refusal names the operator so an Admin can review that account. */
+  function revoked(code: "REVIEWER_ROLE_REVOKED" | "REQUESTER_ROLE_REVOKED", operatorId: string) {
+    return Object.assign(new Error(code), { operatorId });
+  }
   // Resolve both roles from the current authority, including at delivery time.
   async function reviewerRoles(userId: string, isTest: boolean): Promise<string[]> {
     return (await fresh(userId, isTest, "content.create")) &&
@@ -498,6 +502,13 @@ export function createIntelligentContentRepository(
       feedback: [],
       updatedAt: new Date().toISOString(),
     };
+    // Only current Content Curators are recorded as contributors. Administrative
+    // maintenance records its actor on the revision, never on the contributor list,
+    // because posting rechecks every contributor's curator role and an administrator
+    // can never hold it.
+    for (const id of next.contributorIds.filter((value) => !pkg.contributorIds.includes(value)))
+      if (!(await fresh(id, pkg.isTest, "content.create")))
+        throw Error("STUDIO_CONTRIBUTOR_NOT_CURATOR");
     if (pkg.outputs.some((o) => o.workflow)) {
       const reviewAction =
         action.startsWith("APPROVED_") || ["SUBMITTED", "REJECTED", "DISCARDED"].includes(action);
@@ -763,11 +774,11 @@ export function createIntelligentContentRepository(
         await sourceRights(client, scope, true);
         await qualifiedReviewer(client, pkg, approval.reviewerId);
         if (!(await fresh(approval.reviewerId, pkg.isTest, "content.review")))
-          throw Error("REVIEWER_ROLE_REVOKED");
+          throw revoked("REVIEWER_ROLE_REVOKED", approval.reviewerId);
       }
       for (const contributor of pkg.contributorIds)
         if (!(await fresh(contributor, pkg.isTest, "content.create")))
-          throw Error("REQUESTER_ROLE_REVOKED");
+          throw revoked("REQUESTER_ROLE_REVOKED", contributor);
       return;
     }
     if (pkg.status !== "APPROVED" || pkg.approval?.revision !== pkg.revision)
@@ -784,10 +795,10 @@ export function createIntelligentContentRepository(
     await sourceRights(client, pkg, true);
     await qualifiedReviewer(client, pkg, pkg.approval.reviewerId);
     if (!(await fresh(pkg.approval.reviewerId, pkg.isTest, "content.review")))
-      throw new Error("REVIEWER_ROLE_REVOKED");
+      throw revoked("REVIEWER_ROLE_REVOKED", pkg.approval.reviewerId);
     for (const contributor of pkg.contributorIds)
       if (!(await fresh(contributor, pkg.isTest, "content.create")))
-        throw new Error("REQUESTER_ROLE_REVOKED");
+        throw revoked("REQUESTER_ROLE_REVOKED", contributor);
   }
   async function publicationUnchanged(client: PoolClient, pkg: StudioPackage, row: QueryResultRow) {
     if (pkg.revision === row.package_revision) return true;
@@ -1166,11 +1177,11 @@ export function createIntelligentContentRepository(
         requireContentRevision(pkg.revision, expectedRevision);
         try {
           await publicationEligible(client, pkg, true, outputIds);
-          return { blocker: null };
+          return { blocker: null, operatorId: null };
         } catch (error) {
           const code = error instanceof Error ? error.message : "";
           if (!/^[A-Z][A-Z0-9_]{0,99}$/.test(code)) throw error;
-          return { blocker: code };
+          return { blocker: code, operatorId: studioBlockedOperatorId(error) };
         }
       }),
     replaceDraftClosingCards: (
@@ -1373,7 +1384,10 @@ export function createIntelligentContentRepository(
             ...prepared,
             status: outputIds.length ? "QUEUED" : "DRAFT",
             generation: outputIds.length ? { outputIds, mode: "closing" } : null,
-            contributorIds: [...new Set([...pkg.contributorIds, ctx.userId])],
+            // The administrator is the revision's actor, not a content contributor:
+            // posting rechecks every contributor's curator role, which an
+            // administrator never holds.
+            contributorIds: pkg.contributorIds,
           },
           {
             action: "REVISED",
@@ -2976,4 +2990,9 @@ export function createIntelligentContentRepository(
         return { publication: publication(row), package: pkg, output };
       }),
   };
+}
+/** The operator a revoked-authority refusal names, so an Admin can review that account. */
+export function studioBlockedOperatorId(error: unknown): string | null {
+  const value = error instanceof Error ? (error as { operatorId?: unknown }).operatorId : undefined;
+  return typeof value === "string" ? value : null;
 }

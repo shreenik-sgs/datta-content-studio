@@ -59,7 +59,7 @@ No Admin identity is added as a content contributor merely to perform a repair.
 | External closing-card rewrite/watch containers | Native closing jobs and verification checkpoints; unchanged media is skipped, approved media is locked. |
 | Files hidden while generation continues | The series table shows committed drafts and validated pending saved files, with status/version. Pending files cannot be selected for approval or posting. |
 | Inspect posting failures through server logs | Posting preparation runs the same fresh contributor, source-rights and approval checks on the server before confirmation and displays the blocker. The send action rechecks them. |
-| Direct role repair | No automatic role changes. Admin reviews roles using the app's existing role controls; publishing never bypasses revoked-authority checks. |
+| Direct role repair | No automatic role changes. Admin reviews roles using the app's existing role controls; publishing never bypasses revoked-authority checks. Posting refusals name the account concerned. Administrative maintenance (subscription retargets, closing-card refreshes) records the administrator as the revision's actor, never as a contributor; `ops/repair-admin-contributors.mts` removes administrators recorded that way before 27 October 2026 (dry run by default, `--apply` writes with the migration account). Former curators who authored content are reported, never removed. |
 | Upload/download recovery CLI | Native import verification, original-file upload and the existing Studio recovery page. Provider rejection stays visible and never becomes a claimed successful import. |
 
 The former `ops/recover-online-playlist.mts`,

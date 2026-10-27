@@ -5,7 +5,12 @@ import type {
   StudioRetractionResult,
 } from "@satsang/distribution-domain";
 import type { PublicStudioPackage, PublicStudioPublication, StudioDetail } from "./studio-model";
-import { STUDIO_PUBLICATION_LABELS, studioMessage } from "./studio-model";
+import {
+  STUDIO_PUBLICATION_LABELS,
+  type StudioBlockedOperator,
+  studioBlockerMessage,
+  studioMessage,
+} from "./studio-model";
 
 export type SeriesAction = "submit" | "approve" | "post" | "retract";
 export type SeriesRow = {
@@ -59,7 +64,8 @@ export async function seriesRequest<T>(
       if (attempt + 1 < attempts) continue;
       throw Error(body === undefined ? "STUDIO_SERIES_LOAD_FAILED" : "STUDIO_ACTION_UNCONFIRMED");
     }
-    if (!response.ok) throw Error(data.error ?? "STUDIO_ACTION_UNCONFIRMED");
+    if (!response.ok)
+      throw Object.assign(Error(data.error ?? "STUDIO_ACTION_UNCONFIRMED"), { detail: data });
     return data;
   }
   throw Error("STUDIO_SERIES_LOAD_FAILED");
@@ -107,7 +113,10 @@ export async function prepareSeriesRows(
         const outputs = current.outputs.filter((o) => seriesFileEligible(current, o, action));
         const posting =
           action === "post"
-            ? await seriesRequest<{ blocker: string | null }>(
+            ? await seriesRequest<{
+                blocker: string | null;
+                operator?: StudioBlockedOperator | null;
+              }>(
                 `/distribution/api/studio/${current.id}/publication-preflight?revision=${current.revision}&outputs=${outputs.map((o) => o.id).join(",")}`,
               )
             : null;
@@ -141,7 +150,9 @@ export async function prepareSeriesRows(
             (p) => p.outputId === o.id && studioPublicationMatchesFile(current, o, p),
           );
           const blocker =
-            (posting?.blocker ? studioMessage(posting.blocker) : undefined) ??
+            (posting?.blocker
+              ? studioBlockerMessage(posting.blocker, posting.operator)
+              : undefined) ??
             (action === "approve" ? detail.reviewAssignment?.blocker : null) ??
             (blockers.length ? blockers.map(studioMessage).join(" ") : undefined) ??
             (source && !["APPROVED", "PUBLISHED", "RIGHTS_CLEARED"].includes(source.state)
@@ -278,12 +289,14 @@ export async function runSeriesAction(
       }
     } catch (error) {
       const code = error instanceof Error ? error.message : "STUDIO_ACTION_UNCONFIRMED";
+      const operator = (error as { detail?: { operator?: StudioBlockedOperator | null } }).detail
+        ?.operator;
       for (const item of group)
         onResult({
           id: item.id,
           title: item.title,
           ok: false,
-          message: `${sourceApproved ? "Master permissions approved; file approval did not complete. " : ""}${studioMessage(code)}`,
+          message: `${sourceApproved ? "Master permissions approved; file approval did not complete. " : ""}${studioBlockerMessage(code, operator)}`,
         });
       if (["STUDIO_ACTION_UNCONFIRMED", "FORBIDDEN", "UNAUTHORIZED"].includes(code)) break;
     }

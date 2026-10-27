@@ -1,6 +1,7 @@
 import {
   createIntelligentContentRepository,
   createStudioRoleAuthority,
+  describeStudioOperator,
   loadStudioProviderConfig,
   studioProviderReadiness,
   studioSettingsPath,
@@ -21,6 +22,7 @@ import type {
   PublicStudioAsset,
   PublicStudioPackage,
   PublicStudioPublication,
+  StudioBlockedOperator,
 } from "./studio-model";
 
 export function studioRepository() {
@@ -218,7 +220,18 @@ export async function studioJson(request: Request): Promise<unknown> {
     throw new Error("INVALID_REQUEST");
   }
 }
-export function studioProblem(error: unknown): Response {
+/** Names the operator a revoked-authority refusal concerns, so an Admin can review that account. */
+export async function studioRefusalDetail(
+  operatorId: string | null,
+  isTest: boolean,
+): Promise<{ operator?: StudioBlockedOperator }> {
+  if (!operatorId) return {};
+  const operator = await describeStudioOperator(distributionPool(), operatorId, isTest).catch(
+    () => null,
+  );
+  return { operator: operator ?? { id: operatorId, displayName: null, roles: [], active: false } };
+}
+export function studioProblem(error: unknown, detail: Record<string, unknown> = {}): Response {
   const code = error instanceof Error ? error.message : "";
   if (/^INVALID_STUDIO_[A-Z0-9_]{1,70}$/.test(code))
     return json({ error: code }, code === "INVALID_STUDIO_TRANSITION" ? 409 : 400);
@@ -235,7 +248,7 @@ export function studioProblem(error: unknown): Response {
       "PACKAGE_CHANGED",
     ].includes(code)
   )
-    return json({ error: code }, 409);
+    return json({ error: code, ...detail }, 409);
   if (
     [
       "TEACHING_INTEGRITY_CONFIRMATION_REQUIRED",

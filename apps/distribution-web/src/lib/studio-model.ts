@@ -351,6 +351,8 @@ const messages: Record<string, string> = {
   REQUESTER_ROLE_REVOKED:
     "A recorded contributor lacks the Content Curator role required for posting. An Admin must review that operator's roles in Studio. No posting request was created; the files and approvals are retained.",
   PUBLISHER_ROLE_REVOKED: "The Content Approver no longer has permission to publish.",
+  STUDIO_CONTRIBUTOR_NOT_CURATOR:
+    "Only a current Content Curator can be recorded as a contributor. The change was not saved.",
   FORBIDDEN: "Your current role cannot perform this action.",
   INDEPENDENT_REVIEW_REQUIRED:
     "A different Content Approver must review a package you contributed to.",
@@ -387,6 +389,32 @@ export function studioMessage(code: string): string {
     messages[code] ??
     "This action is unavailable. Refresh the package and check its source and service readiness."
   );
+}
+/** The account a revoked-authority refusal concerns; displayName is null without an operator record. */
+export type StudioBlockedOperator = {
+  id: string;
+  displayName: string | null;
+  roles: string[];
+  active: boolean;
+};
+const roleLabels: Record<string, string> = {
+  CONTENT_COORDINATOR: "Content Curator",
+  CONTENT_APPROVER: "Content Approver",
+  SUPER_ADMIN: "Admin",
+};
+/** The blocker message plus the account it concerns, so an Admin knows whose roles to review. */
+export function studioBlockerMessage(
+  code: string,
+  operator?: StudioBlockedOperator | null,
+): string {
+  const base = studioMessage(code);
+  if (!operator) return base;
+  if (operator.displayName === null)
+    return `${base} Account concerned: ${operator.id} (no operator record in this Studio).`;
+  const roles = operator.roles.length
+    ? operator.roles.map((role) => roleLabels[role] ?? role).join(", ")
+    : "no roles";
+  return `${base} Account concerned: ${operator.displayName} (${roles}${operator.active ? "" : "; deactivated"}).`;
 }
 
 export function studioSourceName(value: PublicStudioPackage) {

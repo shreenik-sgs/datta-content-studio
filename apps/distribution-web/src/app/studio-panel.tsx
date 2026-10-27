@@ -27,8 +27,10 @@ import {
   type PublicStudioOutput,
   type PublicStudioPackage,
   STUDIO_PUBLICATION_LABELS,
+  type StudioBlockedOperator,
   type StudioDetail,
   type StudioListing,
+  studioBlockerMessage,
   studioMessage,
   studioSourceName,
   studioStatusLabel,
@@ -692,6 +694,7 @@ export function StudioPanel({
     setError("");
     setNotice("");
     let failureCode = "STUDIO_ACTION_UNCONFIRMED";
+    let failureOperator: StudioBlockedOperator | null = null;
     try {
       const response = await fetch(id ? `${API}/${id}/${action}` : API, {
         method: "POST",
@@ -702,6 +705,7 @@ export function StudioPanel({
       const data = await response.json();
       if (!response.ok) {
         failureCode = data.error ?? "unavailable";
+        failureOperator = data.operator ?? null;
         throw Error("STUDIO_ACTION_REJECTED");
       }
       if (data.package) setSelectedId(data.package.id);
@@ -730,7 +734,7 @@ export function StudioPanel({
       );
       return data;
     } catch {
-      setError(studioMessage(failureCode));
+      setError(studioBlockerMessage(failureCode, failureOperator));
       await load().catch(() => undefined);
       return null;
     } finally {

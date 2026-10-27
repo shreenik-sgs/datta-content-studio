@@ -40,13 +40,22 @@ it("shows the server's fresh contributor-role blocker before posting without cre
   const fetcher = vi.fn(async (url: string) =>
     response(
       url.includes("publication-preflight")
-        ? { blocker: "REQUESTER_ROLE_REVOKED" }
+        ? {
+            blocker: "REQUESTER_ROLE_REVOKED",
+            operator: {
+              id: "op-1",
+              displayName: "Studio Admin",
+              roles: ["SUPER_ADMIN"],
+              active: true,
+            },
+          }
         : { ...detail, package: pkg },
     ),
   );
   vi.stubGlobal("fetch", fetcher);
   const rows = await prepareSeriesRows([pkg], "post");
   expect(rows[0]?.blocker).toContain("Admin must review");
+  expect(rows[0]?.blocker).toContain("Account concerned: Studio Admin (Admin)");
   expect(fetcher.mock.calls.some(([url]) => url.includes("publication-preflight?revision="))).toBe(
     true,
   );

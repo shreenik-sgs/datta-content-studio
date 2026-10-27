@@ -16,6 +16,10 @@ export default defineConfig({
       // 2,352 after one `cdk synth`). Generated output is not source.
       "**/cdk.out/**",
       "migration/**",
+      // Presentation and staging bundles under outputs/ are gitignored copies of
+      // the source tree; collected from there, their tests fail on unresolved
+      // workspace packages and double-count everything else.
+      "outputs/**",
       "tests/e2e/**",
       "tests/review-e2e/**",
     ],
