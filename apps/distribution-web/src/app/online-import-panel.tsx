@@ -278,7 +278,7 @@ export function OnlineImportPanel({
       <>
         {reviewItem.curation.pausedForSettings && (
           <div className="notice">
-            <p>Generation is paused. Saved files remain available to preview.</p>
+            <p>Generation is paused. Saved files remain in the table.</p>
             <button className="button" type="button" onClick={() => setReviewing(false)}>
               View playlist settings
             </button>

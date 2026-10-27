@@ -530,7 +530,7 @@ export function PlaylistCuration({
             {plan?.pausedForSettings
               ? "View saved files while generation stays paused. Opening the workspace does not resume processing."
               : !reviewable
-                ? "Open the live workspace to watch completed MP4s as they become available."
+                ? "Open the file table to see saved files as curation progresses."
                 : canReview
                   ? "Review the files for each recording, approve or return them with comments, then publish approved content."
                   : "Check the generated files, make any corrections, then send each recording's content to the Content Approver."}{" "}
@@ -541,7 +541,7 @@ export function PlaylistCuration({
               ? "View saved files"
               : reviewable
                 ? "Review curated content"
-                : "View generation & previews"}
+                : "View files & progress"}
           </button>
         </div>
       )}

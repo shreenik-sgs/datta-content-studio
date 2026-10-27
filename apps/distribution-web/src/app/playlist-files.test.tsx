@@ -423,7 +423,7 @@ it.each(["submit", "approve", "post"] as const)(
   },
 );
 
-it("shows completed MP4 previews during generation without adding them to selection or approval", async () => {
+it("shows saved files in the table during generation without adding them to selection or approval", async () => {
   const { host, root } = setup();
   const output = value.outputs[0];
   if (!output) throw Error("missing fixture");
@@ -444,24 +444,27 @@ it("shows completed MP4 previews during generation without adding them to select
           canCurate
           canReview
           canPublish
+          onRefresh={async () => {}}
+          workflowStep={3}
           onOpen={vi.fn()}
           onPreview={vi.fn()}
         />,
       ),
     );
-    const previews = host.querySelector('[aria-label="Completed MP4 previews"]');
-    expect(previews?.textContent).toContain("Ready to preview · 1 MP4");
-    expect(previews?.textContent).toContain("Nothing has been approved or posted");
-    expect(previews?.textContent).toContain("Earlier render");
-    expect(previews?.textContent).toContain("closing-card destination may differ");
-    expect(previews?.querySelector("details")?.open).toBe(true);
-    expect(previews?.querySelector("video")?.getAttribute("src")).toBe(
-      `/distribution/api/studio/first/assets/${output.id}/media?preview=1`,
+    const table = host.querySelector('[aria-label="Playlist files table"]');
+    expect(host.querySelector('[aria-label="Completed MP4 previews"]')).toBeNull();
+    expect(host.querySelector("video")).toBeNull();
+    expect(table?.textContent).toContain("First rendered teaching");
+    expect(table?.textContent).toContain("Earlier render · awaiting replacement");
+    expect(table?.textContent).toContain("Settings or closing cards may differ");
+    expect(table?.querySelector('tbody input[type="checkbox"]')).toBeNull();
+    const selectAll = table?.querySelector(
+      'input[aria-label="Select all visible files"]',
+    ) as HTMLInputElement;
+    expect(selectAll.disabled).toBe(true);
+    expect(host.textContent).toContain(
+      "0 files across 1 recordings · 1 saved files awaiting completion",
     );
-    expect(previews?.querySelector("video")?.preload).toBe("none");
-    expect(previews?.querySelector('input[type="checkbox"]')).toBeNull();
-    expect(previews?.querySelector("button")).toBeNull();
-    expect(host.textContent).toContain("0 draft files · 1 MP4 previews across 1 recordings");
     // Polling updates the same surface, including the transition into editable drafts.
     await act(async () =>
       root.render(
@@ -470,6 +473,55 @@ it("shows completed MP4 previews during generation without adding them to select
     );
     expect(host.querySelector('[aria-label="Completed MP4 previews"]')).toBeNull();
     expect(host.textContent).toContain("1 files across 1 recordings");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("keeps pending rows searchable while selecting only curated files and replacing duplicate renders", async () => {
+  const { host, root } = setup();
+  const output = value.outputs[0];
+  if (!output) throw Error("missing fixture");
+  try {
+    await act(async () =>
+      root.render(
+        <PlaylistFiles
+          packages={[
+            {
+              ...first,
+              generationPreviews: [
+                { ...output, title: "Superseded render" },
+                { ...output, id: "pending-file", title: "New saved teaching" },
+              ],
+            },
+          ]}
+          canCurate
+          onRefresh={async () => {}}
+          onOpen={vi.fn()}
+          onPreview={vi.fn()}
+        />,
+      ),
+    );
+    const table = host.querySelector('[aria-label="Playlist files table"]');
+    expect(table?.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect(table?.textContent).not.toContain("Superseded render");
+    expect(table?.textContent).toContain("New saved teaching");
+    expect(table?.querySelector('[scope="rowgroup"]')?.getAttribute("rowspan")).toBe("2");
+    await act(async () =>
+      (table?.querySelector('[aria-label="Select all visible files"]') as HTMLInputElement).click(),
+    );
+    expect(host.textContent).toContain("1 file selected");
+    const search = host.querySelector('input[type="search"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        search,
+        "New saved",
+      );
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(table?.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(table?.textContent).toContain("New saved teaching");
+    expect(table?.querySelector('tbody input[type="checkbox"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
   }

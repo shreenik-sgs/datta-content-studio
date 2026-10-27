@@ -30,7 +30,6 @@ import {
 } from "../lib/studio-source-outcome";
 import { useHubTimestamp } from "./hub-locale";
 import { SeriesGenerationProgress } from "./series-generation-progress";
-import { StudioGenerationPreviews } from "./studio-generation-previews";
 import { StudioSeriesActions } from "./studio-series-actions";
 import { WorkspaceName } from "./workspace-name";
 import "./studio-lineage.css";
@@ -121,26 +120,43 @@ export function PlaylistFiles({
   }
   const formatTimestamp = useHubTimestamp();
   const outputs = packages.flatMap((value) => value.outputs);
-  const previewCount = packages.reduce(
-    (count, value) => count + (value.generationPreviews?.length ?? 0),
-    0,
-  );
-  const channels = [...new Set(outputs.map((output) => output.channel))];
-  const groups = packages
-    .map((value, index) => ({
+  // Keep saved renders visible without treating them as editable or approved outputs.
+  // A completed output replaces its saved render in the same table on the next poll.
+  const files = packages.map((value, index) => {
+    const seen = new Set(value.outputs.map((output) => output.id));
+    const pending = (value.generationPreviews ?? []).filter((file) => {
+      if (seen.has(file.id)) return false;
+      seen.add(file.id);
+      return true;
+    });
+    return { value, index, pending };
+  });
+  const pendingCount = files.reduce((count, group) => count + group.pending.length, 0);
+  const allFiles = [...outputs, ...files.flatMap((group) => group.pending)];
+  const channels = [...new Set(allFiles.map((output) => output.channel))];
+  const matchesFile = (value: PublicStudioPackage, output: (typeof allFiles)[number]) =>
+    (channel === "all" || output.channel === channel) &&
+    `${studioSourceName(value)} ${output.title} ${output.asset?.filename ?? ""}`
+      .toLocaleLowerCase()
+      .includes(search.trim().toLocaleLowerCase());
+  const groups = files
+    .map(({ value, index, pending }) => ({
       value,
       index,
       shown: value.outputs.filter(
         (output) =>
           (!workflowStep || studioFileWorkflowStep(value, output) === workflowStep) &&
           (postingFilter === "all" || postingState(value, output).key === postingFilter) &&
-          (channel === "all" || output.channel === channel) &&
-          `${studioSourceName(value)} ${studioSourceName(value)} ${output.title} ${output.asset?.filename ?? ""}`
-            .toLocaleLowerCase()
-            .includes(search.trim().toLocaleLowerCase()),
+          matchesFile(value, output),
+      ),
+      pending: pending.filter(
+        (output) =>
+          (!workflowStep || workflowStep === 2 || workflowStep === 3) &&
+          postingFilter === "all" &&
+          matchesFile(value, output),
       ),
     }))
-    .filter((group) => group.shown.length);
+    .filter((group) => group.shown.length || group.pending.length);
   const postingCounts = packages
     .flatMap((p) => p.outputs.map((o) => postingState(p, o)))
     .reduce<Record<string, number>>((counts, state) => {
@@ -192,13 +208,40 @@ export function PlaylistFiles({
     if (value.status === "CHANGES_REQUESTED" && canCurate) return "Fix & resubmit";
     return "Open workflow";
   };
+  const masterCell = (value: PublicStudioPackage, index: number, rowCount: number) => (
+    <th scope="rowgroup" rowSpan={rowCount} className="playlist-file-master">
+      <span>
+        {index + 1}. {studioSourceName(value)}
+      </span>
+      <small>{value.outputs.length} curated files</small>
+      {canCurate && (
+        <WorkspaceName
+          kind="master"
+          id={value.source.masterId}
+          title={studioSourceName(value)}
+          name={value.workspaceName}
+          onSaved={async () => {
+            await onRefresh?.();
+          }}
+        />
+      )}
+      <button
+        className="button"
+        type="button"
+        onClick={() => onOpen(value)}
+        aria-label={`Open workflow for ${studioSourceName(value)}`}
+      >
+        {actionLabel(value)}
+      </button>
+    </th>
+  );
   return (
     <section className="studio-lineage" aria-label="All bundle files">
       <div className="series-files-heading">
         <h3>Series files</h3>
         <p>
-          {outputs.length} {previewCount ? `draft files · ${previewCount} MP4 previews` : "files"}{" "}
-          across {packages.length} recordings
+          {outputs.length} files across {packages.length} recordings
+          {pendingCount > 0 && ` · ${pendingCount} saved files awaiting completion`}
           {channels
             .map(
               (name) =>
@@ -207,16 +250,12 @@ export function PlaylistFiles({
             .join("")}
         </p>
       </div>
-      <StudioGenerationPreviews packages={packages} />
-      <SeriesGenerationProgress
-        items={packages.map((value) => ({
-          id: value.id,
-          title: studioSourceName(value),
-          status: value.status,
-          generationProgress: value.generationProgress,
-          failure: value.failure,
-        }))}
-      />
+      {pendingCount > 0 && (
+        <p>
+          Files appear in the table as they are saved. Editing and submission become available when
+          their recording finishes its checks. Earlier renders remain labelled until replaced.
+        </p>
+      )}
       {showHandoff && (canCurate || canReview) && (drafts.length > 0 || submitted.length > 0) && (
         <section className="panel" aria-label="Review handoff" style={{ marginBlock: 16 }}>
           <h4>Next action</h4>
@@ -358,11 +397,11 @@ export function PlaylistFiles({
                 value={channel}
                 onChange={(event) => setChannel(event.target.value)}
               >
-                <option value="all">All channels ({outputs.length})</option>
+                <option value="all">All channels ({allFiles.length})</option>
                 {channels.map((name) => (
                   <option key={name} value={name}>
                     {studioChannelLabel(name)} (
-                    {outputs.filter((output) => output.channel === name).length})
+                    {allFiles.filter((output) => output.channel === name).length})
                   </option>
                 ))}
               </select>
@@ -393,8 +432,8 @@ export function PlaylistFiles({
             />
           </label>
           <output>
-            {groups.reduce((count, group) => count + group.shown.length, 0)} of {outputs.length}{" "}
-            files
+            {groups.reduce((count, group) => count + group.shown.length + group.pending.length, 0)}{" "}
+            of {allFiles.length} files
           </output>
         </div>
         {onRefresh && (
@@ -454,7 +493,7 @@ export function PlaylistFiles({
                 </th>
               )}
               <th scope="col">Master recording</th>
-              <th scope="col">File / preview</th>
+              <th scope="col">File</th>
               <th scope="col">Channel</th>
               <th scope="col">Type / language</th>
               <th scope="col">Length</th>
@@ -463,7 +502,7 @@ export function PlaylistFiles({
               <th scope="col">Posting status</th>
             </tr>
           </thead>
-          {groups.map(({ value, index, shown }) => (
+          {groups.map(({ value, index, shown, pending }) => (
             <tbody key={value.id}>
               {shown.map((output, row) => {
                 const status = studioOutputState(value, output, []);
@@ -487,33 +526,7 @@ export function PlaylistFiles({
                         />
                       </td>
                     )}
-                    {row === 0 && (
-                      <th scope="rowgroup" rowSpan={shown.length} className="playlist-file-master">
-                        <span>
-                          {index + 1}. {studioSourceName(value)}
-                        </span>
-                        <small>{value.outputs.length} files</small>
-                        {canCurate && (
-                          <WorkspaceName
-                            kind="master"
-                            id={value.source.masterId}
-                            title={studioSourceName(value)}
-                            name={value.workspaceName}
-                            onSaved={async () => {
-                              await onRefresh?.();
-                            }}
-                          />
-                        )}
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() => onOpen(value)}
-                          aria-label={`Open workflow for ${studioSourceName(value)}`}
-                        >
-                          {actionLabel(value)}
-                        </button>
-                      </th>
-                    )}
+                    {row === 0 && masterCell(value, index, shown.length + pending.length)}
                     <th scope="row" className="lineage-file">
                       <button
                         type="button"
@@ -574,21 +587,72 @@ export function PlaylistFiles({
                   </tr>
                 );
               })}
+              {pending.map((file, row) => (
+                <tr key={file.id} data-pending="true">
+                  {canSelect && <td aria-label="Available for selection after curation">—</td>}
+                  {row === 0 && !shown.length && masterCell(value, index, pending.length)}
+                  <th scope="row" className="lineage-file">
+                    {file.title}
+                    <details className="file-metadata">
+                      <summary>Filename</summary>
+                      <small>{file.asset?.filename ?? file.title}</small>
+                    </details>
+                  </th>
+                  <td>{studioOutputChannelLabel(file)}</td>
+                  <td>
+                    {file.format}
+                    <small>{DISTRIBUTION_LANGUAGE_NAMES[file.language]}</small>
+                  </td>
+                  <td>—</td>
+                  <td>
+                    {file.fromPreviousRun ? "Earlier render" : "Saved"}
+                    {file.generatedAt && (
+                      <small>
+                        <time dateTime={file.generatedAt}>{formatTimestamp(file.generatedAt)}</time>
+                      </small>
+                    )}
+                  </td>
+                  <td>
+                    <span className="lineage-status lineage-status-pending">
+                      {file.fromPreviousRun
+                        ? "Earlier render · awaiting replacement"
+                        : value.status === "FAILED"
+                          ? "Saved · curation needs attention"
+                          : ["QUEUED", "GENERATING"].includes(value.status)
+                            ? "Saved · curation in progress"
+                            : "Saved · awaiting completion"}
+                    </span>
+                    <small>
+                      {file.fromPreviousRun
+                        ? "Settings or closing cards may differ from the current request."
+                        : "Available for review when this recording finishes."}
+                    </small>
+                  </td>
+                  <td>Not ready for posting</td>
+                </tr>
+              ))}
             </tbody>
           ))}
         </table>
       </section>
       {!groups.length && (
         <p>
-          {outputs.length
+          {allFiles.length
             ? "No files match these filters."
             : waiting.length
-              ? previewCount
-                ? "Watch the MP4 previews above. Files become available in this table for editing and submission when their recording finishes."
-                : "Completed MP4s appear in the preview area above as each render passes its checks."
+              ? "Files appear in this table automatically as curation progresses."
               : "No files were selected from these source recordings."}
         </p>
       )}
+      <SeriesGenerationProgress
+        items={packages.map((value) => ({
+          id: value.id,
+          title: studioSourceName(value),
+          status: value.status,
+          generationProgress: value.generationProgress,
+          failure: value.failure,
+        }))}
+      />
       {skipped.length > 0 && (
         <details>
           <summary>

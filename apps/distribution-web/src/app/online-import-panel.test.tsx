@@ -252,11 +252,11 @@ it.each(["Curator", "Approver"])(
           />,
         ),
       );
-      expect(host.textContent).toContain(
-        "Generation is paused. Saved files remain available to preview.",
+      expect(host.textContent).toContain("Generation is paused. Saved files remain in the table.");
+      expect(host.querySelector('[aria-label="Playlist files table"]')?.textContent).toContain(
+        "Earlier render · awaiting replacement",
       );
-      expect(host.textContent).toContain("Ready to preview · 1 MP4");
-      expect(host.querySelectorAll("video")).toHaveLength(1);
+      expect(host.querySelectorAll("video")).toHaveLength(0);
       const settings = [...host.querySelectorAll("button")].find(
         (b) => b.textContent === "View playlist settings",
       );
@@ -280,8 +280,10 @@ it.each(["Curator", "Approver"])(
       );
       expect(saved).toBeTruthy();
       await act(async () => saved?.click());
-      expect(host.textContent).toContain("Ready to preview · 1 MP4");
-      expect(host.querySelectorAll("video")).toHaveLength(1);
+      expect(host.querySelector('[aria-label="Playlist files table"]')?.textContent).toContain(
+        "Earlier render · awaiting replacement",
+      );
+      expect(host.querySelectorAll("video")).toHaveLength(0);
       expect(
         fetcher.mock.calls.every(([, options]) => !options?.method || options.method === "GET"),
       ).toBe(true);
