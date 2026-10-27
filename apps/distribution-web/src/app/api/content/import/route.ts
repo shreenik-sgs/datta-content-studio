@@ -40,6 +40,16 @@ const schema = z.discriminatedUnion("action", [
     })
     .strict(),
   z.object({ action: z.literal("discover-playlist"), id: z.string().uuid() }).strict(),
+  z
+    .object({
+      action: z.literal("series-workflow"),
+      id: z.string().uuid(),
+      operation: z.enum(["start", "pause", "resume", "rebase"]),
+      confirmed: z.literal(true),
+      workflowId: z.string().uuid().optional(),
+      expectedVersion: z.number().int().nonnegative().optional(),
+    })
+    .strict(),
   z.object({ action: z.literal("retry"), id: z.string().uuid() }).strict(),
   z.object({ action: z.literal("resume-playlist"), id: z.string().uuid() }).strict(),
   z.object({ action: z.literal("pause-playlist-settings"), id: z.string().uuid() }).strict(),
@@ -98,6 +108,16 @@ export async function POST(request: Request) {
       JSON.parse(new TextDecoder().decode(await readBoundedBody(request, 220000))),
     );
     const repo = repository();
+    if (data.action === "series-workflow") {
+      const workflow = await createIntelligentContentRepository(distributionPool(), {
+        authorize: createStudioRoleAuthority(process.env),
+      }).configureSeriesWorkflow(auth.context, data.id, {
+        action: data.operation,
+        workflowId: data.workflowId,
+        expectedVersion: data.expectedVersion,
+      });
+      return json({ workflow }, 202);
+    }
     if (data.action === "rename")
       return json({ item: await repo.rename(auth.context, data.id, data) });
     if (data.action === "pause-playlist-settings") {
@@ -168,6 +188,11 @@ export async function POST(request: Request) {
         : await repository().enqueue(auth.context, data);
     return json({ item }, 202);
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith("STUDIO_SERIES_") || error.message === "REQUESTER_ROLE_REVOKED")
+    )
+      return json({ error: error.message }, 409);
     if (error instanceof Error && error.message in ONLINE_IMPORT_ERRORS)
       return json(
         { error: error.message, message: ONLINE_IMPORT_ERRORS[error.message] },

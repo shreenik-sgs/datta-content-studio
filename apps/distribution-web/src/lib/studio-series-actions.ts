@@ -105,6 +105,12 @@ export async function prepareSeriesRows(
         const current = detail.package;
         if (!seriesCandidates([current], action).length) return [];
         const outputs = current.outputs.filter((o) => seriesFileEligible(current, o, action));
+        const posting =
+          action === "post"
+            ? await seriesRequest<{ blocker: string | null }>(
+                `/distribution/api/studio/${current.id}/publication-preflight?revision=${current.revision}&outputs=${outputs.map((o) => o.id).join(",")}`,
+              )
+            : null;
         if (action === "retract")
           return detail.publications
             .filter((p) => p.status !== "CANCELLED")
@@ -135,6 +141,7 @@ export async function prepareSeriesRows(
             (p) => p.outputId === o.id && studioPublicationMatchesFile(current, o, p),
           );
           const blocker =
+            (posting?.blocker ? studioMessage(posting.blocker) : undefined) ??
             (action === "approve" ? detail.reviewAssignment?.blocker : null) ??
             (blockers.length ? blockers.map(studioMessage).join(" ") : undefined) ??
             (source && !["APPROVED", "PUBLISHED", "RIGHTS_CLEARED"].includes(source.state)

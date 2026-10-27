@@ -1,4 +1,5 @@
 import {
+  studioClosingRefreshSchema,
   studioDiscardSchema,
   studioPublishSchema,
   studioRegenerateSchema,
@@ -28,6 +29,7 @@ import {
 
 const permissions: Record<string, DistributionCapability | undefined> = {
   regenerate: "content.create",
+  "verify-closings": "content.create",
   revise: "content.create",
   submit: "content.create",
   review: "content.review",
@@ -88,15 +90,21 @@ export async function POST(
       });
     }
     const value =
-      action === "regenerate"
-        ? await repo.enqueueGeneration(auth.context, id, studioRegenerateSchema.parse(body))
-        : action === "revise"
-          ? await repo.revise(auth.context, id, studioReviseSchema.parse(body))
-          : action === "submit"
-            ? await repo.submit(auth.context, id, studioSubmitSchema.parse(body))
-            : action === "review"
-              ? await repo.review(auth.context, id, studioReviewSchema.parse(body))
-              : await repo.discard(auth.context, id, studioDiscardSchema.parse(body));
+      action === "verify-closings"
+        ? await repo.enqueueClosingVerification(
+            auth.context,
+            id,
+            studioClosingRefreshSchema.parse(body),
+          )
+        : action === "regenerate"
+          ? await repo.enqueueGeneration(auth.context, id, studioRegenerateSchema.parse(body))
+          : action === "revise"
+            ? await repo.revise(auth.context, id, studioReviseSchema.parse(body))
+            : action === "submit"
+              ? await repo.submit(auth.context, id, studioSubmitSchema.parse(body))
+              : action === "review"
+                ? await repo.review(auth.context, id, studioReviewSchema.parse(body))
+                : await repo.discard(auth.context, id, studioDiscardSchema.parse(body));
     return json({
       package: (new URL(request.url).searchParams.get("view") === "action"
         ? publicStudioSummary

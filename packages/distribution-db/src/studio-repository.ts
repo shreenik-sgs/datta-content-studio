@@ -64,6 +64,8 @@ import type { StudioRoleAuthority } from "./studio-authority.js";
 import { validateStudioClosingReplacement } from "./studio-closing-replacement.js";
 import { materializeFileWorkflows, studioFileFingerprint } from "./studio-file-review.js";
 import { studioGenerationPreviews } from "./studio-generation-previews.js";
+import { joinStudioQueueFence } from "./studio-queue-fence.js";
+import { createStudioSeriesWorkflow } from "./studio-series-workflow.js";
 import { currentStudioTranscript, loadStudioSource } from "./studio-source.js";
 
 export type StudioRevisionHistoryEntry = {
@@ -104,6 +106,9 @@ function comment(value: string | undefined, required = false): string {
   return result;
 }
 const knownFailures = new Set([
+  "STUDIO_EXPORT_CARD_MISMATCH",
+  "STUDIO_EXPORT_CAPTIONS_INVALID",
+  "STUDIO_EXPORT_INVALID",
   "STUDIO_CLOSING_CHANNEL_REQUIRED",
   "GENERATION_NOT_CONFIGURED",
   "TRANSCRIPTION_NOT_CONFIGURED",
@@ -266,6 +271,7 @@ export function createIntelligentContentRepository(
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      await joinStudioQueueFence(client);
       const result = await operation(client);
       await client.query("COMMIT");
       return result;
@@ -1097,6 +1103,76 @@ export function createIntelligentContentRepository(
     return next;
   }
   return {
+    ...createStudioSeriesWorkflow({
+      transaction,
+      access,
+      fresh,
+      load,
+      sourceCurrent,
+      requestGeneration,
+    }),
+    enqueueClosingVerification: (
+      ctx: DistributionContext,
+      id: string,
+      input: {
+        expectedRevision: number;
+        target?: import("@satsang/distribution-domain").StudioYoutubeClosing | undefined;
+      },
+    ) =>
+      transaction(async (client) => {
+        await access(client, ctx, "content.create");
+        if (!(await fresh(ctx.userId, ctx.isTest, "content.create")))
+          throw Error("REQUESTER_ROLE_REVOKED");
+        let pkg = await load(client, ctx.isTest, id, true);
+        requireContentRevision(pkg.revision, input.expectedRevision);
+        active(pkg);
+        await sourceCurrent(client, pkg);
+        if (
+          pkg.status !== "DRAFT" ||
+          pkg.approval ||
+          pkg.generation ||
+          pkg.outputs.some((o) => !studioCanEditFile(pkg, o, ["content.create"]))
+        )
+          throw Error("STUDIO_FILE_LOCKED");
+        const outputIds = pkg.outputs
+          .filter((o) => o.included && ["short", "video", "reel"].includes(o.format))
+          .map((o) => o.id);
+        if (!outputIds.length) throw Error("STUDIO_SELECT_OUTPUTS");
+        if (input.target) {
+          const target = studioYoutubeClosing(input.target);
+          if (!same(target, pkg.request.youtubeClosing))
+            pkg = await save(client, pkg, ctx.userId, "CLOSING_SETTINGS_UPDATED", {
+              request: { ...pkg.request, youtubeClosing: target },
+              contributorIds: [...new Set([...pkg.contributorIds, ctx.userId])],
+            });
+        }
+        // Saving the target and accepting its closing-only job is one transaction.
+        // A lost response is resolved by reading the new revision, never by replaying it.
+        return requestGeneration(client, ctx, id, {
+          expectedRevision: pkg.revision,
+          mode: "closing",
+          outputIds,
+        });
+      }),
+    publicationPreflight: (
+      ctx: DistributionContext,
+      id: string,
+      expectedRevision: number,
+      outputIds: string[],
+    ) =>
+      transaction(async (client) => {
+        await access(client, ctx, "content.publish");
+        const pkg = await load(client, ctx.isTest, id);
+        requireContentRevision(pkg.revision, expectedRevision);
+        try {
+          await publicationEligible(client, pkg, true, outputIds);
+          return { blocker: null };
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "";
+          if (!/^[A-Z][A-Z0-9_]{0,99}$/.test(code)) throw error;
+          return { blocker: code };
+        }
+      }),
     replaceDraftClosingCards: (
       ctx: DistributionContext,
       id: string,
@@ -1555,6 +1631,9 @@ export function createIntelligentContentRepository(
                 expectedRevision: pkg.revision,
                 outputIds: pkg.generation?.outputIds,
                 mode: pkg.generation?.mode,
+                closingDestinations: pkg.generation?.closingDestinations,
+                steadyOpening: pkg.generation?.steadyOpening,
+                illustrationTimings: pkg.generation?.illustrationTimings,
               });
             Reflect.deleteProperty(member, "error");
             await client.query("RELEASE SAVEPOINT playlist_generation_retry");
@@ -2466,7 +2545,11 @@ export function createIntelligentContentRepository(
           outputs: pkg.outputs.some((o) => o.workflow)
             ? result.outputs.map((o) =>
                 !pkg.outputs.some((old) => old.id === o.id) ||
-                pkg.generation?.outputIds.includes(o.id)
+                (pkg.generation?.outputIds.includes(o.id) &&
+                  !same(
+                    pkg.outputs.find((old) => old.id === o.id),
+                    o,
+                  ))
                   ? {
                       ...o,
                       workflow: {

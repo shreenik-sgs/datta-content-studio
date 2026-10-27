@@ -25,7 +25,7 @@ DP. There is no browser-to-loopback API request, CORS bypass, downloaded browser
 extension, cookie export or arbitrary remote URL. The link opens a separate local
 page; each environment authenticates its own Curator independently.
 
-The worker uses the same recovery engine as `ops/recover-online-playlist.mts`.
+The worker owns the recovery engine; the former standalone operator CLI is retired.
 Passwords and the dedicated staging session stay in process memory; credentials
 are never written into checkpoints or returned in status. The session is logged
 out on finish/stop. Local authority is checked throughout, staging authority before
@@ -123,21 +123,11 @@ while the AWS host still receives `ONLINE_PROVIDER_VERIFICATION_REQUIRED`.
 Metadata success is not media-import success. The update fixes maintenance and
 readiness; it does not guarantee Google's acceptance of an AWS browser.
 
-`ops/recover-online-playlist.mts` provides an operator recovery path when ordinary
-public downloads work on the operator's computer. It uses the same constrained Hub
-downloader, then the existing authenticated original-upload API for each saved
-playlist child. It does not export Google cookies, solve CAPTCHA, change provider
-verification state, approve content or publish. It checks the member before each
-operation, retains completed media and SHA-256 checkpoints, reconciles lost upload
-responses with server state, and never creates a second playlist. Existing shared
-permissions and generation settings continue to apply. Give it the playlist UUID
-as its argument and supply `STUDIO_RECOVERY_ORIGIN`, `STUDIO_RECOVERY_USERNAME`,
-`STUDIO_RECOVERY_PASSWORD`, `STUDIO_RECOVERY_DIRECTORY`, and `STUDIO_YTDLP_PATH`
-through a private process environment. Never put credentials in command lines or
-logs. An exclusive recovery lock prevents duplicate runners; after a crash, verify
-its PID is gone before removing the lock. Retained recordings are private inputs,
-not approved outputs. This route is conditional on normal local access and is not
-a permanent substitute for retaining originals.
+The former `ops/recover-online-playlist.mts` entry point is disabled. Use the
+Studio recovery page or original-file upload described above. Neither recovery
+path requires Codex or an operator script. Provider restrictions may still require
+a human sign-in or the source owner's authorized original recording. For the
+current Bhagavat staging work, do not run local curation, rendering or exports.
 
 Long-term source acquisition should retain authorized originals in private object
 storage or a connected Drive archive. Normal external-browser OAuth is appropriate

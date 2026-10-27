@@ -37,6 +37,13 @@ export const studioGenerationRequestSchema = z
     message: "Alternate source branding requires a subscription destination",
     path: ["sourceBranding"],
   });
+export const studioClosingRefreshSchema = z
+  .object({
+    expectedRevision: revision,
+    target: youtubeClosing.optional(),
+  })
+  .strict();
+
 export const studioCreateSchema = z
   .object({
     masterId: z.string().uuid(),

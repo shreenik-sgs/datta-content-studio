@@ -9,6 +9,7 @@ import {
   type StudioOutput,
   type StudioPackage,
   type StudioPresentationReview,
+  replaceStudioYoutubeFooter,
   studioAssetName,
   studioClosingCardPlan,
   studioVideoDurationLimitMs,
@@ -20,6 +21,7 @@ import { createPrivateRenderScratch } from "./renderer.js";
 import { type StudioCheckpoints, studioFingerprint } from "./studio-checkpoints.js";
 import { spliceClosingVideo } from "./studio-closing-splice.js";
 import { studioClosingCard } from "./studio-ending.js";
+import { verifyStudioExport } from "./studio-export-verification.js";
 import { executeStudioSource } from "./studio-process.js";
 import { saveSharedStudioAsset } from "./studio-shared-assets.js";
 
@@ -283,13 +285,6 @@ export async function refreshStudioClosingOutputs(input: {
     });
     const cacheKey = `preserved-closing:${prior.id}`;
     const cached = checkpoints?.get<StudioOutput>(cacheKey, fingerprint);
-    if (
-      cached?.asset &&
-      sha(await store.readDerivedDescriptor(cached.asset)) === cached.asset.sha256
-    ) {
-      outputs.push(cached);
-      continue;
-    }
     await checkpoints?.progress({
       phase: "rendering",
       provider: "local",
@@ -300,10 +295,45 @@ export async function refreshStudioClosingOutputs(input: {
     });
     const directory = await createPrivateRenderScratch(scratch);
     try {
-      const bytes = await store.readDerivedDescriptor(prior.asset);
-      if (sha(bytes) !== prior.asset.sha256) throw Error("INVALID_STUDIO_ASSET");
+      const candidate = cached?.asset ? cached : prior;
+      if (!candidate.asset) throw Error("INVALID_STUDIO_ASSET");
+      const bytes = await store.readDerivedDescriptor(candidate.asset);
+      if (sha(bytes) !== candidate.asset.sha256) throw Error("INVALID_STUDIO_ASSET");
       const sourcePath = join(directory, "reviewed-export.mp4");
       await writeFile(sourcePath, bytes, { mode: 0o600 });
+      const verify = async (output: StudioOutput, path: string) => {
+        const proof = await verifyStudioExport({
+          path,
+          directory,
+          card,
+          output,
+          store,
+          ffmpeg: env.DISTRIBUTION_FFMPEG_PATH ?? "ffmpeg",
+          ...(signal ? { signal } : {}),
+        });
+        await checkpoints?.set(
+          `media-verification:${output.id}`,
+          studioFingerprint({ output, card: sha(card) }),
+          proof,
+        );
+      };
+      if (
+        studioFingerprint(candidate.presentationReview?.closingCard) === studioFingerprint(plan)
+      ) {
+        try {
+          await verify(candidate, sourcePath);
+          outputs.push(candidate);
+          continue; // Already-correct media is checked, never needlessly encoded.
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            error.message !== "STUDIO_EXPORT_CARD_MISMATCH" ||
+            cached
+          )
+            throw error;
+          // A truthful pixel mismatch is repaired using the exact prior export.
+        }
+      }
       const result = await replaceStudioClosingCard({
         sourcePath,
         directory,
@@ -376,6 +406,15 @@ export async function refreshStudioClosingOutputs(input: {
       };
       const output: StudioOutput = {
         ...prior,
+        ...(prior.presentationReview.closingCard?.youtubeClosing && pkg.request.youtubeClosing
+          ? {
+              body: replaceStudioYoutubeFooter(
+                prior.body,
+                prior.presentationReview.closingCard.youtubeClosing,
+                pkg.request.youtubeClosing,
+              ),
+            }
+          : {}),
         asset,
         ...(thumbnail ? { thumbnail } : {}),
         fileVersion,
@@ -398,6 +437,7 @@ export async function refreshStudioClosingOutputs(input: {
         fileVersion,
         durationMs,
       });
+      await verify(output, result.path);
       await checkpoints?.set(cacheKey, fingerprint, output);
       outputs.push(output);
     } finally {

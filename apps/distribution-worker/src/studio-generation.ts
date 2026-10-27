@@ -340,6 +340,10 @@ export async function generateStudioPackage(input: {
           ).values(),
         ],
         ...(result.provenance.discovery ? { discovery: result.provenance.discovery } : {}),
+        excludedMessages: [
+          ...(previous.provenance?.excludedMessages ?? []),
+          ...(result.provenance.excludedMessages ?? []),
+        ],
       },
     };
   }
@@ -394,7 +398,11 @@ export async function generateStudioPackage(input: {
                 get: <T>(key: string, fingerprint: string) =>
                   checkpoints.get<T>(`correction:${targetKey}:${key}`, fingerprint),
                 set: (key: string, fingerprint: string, value: unknown) =>
-                  checkpoints.set(`correction:${targetKey}:${key}`, fingerprint, value),
+                  checkpoints.set(
+                    key.startsWith("media-verification:") ? key : `correction:${targetKey}:${key}`,
+                    fingerprint,
+                    value,
+                  ),
                 progress: async (value) => {
                   const merged = studioScopedGenerationProgress(value, {
                     finished: replacements.size,
@@ -433,7 +441,9 @@ export async function generateStudioPackage(input: {
         replacements.set(prior.id, {
           ...replacement,
           id: prior.id,
-          ...(prior.correction ? { correction: { ...prior.correction, state: "revised" } } : {}),
+          ...(prior.correction && scope.mode !== "closing"
+            ? { correction: { ...prior.correction, state: "revised" } }
+            : {}),
         });
       }
       if (
@@ -1044,6 +1054,7 @@ export async function generateStudioPackage(input: {
       Boolean(input.renderOnly || input.retainedOutputs),
     );
     const rejectedBoundaries = new Map<string, string>();
+    const rejectedPresentations = new Map<string, string>();
     outputLoop: for (const planned of plan.outputs) {
       if (signal?.aborted) throw new Error("GENERATION_TIMEOUT");
       const video = ["short", "reel", "video"].includes(planned.format);
@@ -1070,6 +1081,17 @@ export async function generateStudioPackage(input: {
         rejectedBoundaries.set(studioOutputKey(planned), finding);
         await checkpoints?.set(rejectionKey, fingerprint, { reason: finding });
       };
+      const presentationRejectionKey = `render-presentation-rejection:${studioOutputKey(planned)}`;
+      const rejectedPresentation = canExcludeBoundary
+        ? checkpoints?.get<{ reason: string }>(presentationRejectionKey, fingerprint)
+        : undefined;
+      if (rejectedPresentation?.reason?.trim()) {
+        rejectedPresentations.set(
+          studioOutputKey(planned),
+          rejectedPresentation.reason.slice(0, 3000),
+        );
+        continue;
+      }
       const rejected = canExcludeBoundary
         ? checkpoints?.get<{ reason: string }>(rejectionKey, fingerprint)
         : undefined;
@@ -1571,7 +1593,13 @@ export async function generateStudioPackage(input: {
             if (!checks.illustrationsRelevant) throw Error("STUDIO_IMAGE_REVIEW_REQUIRED");
             if (!input.closingOnly && !wantsOpening && attempt === 0 && scenes.length) {
               scenes = [];
-            } else throw Error("STUDIO_PRESENTATION_REPAIR_REQUIRED");
+            } else {
+              if (!canExcludeBoundary) throw Error("STUDIO_PRESENTATION_REPAIR_REQUIRED");
+              const reason = checks.reason.slice(0, 3000);
+              rejectedPresentations.set(studioOutputKey(planned), reason);
+              await checkpoints?.set(presentationRejectionKey, fingerprint, { reason });
+              continue outputLoop;
+            }
           }
           if (!mediaRender) throw Error("STUDIO_PRESENTATION_REPAIR_REQUIRED");
           rendered.set(key, mediaRender);
@@ -1644,6 +1672,27 @@ export async function generateStudioPackage(input: {
       }
       await checkpoints?.set(cacheKey, fingerprint, output);
       outputs.push(output);
+    }
+    if (rejectedPresentations.size) {
+      // Keep the actual presentation reason. Do not relabel it as an audio-boundary
+      // failure or mark a rejected render as passing editorial/media review.
+      if (!outputs.length) throw Error("STUDIO_PRESENTATION_REPAIR_REQUIRED");
+      provenance.excludedMessages = [
+        ...(provenance.excludedMessages ?? []),
+        ...plan.outputs.flatMap((planned) => {
+          const reason = rejectedPresentations.get(studioOutputKey(planned));
+          if (!reason) return [];
+          if (!planned.messageId) throw Error("INVALID_STUDIO_MESSAGE");
+          return [
+            {
+              messageId: planned.messageId,
+              title: planned.title,
+              reasons: [`Final presentation review: ${reason}`],
+            },
+          ];
+        }),
+      ];
+      validateStudioProvenance(provenance);
     }
     if (rejectedBoundaries.size) {
       const checks = plan.outputs.map((planned) => {

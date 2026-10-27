@@ -18,6 +18,7 @@ import {
   requireDistributionCapability,
 } from "./repository.js";
 import type { StudioRoleAuthority } from "./studio-authority.js";
+import { joinStudioQueueFence } from "./studio-queue-fence.js";
 import { renameMasterWorkspace, workspaceNameValue } from "./workspace-names.js";
 
 export type OnlineImportClaim = OnlineImport & {
@@ -60,6 +61,7 @@ export function createOnlineImportRepository(
     let committing = false;
     try {
       await client.query("BEGIN");
+      await joinStudioQueueFence(client);
       const result = await operation(client);
       committing = true;
       await client.query("COMMIT");

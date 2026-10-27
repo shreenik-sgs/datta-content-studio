@@ -6,6 +6,8 @@ import type {
 } from "./intelligent-content";
 
 export type PlaylistCuration = {
+  workflow?: import("./studio-series-workflow").StudioSeriesWorkflow;
+  workflowHistory?: import("./studio-series-workflow").StudioSeriesWorkflow[];
   pausedForCleanup?: boolean;
   pausedForSettings?: boolean;
   rights: ContentRights;

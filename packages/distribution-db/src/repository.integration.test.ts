@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import {
   type ContentRights,
   type OnlineImport,
+  type StudioPackage,
   studioAssetName,
+  studioDiscoverySections,
 } from "@satsang/distribution-domain";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -937,6 +939,7 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
         [(await studio.list(ctx, { playlistId: parent.id })).map((pkg) => pkg.id)],
       );
     },
+    20_000,
   );
   it("pauses a provider after one bot challenge, preserves the bundle and resumes only on one explicit recovery action", async () => {
     const imports = createOnlineImportRepository(runtime, async () => true);
@@ -1099,6 +1102,357 @@ suite("DS-DIST-R1-CONTENT disposable local PostgreSQL boundary", () => {
     await expect(imports.claimVerification(ctx, playlist.id)).rejects.toThrow(
       "VERIFICATION_NOT_NEEDED",
     );
+  });
+  it("runs a durable series exactly once across restarts, and refuses completion without media evidence", async () => {
+    // These are synthetic worker results in this suite's disposable database, never real curation.
+    await migration.query(
+      "UPDATE distribution.studio_generation_job SET status='STALE' WHERE status IN ('QUEUED','RUNNING')",
+    );
+    await migration.query(
+      "UPDATE distribution.online_import SET status='FAILED' WHERE deleted_at IS NULL AND status IN ('QUEUED','DOWNLOADING')",
+    );
+    // Earlier tests leave completed bundle fixtures eligible for scheduling.
+    // Freeze only those synthetic plans so this scenario owns the queue.
+    await migration.query(
+      "UPDATE distribution.online_import SET curation=jsonb_set(curation,'{pausedForSettings}','true') WHERE deleted_at IS NULL AND curation IS NOT NULL",
+    );
+    const imports = createOnlineImportRepository(runtime, async () => true);
+    let allowed = true;
+    const makeStudio = () =>
+      createIntelligentContentRepository(runtime, { authorize: async () => allowed });
+    let studio = makeStudio();
+    const parent = await imports.enqueueBundle(ctx, {
+      title: "Workflow test",
+      language: "te",
+      category: "pravachanams",
+      urls: [1, 2]
+        .map(() => `https://youtube.com/watch?v=W${randomUUID().replaceAll("-", "").slice(0, 10)}`)
+        .join("\n"),
+    });
+    const request = {
+      languages: ["en"] as "en"[],
+      channels: ["youtube"] as "youtube"[],
+      captions: true,
+      allCompleteMessages: true,
+      instructions: "Keep continuous source stories and complete teachings.",
+      sourceBranding: "bala-swamiji" as const,
+      youtubeClosing: closingFixture().target,
+    };
+    await studio.configurePlaylist(ctx, parent.id, {
+      request,
+      rights: { ...rights, channels: ["youtube"] },
+    });
+    for (const childId of parent.childIds ?? []) {
+      const leaseToken = randomUUID();
+      await migration.query(
+        "UPDATE distribution.online_import SET status='DOWNLOADING',lease_token=$2,lease_until=now()+interval '2 minutes' WHERE id=$1",
+        [childId, leaseToken],
+      );
+      const child = (await imports.list(ctx, { rootId: parent.id })).find((i) => i.id === childId);
+      if (!child) throw Error("missing child");
+      await imports.complete(
+        {
+          ...child,
+          isTest: true,
+          requestedBy: ctx.userId,
+          leaseToken,
+          language: "te",
+          category: "pravachanams",
+        },
+        { asset: asset(), title: "Synthetic source" },
+      );
+      await studio.queuePlaylistMember(true);
+    }
+    const initial = await studio.list(ctx, { playlistId: parent.id });
+    expect(initial).toHaveLength(2);
+    const started = await studio.configureSeriesWorkflow(ctx, parent.id, { action: "start" });
+    expect((await studio.configureSeriesWorkflow(ctx, parent.id, { action: "start" }))?.id).toBe(
+      started?.id,
+    );
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(false); // Shorts still active.
+    const transcript = {
+      language: "te",
+      durationMs: 60000,
+      segments: [
+        { id: "original", startMs: 1000, endMs: 59000, text: "A synthetic complete teaching." },
+      ],
+      provenance: "MACHINE_TRANSCRIPT" as const,
+      sourceTranscriptId: null,
+    };
+    const finish = async (id: string, stories: boolean) => {
+      const pkg = await studio.get(ctx, id);
+      const fixture = closingFixture().next;
+      const next: StudioPackage = {
+        ...pkg,
+        revision: pkg.revision + 1,
+        status: "DRAFT",
+        generation: null,
+        failure: null,
+        outputs: pkg.outputs.length ? pkg.outputs : [{ ...fixture, id: randomUUID() }],
+        provenance: {
+          provider: "gemini",
+          model: "synthetic",
+          generatedAt: new Date().toISOString(),
+          transcript,
+          ...(stories
+            ? {
+                discovery: {
+                  policy: "story-discovery-v1" as const,
+                  completedAt: new Date().toISOString(),
+                  sections: studioDiscoverySections(transcript, true).map((section) => ({
+                    ...section,
+                    candidates: 0,
+                    accepted: 0,
+                    duplicates: 0,
+                    reason: "No complete story longer than three minutes in this synthetic source.",
+                  })),
+                },
+              }
+            : {}),
+        } as StudioPackage["provenance"],
+      };
+      await migration.query(
+        "INSERT INTO distribution.studio_revision(package_id,is_test,revision,snapshot,actor_id,action) VALUES($1,true,$2,$3,$4,'GENERATED')",
+        [id, next.revision, next, ctx.userId],
+      );
+      await migration.query("UPDATE distribution.studio_package SET revision=$2 WHERE id=$1", [
+        id,
+        next.revision,
+      ]);
+      await migration.query(
+        "UPDATE distribution.studio_generation_job SET status='SUCCEEDED' WHERE package_id=$1",
+        [id],
+      );
+      return next;
+    };
+    const getWorkflow = async () =>
+      (await imports.list(ctx, { rootId: parent.id })).find((i) => i.id === parent.id)?.curation
+        ?.workflow;
+    for (const pkg of initial) await finish(pkg.id, false);
+    // TEST and LIVE share worker capacity. An import in the other world must
+    // defer the transition without exposing or changing that world's contents.
+    const otherImport = await imports.enqueue(other, {
+      url: `https://youtube.com/watch?v=Z${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      language: "te",
+      category: "pravachanams",
+    });
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(false);
+    expect((await getWorkflow())?.phase).toBe("shorts");
+    await migration.query("UPDATE distribution.online_import SET status='FAILED' WHERE id=$1", [
+      otherImport.id,
+    ]);
+    // Fault the second INSERT to prove the first accepted job rolls back with it.
+    const second = initial.map((p) => p.id).sort()[1];
+    await migration.query(
+      `CREATE FUNCTION distribution.test_series_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.package_id='${second}'::uuid THEN RAISE EXCEPTION 'INJECTED_SERIES_FAILURE'; END IF; RETURN NEW; END $$`,
+    );
+    await migration.query(
+      "CREATE TRIGGER test_series_fault BEFORE INSERT ON distribution.studio_generation_job FOR EACH ROW EXECUTE FUNCTION distribution.test_series_fault()",
+    );
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(true);
+    expect((await getWorkflow())?.state).toBe("blocked");
+    expect(
+      (await studio.list(ctx, { playlistId: parent.id })).every((p) => p.status === "DRAFT"),
+    ).toBe(true);
+    expect(
+      Number(
+        (
+          await migration.query(
+            "SELECT count(*) AS n FROM distribution.studio_generation_job WHERE package_id=ANY($1::uuid[])",
+            [initial.map((p) => p.id)],
+          )
+        ).rows[0].n,
+      ),
+    ).toBe(2);
+    await migration.query("DROP TRIGGER test_series_fault ON distribution.studio_generation_job");
+    await migration.query("DROP FUNCTION distribution.test_series_fault()");
+    const retryStep = await getWorkflow();
+    await studio.configureSeriesWorkflow(ctx, parent.id, {
+      action: "resume",
+      workflowId: retryStep?.id,
+      expectedVersion: retryStep?.version,
+    });
+    // An unrelated queue admission transaction fences the global idle check.
+    const fence = await runtime.connect();
+    await fence.query("BEGIN");
+    await fence.query(
+      "SELECT pg_advisory_xact_lock_shared(hashtextextended('studio-queue-admission-v1',0))",
+    );
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(false);
+    await fence.query("ROLLBACK");
+    fence.release();
+    await Promise.all([
+      studio.advanceSeriesWorkflow(true),
+      makeStudio().advanceSeriesWorkflow(true),
+    ]);
+    await studio.advanceSeriesWorkflow(true); // Both contenders may yield the non-waiting fence.
+    expect((await getWorkflow())?.phase).toBe("stories");
+    const jobs = async () =>
+      Number(
+        (
+          await migration.query(
+            "SELECT count(*) AS n FROM distribution.studio_generation_job WHERE package_id=ANY($1::uuid[])",
+            [initial.map((p) => p.id)],
+          )
+        ).rows[0].n,
+      );
+    expect(await jobs()).toBe(4);
+    studio = makeStudio(); // A new process reconstructs its state from the same application tables.
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(false);
+    expect(await jobs()).toBe(4);
+    for (const pkg of initial) await finish(pkg.id, true);
+    const current = await getWorkflow();
+    const paused = await studio.configureSeriesWorkflow(ctx, parent.id, {
+      action: "pause",
+      workflowId: current?.id,
+      expectedVersion: current?.version,
+    });
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(false);
+    await expect(
+      studio.configureSeriesWorkflow(ctx, parent.id, {
+        action: "resume",
+        workflowId: current?.id,
+        expectedVersion: current?.version,
+      }),
+    ).rejects.toThrow("STUDIO_SERIES_WORKFLOW_CHANGED");
+    await studio.configureSeriesWorkflow(ctx, parent.id, {
+      action: "resume",
+      workflowId: paused?.id,
+      expectedVersion: paused?.version,
+    });
+    // Simulate an editor's saved revision while the workflow was paused.
+    const first = initial[0];
+    if (!first) throw Error("fixture");
+    const changed = await studio.get(ctx, first.id);
+    const edited = {
+      ...changed,
+      revision: changed.revision + 1,
+      request: { ...changed.request, instructions: "Keep my newly reviewed guidance." },
+    };
+    await migration.query(
+      "INSERT INTO distribution.studio_revision(package_id,is_test,revision,snapshot,actor_id,action) VALUES($1,true,$2,$3,$4,'REVISED')",
+      [changed.id, edited.revision, edited, ctx.userId],
+    );
+    await migration.query("UPDATE distribution.studio_package SET revision=$2 WHERE id=$1", [
+      changed.id,
+      edited.revision,
+    ]);
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(true);
+    const editBlock = await getWorkflow();
+    expect(editBlock?.error).toBe("STUDIO_SERIES_CONTENT_CHANGED");
+    expect(await jobs()).toBe(4);
+    await expect(
+      studio.configureSeriesWorkflow(ctx, parent.id, {
+        action: "rebase",
+        workflowId: editBlock?.id,
+        expectedVersion: (editBlock?.version ?? 0) - 1,
+      }),
+    ).rejects.toThrow("STUDIO_SERIES_WORKFLOW_CHANGED");
+    await studio.configureSeriesWorkflow(ctx, parent.id, {
+      action: "rebase",
+      workflowId: editBlock?.id,
+      expectedVersion: editBlock?.version,
+    });
+    expect(
+      (await imports.list(ctx, { rootId: parent.id })).find((i) => i.id === parent.id)?.curation
+        ?.workflowHistory,
+    ).toHaveLength(1);
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(true); // Reuses completed story coverage.
+    expect(await jobs()).toBe(4);
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(true);
+    expect((await studio.get(ctx, changed.id)).request.instructions).toBe(
+      edited.request.instructions,
+    );
+    expect((await getWorkflow())?.phase).toBe("closings");
+    expect(await jobs()).toBe(6);
+    for (const pkg of initial) await finish(pkg.id, true);
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(true);
+    const blocked = await getWorkflow();
+    expect(blocked).toMatchObject({
+      state: "blocked",
+      error: "STUDIO_SERIES_MEDIA_VERIFICATION_REQUIRED",
+    });
+    expect(await jobs()).toBe(6);
+    for (const pkg of initial) {
+      const current = await studio.get(ctx, pkg.id);
+      const checkpoints = Object.fromEntries(
+        current.outputs.map((o) => [
+          `media-verification:${o.id}`,
+          {
+            value: {
+              policy: "studio-export-verification-v1",
+              renderedSha256: o.asset?.sha256,
+              fileVersion: o.fileVersion,
+              audioSha256: o.presentationReview?.closingRefresh?.audioSha256 ?? "f".repeat(64),
+              language: o.language,
+              captionSha256: o.captions.find((c) => c.language === o.language)?.asset.sha256,
+              cardPixelsVerified: true,
+              captionsVerified: true,
+              decoded: true,
+              closingCard: o.presentationReview?.closingCard,
+            },
+          },
+        ]),
+      );
+      await migration.query(
+        "UPDATE distribution.studio_package SET generation_checkpoint=$2 WHERE id=$1",
+        [pkg.id, checkpoints],
+      );
+    }
+    await studio.configureSeriesWorkflow(ctx, parent.id, {
+      action: "resume",
+      workflowId: blocked?.id,
+      expectedVersion: blocked?.version,
+    });
+    allowed = false;
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(true);
+    const revoked = await getWorkflow();
+    expect(revoked?.error).toBe("REQUESTER_ROLE_REVOKED");
+    allowed = true;
+    await studio.configureSeriesWorkflow(ctx, parent.id, {
+      action: "resume",
+      workflowId: revoked?.id,
+      expectedVersion: revoked?.version,
+    });
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(true);
+    const done = await getWorkflow();
+    expect(done).toMatchObject({ state: "complete", phase: "complete" });
+    expect(
+      Object.values(done?.members ?? {}).every(
+        (m) => m.noSuitableStory && m.stories === 0 && m.shorts === 1 && m.completedRevision,
+      ),
+    ).toBe(true);
+    expect(await studio.advanceSeriesWorkflow(true)).toBe(false);
+    expect(await jobs()).toBe(6);
+    const final = await studio.get(ctx, first.id);
+    const target = {
+      ...request.youtubeClosing,
+      fullVideosUrl: "https://www.youtube.com/@neworiginals",
+    };
+    await expect(
+      studio.enqueueClosingVerification(reviewer, first.id, {
+        expectedRevision: final.revision,
+        target,
+      }),
+    ).rejects.toThrow("FORBIDDEN");
+    const queued = await studio.enqueueClosingVerification(ctx, first.id, {
+      expectedRevision: final.revision,
+      target,
+    });
+    expect(queued.outputs).toEqual(final.outputs);
+    expect(queued.request.youtubeClosing).toEqual(target);
+    expect(queued.generation).toMatchObject({
+      mode: "closing",
+      outputIds: final.outputs.filter((o) => o.included).map((o) => o.id),
+    });
+    expect(await jobs()).toBe(7);
+    await expect(
+      studio.enqueueClosingVerification(ctx, first.id, {
+        expectedRevision: final.revision,
+        target,
+      }),
+    ).rejects.toThrow("REVISION_CONFLICT");
+    expect(await jobs()).toBe(7);
   });
   beforeAll(async () => {
     const base = new URL(process.env.DISTRIBUTION_TEST_ADMIN_URL ?? "");

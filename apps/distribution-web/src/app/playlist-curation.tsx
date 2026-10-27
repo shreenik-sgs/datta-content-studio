@@ -18,6 +18,7 @@ import { STUDIO_STATUS_LABELS, studioMessage } from "../lib/studio-model";
 import { BundleWorkflow } from "./bundle-workflow";
 import { ImportRecovery } from "./import-recovery";
 import { SeriesGenerationProgress } from "./series-generation-progress";
+import { SeriesWorkflow } from "./series-workflow";
 
 export function PlaylistCuration({
   item,
@@ -145,6 +146,7 @@ export function PlaylistCuration({
   }
   return (
     <section className="playlist-curation" aria-label="Playlist curation">
+      <SeriesWorkflow item={item} canCurate={canCurate} busy={busy} send={send} />
       {!completeOnly && <BundleWorkflow item={item} />}
       <p>
         One bundle, one setup. Videos download one at a time; generation can process several

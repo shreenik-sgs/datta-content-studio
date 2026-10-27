@@ -373,7 +373,9 @@ describe("automatic Studio generation with real media", () => {
       const imageGeneration = vi
         .spyOn(contextualImages, "studioContextIllustrationShots")
         .mockRejectedValue(Error("A closing-only repair must not create new imagery"));
+      const verification = vi.fn(async (_key: string, _fingerprint: string, _value: unknown) => {});
       const replacement = await generateStudioPackage({
+        checkpoints: { get: () => undefined, set: verification, progress: async () => {} },
         claim: {
           ...claim,
           externalProcessing: { allowed: true, reason: null },
@@ -416,14 +418,21 @@ describe("automatic Studio generation with real media", () => {
       expect(refreshed?.captions).toEqual(original?.captions);
       expect(refreshed?.mediaEdits).toEqual(original?.mediaEdits);
       expect(refreshed?.aiReview?.reviewedAt).toEqual(original?.aiReview?.reviewedAt);
-      expect(refreshed?.presentationReview?.closingRefresh).toMatchObject({
-        policy: "preserved-export-closing-v1",
-        previousSha256: original?.asset?.sha256,
-        previousFileVersion: 1,
-      });
       expect(
-        refreshed?.presentationReview?.closingRefresh?.minimumCaptionSsim,
-      ).toBeGreaterThanOrEqual(0.995);
+        verification.mock.calls.some((args) => String(args[0]).startsWith("media-verification:")),
+      ).toBe(true);
+      if (youtubeClosing) {
+        expect(refreshed).toEqual(original);
+      } else {
+        expect(refreshed?.presentationReview?.closingRefresh).toMatchObject({
+          policy: "preserved-export-closing-v1",
+          previousSha256: original?.asset?.sha256,
+          previousFileVersion: 1,
+        });
+        expect(
+          refreshed?.presentationReview?.closingRefresh?.minimumCaptionSsim,
+        ).toBeGreaterThanOrEqual(0.995);
+      }
       expect(replacement.outputs[0]?.presentationReview?.closingCard).toMatchObject({
         destination: "youtube",
         channelUrl: youtubeClosing?.url ?? "https://www.youtube.com/@sgsswamiji",
@@ -432,7 +441,7 @@ describe("automatic Studio generation with real media", () => {
       expect(replacement.outputs[0]?.thumbnail).toMatchObject({ mimeType: "image/png" });
       expect(replacement.outputs[0]).toMatchObject({
         id: result.outputs[0]?.id,
-        fileVersion: 2,
+        fileVersion: youtubeClosing ? 1 : 2,
         title: result.outputs[0]?.title,
         startMs: 0,
         endMs: 2000,
@@ -519,9 +528,14 @@ describe("automatic Studio generation with real media", () => {
     expect(write.mock.calls.some(([input]) => input.mimeType === "video/mp4")).toBe(false);
   }, 30000);
 
-  it.each([false, true])(
-    "records a rejected final-media candidate without losing passing files or repeating paid work (all rejected: %s)",
-    async (allRejected) => {
+  it.each([
+    { allRejected: false, presentationFailure: false },
+    { allRejected: true, presentationFailure: false },
+    { allRejected: false, presentationFailure: true },
+    { allRejected: true, presentationFailure: true },
+  ])(
+    "records a rejected final-media candidate without losing passing files or repeating paid work (all rejected: $allRejected, presentation: $presentationFailure)",
+    async ({ allRejected, presentationFailure }) => {
       vi.spyOn(intelligence, "generateStudioPlan").mockImplementation(
         async ({ pkg, transcript }) => {
           const plan = createLocalStudioPlan(
@@ -564,20 +578,29 @@ describe("automatic Studio generation with real media", () => {
         scenes: [],
         illustrations: [],
       });
-      vi.spyOn(presentation, "reviewStudioPresentation").mockResolvedValue({
-        illustrationsRelevant: true,
-        textIntact: true,
-        subjectIntact: true,
-        captionsClear: true,
-        naturalBoundaries: true,
-        reason: "Presentation passed.",
-      });
+      vi.spyOn(presentation, "reviewStudioPresentation").mockImplementation(
+        async ({ context }) => ({
+          illustrationsRelevant: true,
+          textIntact: true,
+          subjectIntact: true,
+          captionsClear: !(
+            presentationFailure &&
+            (allRejected || (context as { title: string }).title === "Second teaching")
+          ),
+          naturalBoundaries: true,
+          reason: presentationFailure
+            ? "Captions continued into the clean hold."
+            : "Presentation passed.",
+        }),
+      );
       const boundary = vi.mocked(boundaries.reviewStudioClipBoundaries);
       const original = boundary.getMockImplementation();
       if (!original) throw Error("Missing boundary fixture");
       boundary.mockImplementation(async (input) => {
         const value = await original(input);
-        return input.fileStartMs === 0 && (allRejected || input.startMs === 1000)
+        return !presentationFailure &&
+          input.fileStartMs === 0 &&
+          (allRejected || input.startMs === 1000)
           ? {
               ...value,
               opening: {
@@ -623,8 +646,16 @@ describe("automatic Studio generation with real media", () => {
           },
         });
       if (allRejected) {
-        await expect(attempt()).rejects.toThrow("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
-        await expect(attempt()).rejects.toThrow("STUDIO_PRESENTATION_BOUNDARY_REQUIRED");
+        await expect(attempt()).rejects.toThrow(
+          presentationFailure
+            ? "STUDIO_PRESENTATION_REPAIR_REQUIRED"
+            : "STUDIO_PRESENTATION_BOUNDARY_REQUIRED",
+        );
+        await expect(attempt()).rejects.toThrow(
+          presentationFailure
+            ? "STUDIO_PRESENTATION_REPAIR_REQUIRED"
+            : "STUDIO_PRESENTATION_BOUNDARY_REQUIRED",
+        );
       } else {
         const first = await attempt();
         expect(first.outputs).toHaveLength(1);
@@ -632,7 +663,11 @@ describe("automatic Studio generation with real media", () => {
         expect(first.provenance.excludedMessages).toEqual([
           expect.objectContaining({
             messageId: "message-2",
-            reasons: [expect.stringContaining("begins mid-verse")],
+            reasons: [
+              expect.stringContaining(
+                presentationFailure ? "Captions continued" : "begins mid-verse",
+              ),
+            ],
           }),
         ]);
         const resumed = await attempt();
@@ -643,7 +678,11 @@ describe("automatic Studio generation with real media", () => {
       expect(render).toHaveBeenCalledTimes(2);
       expect(boundary.mock.calls.filter(([input]) => input.fileStartMs === 0)).toHaveLength(2);
       expect(
-        [...saved.keys()].filter((key) => key.startsWith("render-boundary-rejection:")),
+        [...saved.keys()].filter((key) =>
+          key.startsWith(
+            presentationFailure ? "render-presentation-rejection:" : "render-boundary-rejection:",
+          ),
+        ),
       ).toHaveLength(allRejected ? 2 : 1);
     },
     60000,

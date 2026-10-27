@@ -35,6 +35,26 @@ const row: SeriesRow = {
 const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
 afterEach(() => vi.unstubAllGlobals());
 
+it("shows the server's fresh contributor-role blocker before posting without creating a job", async () => {
+  const pkg = { ...value, status: "APPROVED" as const };
+  const fetcher = vi.fn(async (url: string) =>
+    response(
+      url.includes("publication-preflight")
+        ? { blocker: "REQUESTER_ROLE_REVOKED" }
+        : { ...detail, package: pkg },
+    ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const rows = await prepareSeriesRows([pkg], "post");
+  expect(rows[0]?.blocker).toContain("Admin must review");
+  expect(fetcher.mock.calls.some(([url]) => url.includes("publication-preflight?revision="))).toBe(
+    true,
+  );
+  expect(
+    fetcher.mock.calls.every((args) => !(args as unknown as [string, RequestInit])[1]?.method),
+  ).toBe(true);
+});
+
 it("prepares all 49 recordings using reads only, ignoring excluded/empty or already submitted packages", async () => {
   const packages = Array.from({ length: 49 }, (_, i) => ({ ...value, id: `p-${i}` }));
   const fetcher = vi.fn(async (_url: string) => response(detail));

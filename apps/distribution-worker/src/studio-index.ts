@@ -112,6 +112,7 @@ async function main() {
                 )
                   continue;
                 if (await repository.queuePlaylistMember(isTest, capacity.queue)) continue;
+                if (await repository.advanceSeriesWorkflow(isTest)) continue;
               } catch {
                 console.error(
                   JSON.stringify({

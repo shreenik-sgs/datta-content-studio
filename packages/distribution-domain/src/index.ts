@@ -147,3 +147,4 @@ export * from "./reviewer-languages.js";
 export * from "./studio-file-workflow";
 
 export * from "./studio-shared-assets";
+export * from "./studio-series-workflow";

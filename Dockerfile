@@ -97,8 +97,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-no
     && ffmpeg -hide_banner -protocols 2>&1 | grep -q ' fd'
 COPY --from=distribution-worker --chown=node:node /repo /repo
 COPY --chown=node:node ops/check-online-import-runtime.mts /repo/ops/check-online-import-runtime.mts
-# Explicit closing-only maintenance uses the same reviewed worker modules and asset guards.
-COPY --chown=node:node ops/refresh-preview-and-draft-closings.mts /repo/ops/refresh-preview-and-draft-closings.mts
+# Native closing-only jobs use the worker modules and private asset guards.
 COPY --chown=node:node apps/distribution-worker/assets/sgsswamiji-channel-avatar.jpg /opt/brand/sgsswamiji.jpg
 ADD --chmod=0644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 ENV NODE_ENV=production DISTRIBUTION_HUB_ENABLED=false DISTRIBUTION_HUB_STAGE=OFF \

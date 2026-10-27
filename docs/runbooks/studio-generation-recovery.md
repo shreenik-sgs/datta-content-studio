@@ -149,8 +149,8 @@ are still validated; invalid or foreign-source checkpoints remain hidden. The
 successful job replaces this preview surface with the normal editable draft list.
 
 Inspect both `outputs` and `generationPreviews` when diagnosing missing videos.
-The series shows previews before detailed progress and explains when no playable
-MP4 exists yet. Do not restart generation or overwrite checkpoints just to make a
+The series table shows saved files before detailed progress, marks them as pending,
+and explains when no playable MP4 exists yet. Do not restart generation or overwrite checkpoints just to make a
 file visible. Regression coverage includes list/detail projection, failure/retry,
 media access, environment separation and unchanged approval/publication gates.
 
@@ -167,13 +167,11 @@ The old editorial timestamp is retained and the render cache fingerprint is inva
 The replacement copies the original encoded audio, compares all preceding frames and the
 caption band, and compares the actual closing pixels with the requested template.
 
-For an already-running older worker, `ops/refresh-preview-and-draft-closings.mts` can perform
-explicit GBADPT-only maintenance without restarting it. It defaults to a dry run; applying
-requires an Admin identity, explicit target, bundle/count guard and a private audit directory.
-The original checkpoints are backed up. A compare-and-swap prevents overwriting newer
-checkpoints; finished unapproved drafts receive an audited new revision. Approved or
-submitted files are locked. `--watch` follows this same bundle as generation completes;
-it neither starts generation nor publishes. Run at most one instance for a bundle.
+As of 27 October, external content maintenance is retired. Use the native
+**Check closing cards and channel links** control for unapproved draft recordings,
+or **Complete this series automatically** for the durable Shorts → stories →
+final checks workflow. Existing active jobs finish unchanged. Do not run old
+maintenance containers. See [Standalone Studio workflow](standalone-studio-workflow.md).
 
 26 October 2026 Bhagavat Katha decision: full videos remain on `@gurubhavanaadpt`, while
 subscription and posting target `@sridattavijayam`. This change is scoped to Bhagavat Katha;

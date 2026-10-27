@@ -7,7 +7,10 @@ import type {
   StudioPublication,
   StudioReadiness,
 } from "@satsang/distribution-domain";
-import { studioNeedsSuitabilityReview } from "@satsang/distribution-domain";
+import {
+  STUDIO_SERIES_WORKFLOW_MESSAGES,
+  studioNeedsSuitabilityReview,
+} from "@satsang/distribution-domain";
 
 /** The operator client receives a filename and authenticated URL, never a storage address. */
 export type PublicStudioAsset = Omit<StudioAsset, "storageKey" | "identityKey">;
@@ -86,6 +89,13 @@ export const STUDIO_PUBLICATION_LABELS: Record<StudioPublication["status"], stri
 };
 
 const messages: Record<string, string> = {
+  ...STUDIO_SERIES_WORKFLOW_MESSAGES,
+  STUDIO_EXPORT_CARD_MISMATCH:
+    "The rendered closing card does not match the selected portrait, name or channel links. The previous file is retained.",
+  STUDIO_EXPORT_CAPTIONS_INVALID:
+    "The saved subtitle file does not match the reviewed captions. The previous file is retained.",
+  STUDIO_EXPORT_INVALID:
+    "The saved video failed its decode, audio, dimensions or duration checks. The previous file is retained.",
   PLAYLIST_SETTINGS_PAUSED:
     "Generation is paused. Open the playlist, choose channels in shared settings, then save and resume.",
   STUDIO_FILE_LOCKED:
@@ -338,7 +348,8 @@ const messages: Record<string, string> = {
     "The source rights do not permit worldwide channel distribution. Confirm the permitted territories with the rights holder.",
   REVIEWER_ROLE_REVOKED:
     "The Content Approver's role changed. The package needs a current authorized review.",
-  REQUESTER_ROLE_REVOKED: "A package contributor no longer has the required Content Curator role.",
+  REQUESTER_ROLE_REVOKED:
+    "A recorded contributor lacks the Content Curator role required for posting. An Admin must review that operator's roles in Studio. No posting request was created; the files and approvals are retained.",
   PUBLISHER_ROLE_REVOKED: "The Content Approver no longer has permission to publish.",
   FORBIDDEN: "Your current role cannot perform this action.",
   INDEPENDENT_REVIEW_REQUIRED:

@@ -15,6 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import type { PublicStudioPackage } from "../lib/studio-model";
 import { useHubTimestamp } from "./hub-locale";
+import { StudioClosingControls } from "./studio-closing-controls";
 
 import {
   StudioMediaControls,
@@ -178,6 +179,12 @@ export function StudioCorrections({
           />
         </>
       )}
+      <StudioClosingControls
+        value={value}
+        busy={busy || dirty}
+        available={available}
+        onAction={onAction}
+      />
       {!available && (
         <p aria-live="polite">
           Generation is unavailable. You can save manual edits; rendering and AI corrections require
