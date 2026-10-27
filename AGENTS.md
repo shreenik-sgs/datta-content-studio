@@ -1,5 +1,10 @@
 # Datta Content Studio
 
+Owner deployment scope, 20 October 2026: run Content Studio independently on
+localhost (port 3070) and its own staging origin. Production is reserved for
+SGS Datta Sannidhi; do not deploy Content Studio to production. Keep Sannidhi's
+local preview on port 3020 available alongside Studio.
+
 This is an independent curation application. Never read Sannidhi account tables,
 reuse its session cookie, or deploy into its ECS services. Use only the configured
 DISTRIBUTION_DATABASE_URL and this app's operator accounts. Stored content, consent,
