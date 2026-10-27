@@ -19,6 +19,8 @@ import {
   STUDIO_OPENING_CARD_POLICY,
   STUDIO_POST_ART_POLICY,
   STUDIO_PRESENTATION_POLICY,
+  STUDIO_PRESENTATION_REVIEWER_VERSION,
+  STUDIO_RENDERER_VERSION,
   STUDIO_SINGLE_TRANSCRIPTION_MS,
   STUDIO_SOURCE_FRAMING_POLICY,
   STUDIO_STORYBOARD_CONTINUITY_POLICY,
@@ -1078,7 +1080,7 @@ export async function generateStudioPackage(input: {
       // Repair only unfinished media. Previously passing, hash-verified exports retain
       // their IDs and bytes; failed presentation/render caches must run the new path.
       const fingerprint = video
-        ? studioFingerprint({ legacyFingerprint, renderer: "full-picture-clean-hold-v1" })
+        ? studioFingerprint({ legacyFingerprint, renderer: STUDIO_RENDERER_VERSION })
         : legacyFingerprint;
       const rejectionKey = `render-boundary-rejection:${studioOutputKey(planned)}`;
       const excludeBoundary = async (reason: string) => {
@@ -1428,7 +1430,7 @@ export async function generateStudioPackage(input: {
             }
             const bytes = await readFile(path);
             const qualityFingerprint = studioFingerprint({
-              reviewerVersion: 6,
+              reviewerVersion: STUDIO_PRESENTATION_REVIEWER_VERSION,
               renderedBoundaryPolicy: STUDIO_BOUNDARY_EVIDENCE_POLICY,
               framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
               policy: STUDIO_PRESENTATION_POLICY,
@@ -1559,7 +1561,7 @@ export async function generateStudioPackage(input: {
               `render-presentation-evidence:${studioOutputKey(planned)}:${qualityFingerprint}`,
               qualityFingerprint,
               {
-                renderer: "full-picture-clean-hold-v1",
+                renderer: STUDIO_RENDERER_VERSION,
                 sourceRange: { startMs: range.startMs, endMs: range.endMs },
                 renderedSha256: sha(bytes),
                 attempt,

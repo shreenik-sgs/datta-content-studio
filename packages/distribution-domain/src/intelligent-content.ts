@@ -169,6 +169,10 @@ export type StudioGenerationProgress = {
   presentationIssues?: string[];
   /** Source suitability decisions, not service errors or approval of an empty package. */
   excludedChannels?: { channel: StudioChannel; reason: string }[];
+  /** The rendering/review pipeline of the worker that recorded a failure. */
+  mediaPipeline?: string;
+  /** The one automatic retry this failed job received under a newer pipeline. */
+  recovery?: import("./studio-generation-recovery").StudioGenerationRecoveryRecord;
 };
 /** A repeat of unchanged settings cannot repair a source-suitability decision. */
 export function studioNeedsSuitabilityReview(code?: string | null): boolean {

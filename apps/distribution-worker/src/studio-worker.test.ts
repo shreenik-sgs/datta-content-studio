@@ -1,3 +1,4 @@
+import { STUDIO_MEDIA_PIPELINE_VERSION } from "@satsang/distribution-domain";
 import { beforeEach, expect, it, vi } from "vitest";
 import { StudioNoSuitableContentError } from "./studio-checkpoints";
 import { StudioContentQualityError } from "./studio-content-review";
@@ -62,6 +63,25 @@ it("contains an unexpected recording error, hides raw diagnostics and processes 
   );
   expect(onError).toHaveBeenCalledWith("GENERATION_FAILED");
   expect(repository.completeGeneration).toHaveBeenCalledOnce();
+});
+it("names the media pipeline that failed so a newer worker can retry the job once", async () => {
+  vi.mocked(generateStudioPackage).mockRejectedValue(
+    new Error("STUDIO_PRESENTATION_REPAIR_REQUIRED"),
+  );
+  const onFailureDiagnostic = vi.fn();
+  await runStudioGenerationOnce({
+    ...input(),
+    env: { STUDIO_RELEASE: "a2cbe84" },
+    onFailureDiagnostic,
+  });
+  const mediaPipeline = `${STUDIO_MEDIA_PIPELINE_VERSION}@a2cbe84`;
+  expect(repository.failGeneration).toHaveBeenCalledWith(
+    expect.anything(),
+    "STUDIO_PRESENTATION_REPAIR_REQUIRED",
+    expect.objectContaining({ errorCode: "STUDIO_PRESENTATION_REPAIR_REQUIRED", mediaPipeline }),
+  );
+  expect(onFailureDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ mediaPipeline }));
+  expect(repository.deferGeneration).not.toHaveBeenCalled();
 });
 it("does not overwrite another worker's results after losing the lease", async () => {
   vi.mocked(generateStudioPackage).mockRejectedValue(new Error("STUDIO_LEASE_LOST"));

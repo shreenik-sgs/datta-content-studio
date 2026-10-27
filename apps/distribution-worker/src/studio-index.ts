@@ -13,11 +13,13 @@ import {
   createStorageCleanupRepository,
   createStudioRoleAuthority,
 } from "@satsang/distribution-db";
+import { studioMediaPipeline } from "@satsang/distribution-domain";
 import { Pool } from "pg";
 import { runLiveCurationLoop } from "./live-curation-worker.js";
 import { runStorageCleanupLoop } from "./storage-cleanup-worker.js";
 import { studioCapacity } from "./studio-capacity.js";
 import { studioMediaCapacity } from "./studio-media-capacity.js";
+import { studioRecoveryScheduler } from "./studio-recovery.js";
 import { runStudioLoop } from "./studio-worker.js";
 import { runVerifiedOnlineImports } from "./verified-online-imports.js";
 
@@ -78,6 +80,10 @@ async function main() {
     console.info(
       `Intelligent content worker ${isTest ? "TEST (no external publication)" : "PRODUCTION"} started.`,
     );
+    // The pipeline this worker reports on failures and retries; proves which build runs.
+    console.info(
+      JSON.stringify({ event: "studio.media.pipeline", mediaPipeline: studioMediaPipeline(env) }),
+    );
     const fragments = createLiveFragmentStore(parseAssetStoreConfig(env));
     try {
       await Promise.all([
@@ -104,6 +110,18 @@ async function main() {
             const repository = createIntelligentContentRepository(pool, {
               authorize: createStudioRoleAuthority(env),
             });
+            // A newer worker retries, once, the recordings its predecessor's rendering or
+            // final media gate failed. It runs before series steps so a recovered member
+            // is queued again before its series is judged.
+            const recover = studioRecoveryScheduler({
+              repository,
+              isTest,
+              env,
+              onRecovered: (result) =>
+                console.info(JSON.stringify({ event: "studio.generation.recovery", ...result })),
+              onError: (code) =>
+                console.error(JSON.stringify({ event: "studio.generation.recovery", code })),
+            });
             while (!controller.signal.aborted) {
               try {
                 if (
@@ -112,6 +130,7 @@ async function main() {
                 )
                   continue;
                 if (await repository.queuePlaylistMember(isTest, capacity.queue)) continue;
+                if (await recover()) continue;
                 if (await repository.advanceSeriesWorkflow(isTest)) continue;
               } catch {
                 console.error(

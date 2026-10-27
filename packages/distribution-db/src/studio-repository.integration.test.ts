@@ -3013,4 +3013,94 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision }),
     ).rejects.toThrow("TRANSCRIPT_SUPERSEDED");
   });
+  it("retries a media failure once per pipeline through the checked request path, never a source decision", async () => {
+    const f = await fixture({ channels: ["youtube"], allCompleteMessages: true });
+    const queued = f.pkg;
+    // Earlier tests leave their own failed packages behind; judge only this test's.
+    const recover = async (mediaPipeline: string, ids = [f.pkg.id]) =>
+      (await studio.recoverFailedGenerations({ isTest: true, mediaPipeline })).filter((r) =>
+        ids.includes(r.packageId),
+      );
+    const first = await claim(queued);
+    await studio.failGeneration(first, "STUDIO_PRESENTATION_REPAIR_REQUIRED", {
+      phase: "reviewing",
+      provider: "gemini",
+      completed: 2,
+      total: 26,
+      presentationIssues: ["The title banner is cropped."],
+      mediaPipeline: "pipeline-a",
+    });
+    expect((await studio.get(f.ctx, f.pkg.id)).status).toBe("FAILED");
+    // The pipeline that failed never retries itself.
+    expect(await recover("pipeline-a")).toEqual([]);
+    // A newer pipeline retries once, as the original requester, resuming saved work.
+    expect(await recover("pipeline-b")).toEqual([
+      { packageId: f.pkg.id, failure: "STUDIO_PRESENTATION_REPAIR_REQUIRED", outcome: "requeued" },
+    ]);
+    const requeued = await studio.get(f.ctx, f.pkg.id);
+    expect(requeued.status).toBe("QUEUED");
+    expect(requeued.failure).toBeNull();
+    expect(requeued.revision).toBe(queued.revision + 2);
+    const history = await migration.query(
+      "SELECT action,actor_id FROM distribution.studio_revision WHERE package_id=$1 AND is_test=true ORDER BY revision DESC LIMIT 1",
+      [f.pkg.id],
+    );
+    expect(history.rows[0]).toEqual({ action: "GENERATION_REQUESTED", actor_id: f.ctx.userId });
+    const stamped = await migration.query(
+      "SELECT progress FROM distribution.studio_generation_job WHERE id=$1",
+      [first.id],
+    );
+    expect(stamped.rows[0].progress).toMatchObject({
+      errorCode: "STUDIO_PRESENTATION_REPAIR_REQUIRED",
+      mediaPipeline: "pipeline-a",
+      presentationIssues: ["The title banner is cropped."],
+      recovery: { mediaPipeline: "pipeline-b", outcome: "requeued" },
+    });
+    expect(await recover("pipeline-b")).toEqual([]);
+    // The retried job is an ordinary job. Failing again under the current pipeline
+    // records that pipeline, so the same worker never loops; the next one retries.
+    const second = await claim(requeued);
+    expect(second.checkpoint).toBeDefined();
+    await studio.failGeneration(second, "RENDER_TIMEOUT", {
+      phase: "rendering",
+      provider: "local",
+      completed: 0,
+      total: 1,
+      mediaPipeline: "pipeline-b",
+    });
+    expect(await recover("pipeline-b")).toEqual([]);
+    // A curator whose role was revoked cannot have work requested in their name; the
+    // decline is final for this pipeline and leaves the package failed for a curator.
+    roles.set(`true:${f.ctx.userId}`, []);
+    expect(await recover("pipeline-c")).toEqual([
+      {
+        packageId: f.pkg.id,
+        failure: "RENDER_TIMEOUT",
+        outcome: "declined",
+        code: "REQUESTER_ROLE_REVOKED",
+      },
+    ]);
+    roles.set(`true:${f.ctx.userId}`, ["CONTENT_COORDINATOR"]);
+    expect((await studio.get(f.ctx, f.pkg.id)).status).toBe("FAILED");
+    expect(await recover("pipeline-c")).toEqual([]);
+    expect(await recover("pipeline-d")).toEqual([
+      { packageId: f.pkg.id, failure: "RENDER_TIMEOUT", outcome: "requeued" },
+    ]);
+    // Source suitability is a decision, not a media failure.
+    const unsuitable = await fixture({ channels: ["youtube"], allCompleteMessages: true });
+    const job = await claim(unsuitable.pkg);
+    await studio.failGeneration(job, "STUDIO_NO_SUITABLE_CHANNELS", {
+      phase: "drafting",
+      provider: "gemini",
+      completed: 0,
+      total: 1,
+      mediaPipeline: "pipeline-a",
+    });
+    expect(await recover("pipeline-z", [unsuitable.pkg.id])).toEqual([]);
+    expect((await studio.get(unsuitable.ctx, unsuitable.pkg.id)).status).toBe("FAILED");
+    await migration.query(
+      "UPDATE distribution.studio_generation_job SET status='SUCCEEDED' WHERE package_id=ANY($1::uuid[])",
+      [[f.pkg.id, unsuitable.pkg.id]],
+    );
+  });
 });

@@ -67,6 +67,7 @@ import type { StudioRoleAuthority } from "./studio-authority.js";
 import { validateStudioClosingReplacement } from "./studio-closing-replacement.js";
 import { materializeFileWorkflows, studioFileFingerprint } from "./studio-file-review.js";
 import { studioGenerationPreviews } from "./studio-generation-previews.js";
+import { createStudioGenerationRecovery } from "./studio-generation-recovery.js";
 import { joinStudioQueueFence } from "./studio-queue-fence.js";
 import { createStudioSeriesWorkflow } from "./studio-series-workflow.js";
 import { currentStudioTranscript, loadStudioSource } from "./studio-source.js";
@@ -1125,6 +1126,7 @@ export function createIntelligentContentRepository(
       sourceCurrent,
       requestGeneration,
     }),
+    ...createStudioGenerationRecovery({ transaction, fresh, load, requestGeneration }),
     enqueueClosingVerification: (
       ctx: DistributionContext,
       id: string,

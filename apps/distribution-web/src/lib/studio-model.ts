@@ -9,6 +9,7 @@ import type {
 } from "@satsang/distribution-domain";
 import {
   STUDIO_SERIES_WORKFLOW_MESSAGES,
+  studioGenerationRecoverable,
   studioNeedsSuitabilityReview,
 } from "@satsang/distribution-domain";
 
@@ -395,10 +396,14 @@ const messages: Record<string, string> = {
 
 /** Raw provider/database failures never become interface copy. */
 export function studioMessage(code: string): string {
-  return (
+  const message =
     messages[code] ??
-    "This action is unavailable. Refresh the package and check its source and service readiness."
-  );
+    "This action is unavailable. Refresh the package and check its source and service readiness.";
+  // The promise is exact: one automatic retry from saved work, only after the Studio's
+  // own rendering or final video check changes. Retrying now uses the current one.
+  return studioGenerationRecoverable(code)
+    ? `${message} Datta Media Studio retries this recording automatically from its saved work after its next media update; you can also retry it now.`
+    : message;
 }
 /** The account a revoked-authority refusal concerns; displayName is null without an operator record. */
 export type StudioBlockedOperator = {

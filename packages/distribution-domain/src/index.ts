@@ -125,6 +125,7 @@ export * from "./studio-content-review";
 export * from "./studio-boundary-review";
 export * from "./studio-presentation";
 export * from "./studio-framing";
+export * from "./studio-generation-recovery";
 export * from "./studio-ending";
 export * from "./studio-closing-destination";
 export * from "./studio-visual-preferences";

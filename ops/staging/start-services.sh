@@ -48,7 +48,7 @@ docker run "${common[@]}" --name dcs-staging-web --memory 1g --pids-limit 256 \
   "$STUDIO_IMAGE_REPOSITORY:$STUDIO_RELEASE-web"
 docker run "${common[@]}" --name dcs-staging-worker --memory 5g --pids-limit 768 --shm-size 512m \
   --security-opt seccomp=/opt/content-studio/releases/$STUDIO_RELEASE/ops/import-verification-seccomp.json \
-  --env-file "$config/runtime.env" \
+  --env-file "$config/runtime.env" -e STUDIO_RELEASE="$STUDIO_RELEASE" \
   -v /srv/content-studio/scratch:/tmp/sgs-studio \
   -v /srv/content-studio/transcripts:/tmp/sgs-transcripts \
   "$STUDIO_IMAGE_REPOSITORY:$STUDIO_RELEASE-verification"

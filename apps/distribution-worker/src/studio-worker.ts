@@ -1,7 +1,7 @@
 import { setTimeout as pause } from "node:timers/promises";
 import type { PrivateAssetStore } from "@satsang/distribution-assets";
 import type { createIntelligentContentRepository } from "@satsang/distribution-db";
-import type { StudioGenerationProgress } from "@satsang/distribution-domain";
+import { type StudioGenerationProgress, studioMediaPipeline } from "@satsang/distribution-domain";
 import { studioCapacity } from "./studio-capacity.js";
 import { StudioNoSuitableContentError } from "./studio-checkpoints.js";
 import { StudioClosingPreservationError } from "./studio-closing-refresh.js";
@@ -26,6 +26,7 @@ export type StudioWorkerInput = {
     provider: string;
     errorType: string;
     sourceLocations: string[];
+    mediaPipeline: string;
   }) => void;
 };
 export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise<boolean> {
@@ -102,11 +103,13 @@ export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise
         ? error.message
         : "GENERATION_FAILED";
     // Log source locations, never provider payloads, credentials, or raw error messages.
+    const mediaPipeline = studioMediaPipeline(input.env);
     input.onFailureDiagnostic?.({
       code,
       ...(claim.package?.id ? { packageId: claim.package.id } : {}),
       phase: progress.phase,
       provider: progress.provider,
+      mediaPipeline,
       errorType:
         error instanceof Error &&
         ["Error", "TypeError", "RangeError", "SyntaxError", "AbortError", "TimeoutError"].includes(
@@ -179,9 +182,11 @@ export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise
     )
       return true;
     if (code !== "STUDIO_LEASE_LOST") {
+      // Name the pipeline that failed so a newer one can retry this job once, automatically.
       await input.repository.failGeneration(claim, code, {
         ...progress,
         errorCode: code,
+        mediaPipeline,
         ...(error instanceof StudioContentQualityError ? { reviewIssues: error.checks } : {}),
         ...(error instanceof StudioNoSuitableContentError
           ? { excludedChannels: error.excludedChannels }

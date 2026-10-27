@@ -230,3 +230,34 @@ with the unfinished work. Provider, timeout and contract failures are never cach
 as empty content. Changed inputs invalidate the checkpoint; no rejected excerpt
 is promoted or exempted from review. Deploy worker changes only after its active
 jobs have drained, preserving the existing checkpoints.
+
+## Automatic retry after a worker update (27 October 2026)
+
+On 27 October three Bhagavat Katha recordings failed `STUDIO_PRESENTATION_REPAIR_REQUIRED`
+under worker a2cbe84 while the fix for their findings (full-picture framing and a
+caption-free closing hold) was already on `main`. Deploying the fix did nothing for
+them: a terminal failure waited for a curator to press retry on each recording.
+
+The worker now records the media pipeline that failed each job
+(`progress.mediaPipeline`: renderer version, final-review version, the boundary,
+framing and presentation policies, and the deployed `STUDIO_RELEASE` tag when the
+host passes one). At start-up, and then once a minute, a worker asks the repository
+for packages whose latest job failed with one of the Studio's own media failures
+(`STUDIO_PRESENTATION_REPAIR_REQUIRED`, `STUDIO_PRESENTATION_BOUNDARY_REQUIRED`,
+`RENDER_TIMEOUT`, `RENDER_STALLED`, `RENDER_PROCESS_FAILED`, `GENERATION_FAILED`)
+under a different pipeline, and requeues each one through the same checked request a
+curator would make: the original requester's current curator role, the paused-series
+rule, the source dependency and the transition rules all still apply. The retry
+resumes saved checkpoints, so finished files are reused and only the failed work runs
+again. Source-suitability decisions, spend caps, revoked roles and changed sources are
+never retried this way.
+
+The retry is bounded: the failed job is stamped with the pipeline that handled it
+(`progress.recovery`), and a job that fails again under the current pipeline records
+that pipeline, so an unchanged worker never loops. A paused series or an unreachable
+authority leaves the job eligible for a later pass; any other refusal is declined for
+this pipeline and left to the curator. Series workflows benefit without change: the
+recovery runs before a series step, so a requeued member is judged after it completes.
+`ops/staging/start-services.sh` passes `STUDIO_RELEASE` to the worker so every hosted
+deploy counts as a pipeline change; a worker without the tag retries only when the
+media constants themselves change.
