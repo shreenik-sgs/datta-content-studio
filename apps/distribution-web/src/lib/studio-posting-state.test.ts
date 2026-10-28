@@ -147,3 +147,20 @@ describe("series posting visibility", () => {
       expect(studioPostingState(pkg, output, [{ ...receipt, remoteUrl }]).url).toBeNull();
   });
 });
+
+it("shows the channel's own reason on a failed posting request", () => {
+  const failed: PublicStudioPublication = {
+    ...receipt,
+    id: "failed",
+    status: "FAILED",
+    error: "BUFFER_PUBLISH_FAILED",
+    errorDetail: "You've hit the daily video upload limit for an unverified YouTube account.",
+    remoteId: "buffer-rejected",
+    remoteUrl: null,
+  };
+  const state = studioPostingState(pkg, output, [failed], { accountId: "guru" });
+  expect(state.label).toBe("Posting failed");
+  expect(state.detail).toContain(
+    "The channel reported: \u201cYou've hit the daily video upload limit",
+  );
+});

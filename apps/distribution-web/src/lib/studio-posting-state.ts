@@ -5,7 +5,7 @@ import type {
   PublicStudioPackage,
   PublicStudioPublication,
 } from "./studio-model";
-import { studioMessage } from "./studio-model";
+import { studioMessage, studioPublicationMessage } from "./studio-model";
 
 export type StudioPostingKey =
   | "posted"
@@ -135,7 +135,7 @@ export function studioPostingState(
           ? "Posting blocked"
           : "Posting failed",
       current.error
-        ? studioMessage(current.error)
+        ? studioPublicationMessage(current)
         : "Check the channel and the posting record before retrying; the outcome is not confirmed.",
       "attention",
       current,
