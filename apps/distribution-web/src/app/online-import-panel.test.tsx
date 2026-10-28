@@ -12,6 +12,134 @@ afterEach(() => {
 });
 
 it.each([
+  ["start", false],
+  ["start", true],
+  ["pause", false],
+  ["resume", false],
+  ["rebase", false],
+] as const)(
+  "keeps an accepted %s workflow visible when refresh failure is %s",
+  async (operation, refreshFails) => {
+    vi.stubGlobal("React", React);
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const workflow = {
+      id: "workflow",
+      version: 2,
+      state: operation === "pause" ? "paused" : "running",
+      phase: "stories",
+      sourceIds: ["child"],
+      members: { "package-one": { shorts: 1, stories: 0 } },
+      history: [{ at: "2026-10-28T00:00:00Z", action: operation, actorId: "curator" }],
+    };
+    const parent = {
+      id: "series",
+      title: "Saved series",
+      source: { provider: "youtube", kind: "bundle" },
+      status: "COMPLETE",
+      childIds: ["child"],
+      curation: {
+        rights: { owner: "Owner", authorizationBasis: "Permission", channels: ["youtube"] },
+        request: { ...value.request, allCompleteMessages: true },
+        items: { child: { packageId: value.id, status: "DRAFT" } },
+        ...(operation === "start"
+          ? {}
+          : {
+              workflow: {
+                ...workflow,
+                version: 1,
+                state: operation === "pause" ? "running" : "paused",
+                history: [],
+              },
+            }),
+      },
+    };
+    const child = {
+      id: "child",
+      parentId: parent.id,
+      masterId: value.source.masterId,
+      status: "COMPLETE",
+      source: { provider: "youtube", kind: "video" },
+    };
+    if (operation === "rebase" && parent.curation.workflow)
+      Object.assign(parent.curation.workflow, {
+        state: "blocked",
+        error: "STUDIO_SERIES_CONTENT_CHANGED",
+      });
+    let submitted = false;
+    const fetcher = vi.fn(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        const action = JSON.parse(String(options.body));
+        expect(action).toMatchObject({
+          action: "series-workflow",
+          id: parent.id,
+          operation,
+          confirmed: true,
+        });
+        if (operation !== "start")
+          expect(action).toMatchObject({ workflowId: workflow.id, expectedVersion: 1 });
+        submitted = true;
+        return Response.json({ workflow }, { status: 202 });
+      }
+      if (submitted && refreshFails) throw Error("refresh unavailable");
+      return Response.json({
+        items: [
+          submitted ? { ...parent, curation: { ...parent.curation, workflow } } : parent,
+          child,
+        ],
+        available: true,
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const button = (text: string) => {
+      const result = [...host.querySelectorAll("button")].find(
+        (entry) => entry.textContent === text,
+      );
+      if (!result) throw Error(`Missing button: ${text}`);
+      return result;
+    };
+    try {
+      await act(async () =>
+        root.render(<OnlineImportPanel locale="en" showForm={false} onOpen={vi.fn()} />),
+      );
+      await act(async () => button("Continue series").click());
+      if (["start", "rebase"].includes(operation)) {
+        await act(async () =>
+          host
+            .querySelector<HTMLInputElement>('[aria-label="Complete series workflow"] input')
+            ?.click(),
+        );
+      }
+      const label = {
+        start: "Complete this series automatically",
+        pause: "Pause after current work",
+        resume: "Resume series workflow",
+        rebase: "Use current drafts and run checks",
+      }[operation];
+      await act(async () => button(label).click());
+      expect(host.textContent).toContain("Series workflow saved");
+      expect(host.textContent).toContain(
+        operation === "pause"
+          ? "Paused between stages"
+          : "Discovering and reviewing complete stories",
+      );
+      expect(host.textContent).toContain("1 Shorts");
+      expect(host.textContent).toContain("Saved series");
+      expect(host.textContent).not.toContain("could not confirm");
+      if (refreshFails)
+        expect(host.textContent).toContain(
+          "Your request was saved, but progress could not refresh",
+        );
+      expect(fetcher.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(1);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+
+it.each([
   ["QUEUED", null, "Waiting to read the playlist."],
   ["DOWNLOADING", null, "Reading the playlist’s recordings…"],
   ["FAILED", "ONLINE_SOURCE_UNAVAILABLE", "The playlist could not be read."],

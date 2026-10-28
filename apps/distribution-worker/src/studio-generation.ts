@@ -637,7 +637,8 @@ export async function generateStudioPackage(input: {
           }
         : undefined;
     const imageModel = env.STUDIO_GEMINI_IMAGE_MODEL ?? STUDIO_CONTEXT_IMAGE_MODEL;
-    const screenCache = new Map<string, { screen: StudioSourceScreen; proxy: Buffer }>();
+    // Keep long review proxies on private scratch disk, not one large Buffer per candidate.
+    const screenCache = new Map<string, { screen: StudioSourceScreen; proxyPath: string }>();
     const videoConnection = {
       apiKey: env.STUDIO_GEMINI_API_KEY ?? "",
       model: env.STUDIO_GEMINI_MODEL ?? "",
@@ -721,7 +722,7 @@ export async function generateStudioPackage(input: {
         });
         await checkpoints?.set(`source-screen:${fingerprint}`, fingerprint, screen);
       }
-      const result = { screen, proxy };
+      const result = { screen, proxyPath: join(directory, `source-review-${fingerprint}.mp4`) };
       screenCache.set(fingerprint, result);
       return result;
     };
@@ -1492,7 +1493,7 @@ export async function generateStudioPackage(input: {
               checks = await reviewStudioPresentation({
                 frames,
                 ...videoConnection,
-                source: screened.proxy,
+                source: await readFile(screened.proxyPath),
                 rendered: proxy,
                 context: {
                   title: planned.title,

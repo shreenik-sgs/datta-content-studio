@@ -21,6 +21,11 @@ import {
   STUDIO_GENERATIVE_REQUEST_TIMEOUT_MS,
   fetchGeminiWithRetry,
 } from "./studio-provider-retry.js";
+import {
+  STUDIO_REVIEW_MEDIA_MAX_BYTES,
+  type StudioReviewPart,
+  withStudioReviewMedia,
+} from "./studio-review-media.js";
 
 type ReviewConnection = {
   apiKey: string;
@@ -205,7 +210,7 @@ export async function studioReviewProxy(input: {
     sourcePath: input.sourcePath,
     mimeType: "video/mp4",
     directory: input.directory,
-    timeoutMs: 180000,
+    timeoutMs: Math.max(180000, Math.min(1800000, input.endMs - input.startMs)),
     ...(input.signal ? { signal: input.signal } : {}),
     args: [
       "-nostdin",
@@ -245,7 +250,8 @@ export async function studioReviewProxy(input: {
       path,
     ],
   });
-  if ((await stat(path)).size > 16 * 1024 * 1024) throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
+  if ((await stat(path)).size > STUDIO_REVIEW_MEDIA_MAX_BYTES)
+    throw Error("STUDIO_PRESENTATION_REVIEW_MEDIA_TOO_LARGE");
   return readFile(path);
 }
 async function request(
@@ -260,56 +266,58 @@ async function request(
   const model = input.model.replace(/^models\//, "");
   if (!input.apiKey?.trim() || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(model))
     throw Error("STUDIO_PRESENTATION_NOT_CONFIGURED");
-  const response = await providerJson(
-    (url, init) => fetchGeminiWithRetry(input.fetcher ?? fetch, String(url), init ?? {}),
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: "POST",
-      redirect: "error",
-      signal: input.signal
-        ? AbortSignal.any([input.signal, AbortSignal.timeout(STUDIO_GENERATIVE_REQUEST_TIMEOUT_MS)])
-        : AbortSignal.timeout(STUDIO_GENERATIVE_REQUEST_TIMEOUT_MS),
-      headers: { "x-goog-api-key": input.apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: input.instructions }] },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: JSON.stringify(input.context) },
-              ...input.videos.map((video) => ({
-                inlineData: { mimeType: "video/mp4", data: video.toString("base64") },
-              })),
-              ...(input.frames ?? []).flatMap((frame) => [
-                {
-                  text: `Full-resolution original then rendered frame at ${frame.atMs}ms relative to this excerpt. Inspect exact picture edges, head and text.`,
-                },
-                { inlineData: { mimeType: "image/png", data: frame.source.toString("base64") } },
-                { inlineData: { mimeType: "image/png", data: frame.rendered.toString("base64") } },
-                ...(frame.foreground
-                  ? [
-                      {
-                        text: "The following image isolates the actual sharp foreground pixels from that rendered frame, excluding the decorative blurred backdrop. Compare its edges with the original above. Identify which lettering, if any, was newly lost; lettering already absent in the original is a source limitation, not an introduced crop. This is additional evidence, not an automatic pass: still reject actual lost text, occlusion or distortion.",
-                      },
-                      {
-                        inlineData: {
-                          mimeType: "image/png",
-                          data: frame.foreground.toString("base64"),
-                        },
-                      },
-                    ]
-                  : []),
-              ]),
-            ],
+  const evidence: StudioReviewPart[] = [
+    { text: JSON.stringify(input.context) },
+    ...input.videos.map((video): StudioReviewPart => ({ mimeType: "video/mp4", bytes: video })),
+    ...(input.frames ?? []).flatMap((frame): StudioReviewPart[] => [
+      {
+        text: `Full-resolution original then rendered frame at ${frame.atMs}ms relative to this excerpt. Inspect exact picture edges, head and text.`,
+      },
+      { mimeType: "image/png", bytes: frame.source },
+      { mimeType: "image/png", bytes: frame.rendered },
+      ...(frame.foreground
+        ? [
+            {
+              text: "The following image isolates the actual sharp foreground pixels from that rendered frame, excluding the decorative blurred backdrop. Compare its edges with the original above. Identify which lettering, if any, was newly lost; lettering already absent in the original is a source limitation, not an introduced crop. This is additional evidence, not an automatic pass: still reject actual lost text, occlusion or distortion.",
+            },
+            {
+              mimeType: "image/png" as const,
+              bytes: frame.foreground,
+            },
+          ]
+        : []),
+    ]),
+  ];
+  const response = await withStudioReviewMedia({ ...input, parts: evidence }, (parts) =>
+    providerJson(
+      (url, init) => fetchGeminiWithRetry(input.fetcher ?? fetch, String(url), init ?? {}),
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: "POST",
+        redirect: "error",
+        signal: input.signal
+          ? AbortSignal.any([
+              input.signal,
+              AbortSignal.timeout(STUDIO_GENERATIVE_REQUEST_TIMEOUT_MS),
+            ])
+          : AbortSignal.timeout(STUDIO_GENERATIVE_REQUEST_TIMEOUT_MS),
+        headers: { "x-goog-api-key": input.apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: input.instructions }] },
+          contents: [
+            {
+              role: "user",
+              parts,
+            },
+          ],
+          generationConfig: {
+            candidateCount: 1,
+            responseMimeType: "application/json",
+            responseJsonSchema: input.schema,
           },
-        ],
-        generationConfig: {
-          candidateCount: 1,
-          responseMimeType: "application/json",
-          responseJsonSchema: input.schema,
-        },
-      }),
-    },
+        }),
+      },
+    ),
   );
   const text = geminiPlanText(response);
   try {

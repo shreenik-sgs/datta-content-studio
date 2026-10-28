@@ -298,6 +298,10 @@ const messages: Record<string, string> = {
     "The closing-card timing is invalid. Your existing video is retained; regenerate the affected file to rebuild its ending.",
   STUDIO_PRESENTATION_REVIEW_INVALID:
     "The visual reviewer returned incomplete or invalid evidence. The affected file is held; retry to resume screening.",
+  STUDIO_PRESENTATION_REVIEW_MEDIA_TOO_LARGE:
+    "The full video exceeded the review media limit. Completed work is saved. An Admin must inspect the review preparation before retrying.",
+  STUDIO_PRESENTATION_REVIEW_FILE_FAILED:
+    "The AI service could not prepare the uploaded review evidence. The affected file is held and completed work is saved. Check the provider failure before retrying.",
   STUDIO_PRESENTATION_BOUNDARY_REQUIRED:
     "The actual video or audio cut still starts or ends abruptly. The affected file is held. Use AI correction to select a complete passage with a natural pause; see the reviewer’s findings below.",
   STUDIO_PRESENTATION_REPAIR_REQUIRED:

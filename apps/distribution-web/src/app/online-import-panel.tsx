@@ -130,6 +130,24 @@ export function OnlineImportPanel({
           "The Hub could not apply this action. Refresh the bundle and check its current status before retrying.";
         throw Error("IMPORT_REQUEST_REJECTED");
       }
+      if ((data as { action?: string }).action === "series-workflow") {
+        if (!body.workflow) throw Error("IMPORT_RESPONSE_UNCONFIRMED");
+        const id = (data as { id: string }).id;
+        setItems((previous) =>
+          previous.map((item) =>
+            item.id === id && item.curation
+              ? { ...item, curation: { ...item.curation, workflow: body.workflow } }
+              : item,
+          ),
+        );
+        setNotice("Series workflow saved. Its progress and history appear below.");
+        await load().catch(() =>
+          setProgressError(
+            "Your request was saved, but progress could not refresh. Reconnecting automatically; do not submit it again.",
+          ),
+        );
+        return;
+      }
       setActiveImportId((previous) =>
         ["import", "import-bundle"].includes((data as { action?: string }).action ?? "")
           ? body.item.id
