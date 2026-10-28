@@ -242,6 +242,8 @@ export type StudioPublication = {
   accountId: string | null;
   attempt: number;
   error: string | null;
+  /** The channel's own reason for a refusal, as reported by the provider; null when it gave none. */
+  errorDetail: string | null;
   remoteId: string | null;
   remoteUrl: string | null;
   createdAt: string;

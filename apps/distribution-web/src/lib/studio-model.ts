@@ -122,7 +122,9 @@ const messages: Record<string, string> = {
   STUDIO_PUBLISHING_PAUSED_AFTER_REJECTIONS:
     "Posting paused after three consecutive channel rejections for this account. Nothing more was sent. Fix the cause shown on the failed posts, then Post again to resume.",
   BUFFER_PUBLISH_FAILED:
-    "The channel rejected this upload after Buffer created the post, for example a Buffer plan limit or YouTube's daily upload limit. Read the error on the post in Buffer, fix the cause, then Post again; Studio sends a fresh request. The rejected Buffer post is never published and can be deleted in Buffer.",
+    "The channel rejected this upload after Buffer created the post. The channel's own reason is shown with this message when Buffer reported one; a YouTube daily upload limit clears after 24 hours. Fix the cause, then Post again; Studio sends a fresh request. The rejected Buffer post is never published and can be deleted in Buffer.",
+  BUFFER_CREATE_REJECTED:
+    "Buffer refused to create this post. The reason Buffer gave is shown with this message. Fix the cause, then Post again.",
   BUFFER_APPROVAL_REQUIRED:
     "Buffer is holding this post as a draft or for approval. Release it in Buffer, or change the Buffer queue settings and Post again.",
   BUFFER_STATUS_UNKNOWN:
@@ -395,6 +397,17 @@ const messages: Record<string, string> = {
 };
 
 /** Raw provider/database failures never become interface copy. */
+/** The failure message for a publishing request: Studio's explanation of the code,
+ * followed by the channel's own reason when the provider reported one. */
+export function studioPublicationMessage(
+  publication: Pick<StudioPublication, "error"> & { errorDetail?: string | null },
+): string {
+  if (!publication.error) return "";
+  const message = studioMessage(publication.error);
+  return publication.errorDetail
+    ? `${message} The channel reported: “${publication.errorDetail}”`
+    : message;
+}
 export function studioMessage(code: string): string {
   const message =
     messages[code] ??

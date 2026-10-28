@@ -4,6 +4,7 @@ import {
   type StudioProviderAccount,
   studioProviderAccountBlock,
 } from "@satsang/distribution-db";
+import { studioProviderErrorDetail } from "@satsang/distribution-domain";
 export type { StudioPlatform, StudioProviderAccount } from "@satsang/distribution-db";
 
 export type StudioPublicationInput = {
@@ -35,6 +36,8 @@ export type StudioProviderOutcome =
       kind: "BLOCKED" | "REJECTED" | "UNKNOWN";
       code: string;
       checkpoint?: StudioProviderCheckpoint;
+      /** The provider's own reason, reduced to one plain line; absent when it gave none. */
+      detail?: string;
     };
 export type StudioProviderAuthorization = {
   allowed: boolean;
@@ -53,7 +56,8 @@ export type StudioAdapterOptions = {
   now?: () => Date;
 };
 const BUFFER_ENDPOINT = "https://api.buffer.com";
-const POST_FIELDS = "id channelId channelService status schedulingType sentAt externalLink text";
+const POST_FIELDS =
+  "id channelId channelService status schedulingType sentAt externalLink text error { message }";
 const CREATE_POST = `mutation HubPublish($input: CreatePostInput!) { createPost(input: $input) { ... on PostActionSuccess { post { ${POST_FIELDS} } } ... on MutationError { message } } }`;
 const GET_POST = `query HubReceipt($input: PostInput!) { post(input: $input) { ${POST_FIELDS} } }`;
 const GET_CHANNEL =
@@ -163,7 +167,11 @@ export function createSocialPlatformAdapter(options: StudioAdapterOptions) {
     kind: "BLOCKED" | "REJECTED" | "UNKNOWN",
     code: string,
     cp?: StudioProviderCheckpoint,
-  ): StudioProviderOutcome => ({ kind, code, ...(cp ? { checkpoint: cp } : {}) });
+    reported?: unknown,
+  ): StudioProviderOutcome => {
+    const detail = studioProviderErrorDetail(reported);
+    return { kind, code, ...(cp ? { checkpoint: cp } : {}), ...(detail ? { detail } : {}) };
+  };
   function validate(input: StudioPublicationInput): string | null {
     const block = studioProviderAccountBlock(account);
     if (block) return block;
@@ -323,7 +331,8 @@ export function createSocialPlatformAdapter(options: StudioAdapterOptions) {
       return { kind: "PROGRESS", checkpoint: cp, retryAfterSeconds: 30 };
     if (value.status === "draft" || value.status === "needs_approval")
       return outcome("BLOCKED", "BUFFER_APPROVAL_REQUIRED", cp);
-    if (value.status === "error") return outcome("REJECTED", "BUFFER_PUBLISH_FAILED", cp);
+    if (value.status === "error")
+      return outcome("REJECTED", "BUFFER_PUBLISH_FAILED", cp, value.error);
     return outcome("UNKNOWN", "BUFFER_STATUS_UNKNOWN", cp);
   }
   function bufferInput(input: StudioPublicationInput) {
@@ -486,7 +495,7 @@ export function createSocialPlatformAdapter(options: StudioAdapterOptions) {
           return outcome("UNKNOWN", "BUFFER_CREATE_OUTCOME_UNKNOWN");
         const result = response.value.data.createPost;
         if (!result.post && typeof result.message === "string")
-          return outcome("REJECTED", "BUFFER_CREATE_REJECTED");
+          return outcome("REJECTED", "BUFFER_CREATE_REJECTED", undefined, result.message);
         return bufferReceipt(input, result.post);
       }
       if (account.transport === "reddit") {

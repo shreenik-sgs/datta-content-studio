@@ -2789,18 +2789,33 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       publicationId: queued[0]?.id,
     });
     if (!first) throw new Error("MISSING_CLAIM");
-    await studio.completePublication(first, {
+    const failed = await studio.completePublication(first, {
       status: "FAILED",
       accountId: "acc-1",
       remoteId: "buffer-rejected",
       error: "BUFFER_PUBLISH_FAILED",
+      errorDetail: "The user has exceeded the number of videos they may upload.",
       checkpoint: { providerPostId: "buffer-rejected" },
     });
+    expect(failed).toMatchObject({
+      status: "FAILED",
+      error: "BUFFER_PUBLISH_FAILED",
+      errorDetail: "The user has exceeded the number of videos they may upload.",
+    });
+    expect(
+      (
+        await migration.query(
+          "SELECT detail->>'errorDetail' AS detail FROM distribution.studio_publication_attempt WHERE publication_id=$1 AND status='FAILED'",
+          [first.publication.id],
+        )
+      ).rows[0]?.detail,
+    ).toBe("The user has exceeded the number of videos they may upload.");
     const retried = await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision });
     expect(retried.find((value) => value.id === first.publication.id)).toMatchObject({
       status: "QUEUED",
       remoteId: null,
       error: null,
+      errorDetail: null,
     });
     const retries = (
       await migration.query(

@@ -83,6 +83,7 @@ it.each([
       selectedAccountId: "guru",
       attempt: 1,
       error: null,
+      errorDetail: null,
       remoteId: isTest ? null : "video",
       remoteUrl: null,
       createdAt: "2026-10-23T01:00:00Z",

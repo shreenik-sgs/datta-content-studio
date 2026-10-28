@@ -87,6 +87,7 @@ const publication: PublicStudioPublication = {
   status: "PUBLISHED",
   attempt: 1,
   error: null,
+  errorDetail: null,
   remoteId: "remote-one",
   remoteUrl: "https://youtube.com/watch?v=example",
   createdAt: "2026-10-10T10:10:00.000Z",

@@ -11,7 +11,7 @@ import {
   type PublicStudioPublication,
   STUDIO_PUBLICATION_LABELS,
   STUDIO_STATUS_LABELS,
-  studioMessage,
+  studioPublicationMessage,
 } from "./studio-model";
 
 export type LineageState = {
@@ -133,7 +133,7 @@ export function studioOutputState(
   return {
     label: STUDIO_PUBLICATION_LABELS[publication.status],
     detail: publication.error
-      ? studioMessage(publication.error)
+      ? studioPublicationMessage(publication)
       : `Package revision ${publication.packageRevision}`,
     tone:
       publication.status === "PUBLISHED"

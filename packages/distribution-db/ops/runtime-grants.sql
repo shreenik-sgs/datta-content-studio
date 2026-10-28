@@ -61,6 +61,6 @@ BEGIN
     EXECUTE format('GRANT SELECT,INSERT ON distribution.studio_package,distribution.studio_revision,distribution.studio_feedback,distribution.studio_generation_job,distribution.studio_publication_job,distribution.studio_publication_attempt TO %I', runtime_role);
     EXECUTE format('GRANT UPDATE(revision,updated_at,generation_checkpoint,deleted_at) ON distribution.studio_package TO %I', runtime_role);
     EXECUTE format('GRANT UPDATE(status,attempts,available_at,lease_token,lease_owner,lease_until,last_error,progress,updated_at) ON distribution.studio_generation_job TO %I', runtime_role);
-    EXECUTE format('GRANT UPDATE(status,attempts,available_at,lease_token,lease_owner,lease_until,last_error,account_id,remote_id,remote_url,checkpoint,destination_key,duplicate_check,updated_at) ON distribution.studio_publication_job TO %I', runtime_role);
+    EXECUTE format('GRANT UPDATE(status,attempts,available_at,lease_token,lease_owner,lease_until,last_error,account_id,remote_id,remote_url,checkpoint,destination_key,duplicate_check,last_error_detail,updated_at) ON distribution.studio_publication_job TO %I', runtime_role);
   END IF;
 END $$;

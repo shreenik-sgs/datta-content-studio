@@ -8,7 +8,12 @@ import {
   unconfiguredStudioClosingChannels,
 } from "@satsang/distribution-domain";
 import { useState } from "react";
-import { STUDIO_PUBLICATION_LABELS, type StudioDetail, studioMessage } from "../lib/studio-model";
+import {
+  STUDIO_PUBLICATION_LABELS,
+  type StudioDetail,
+  studioMessage,
+  studioPublicationMessage,
+} from "../lib/studio-model";
 import { StudioPostingCheck } from "./studio-posting-check";
 
 /** Show delivery readiness before approval, and keep the next action above the files. */
@@ -234,7 +239,7 @@ export function StudioPublishing({
                   <p key={p.id}>
                     {outputs.find((output) => output.id === p.outputId)?.title}:{" "}
                     {STUDIO_PUBLICATION_LABELS[p.status]}
-                    {p.error && <> — {studioMessage(p.error)}</>}
+                    {p.error && <> — {studioPublicationMessage(p)}</>}
                     {p.remoteUrl && (
                       <>
                         {" "}

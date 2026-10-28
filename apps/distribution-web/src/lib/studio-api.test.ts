@@ -611,6 +611,7 @@ describe("Intelligent content HTTP role, review and media boundaries", () => {
       accountId: "private-account",
       attempt: 0,
       error: "secret account token",
+      errorDetail: null,
       remoteId: null,
       remoteUrl: "https://user:password@example.test/private",
       createdAt: now,

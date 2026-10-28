@@ -166,6 +166,7 @@ export const distributionStudioPublicationJob = distributionSchema.table(
     checkpoint: jsonb("checkpoint"),
     destinationKey: text("destination_key"),
     duplicateCheck: jsonb("duplicate_check"),
+    lastErrorDetail: text("last_error_detail"),
     ...lease(),
   },
   (table) => [

@@ -247,6 +247,7 @@ function publication(row: QueryResultRow): StudioPublication {
     accountId: row.account_id,
     attempt: row.attempts,
     error: row.last_error,
+    errorDetail: row.last_error_detail ?? null,
     remoteId: row.remote_id,
     remoteUrl: row.remote_url,
     createdAt: iso(row.created_at),
@@ -875,7 +876,7 @@ export function createIntelligentContentRepository(
     error: string | null,
   ) {
     await client.query(
-      "UPDATE distribution.studio_publication_job SET status=$3,last_error=$4,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2",
+      "UPDATE distribution.studio_publication_job SET status=$3,last_error=$4,last_error_detail=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2",
       [row.id, row.is_test, status, error],
     );
     await attempt(client, row, status, error ? { error } : {});
@@ -2688,8 +2689,8 @@ export function createIntelligentContentRepository(
             row = (
               await client.query(
                 retry === "FRESH_ATTEMPT"
-                  ? "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,remote_id=NULL,remote_url=NULL,checkpoint=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *"
-                  : "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *",
+                  ? "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,last_error_detail=NULL,remote_id=NULL,remote_url=NULL,checkpoint=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *"
+                  : "UPDATE distribution.studio_publication_job SET status='QUEUED',last_error=NULL,last_error_detail=NULL,available_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *",
                 [row.id, pkg.isTest],
               )
             ).rows[0] as QueryResultRow;
@@ -2928,12 +2929,15 @@ export function createIntelligentContentRepository(
         remoteId?: string | null;
         remoteUrl?: string | null;
         error?: string | null;
+        /** The channel's own words for a refusal; stored beside the code, never in place of it. */
+        errorDetail?: string | null;
         checkpoint?: Record<string, unknown> | null;
         retryAfterSeconds?: number;
       },
     ) =>
       transaction(async (client) => {
         const { pkg, row } = await checkedPublication(client, claim);
+        const errorDetail = input.error ? (input.errorDetail ?? null) : null;
         if (
           !["PUBLISHED", "PROCESSING", "SIMULATED", "BLOCKED", "FAILED", "UNCERTAIN"].includes(
             input.status,
@@ -2951,7 +2955,7 @@ export function createIntelligentContentRepository(
           retryAfterSeconds < 1 ||
           retryAfterSeconds > 86400 ||
           JSON.stringify(checkpoint).length > 16000 ||
-          [input.accountId, remoteId, remoteUrl, input.error].some(
+          [input.accountId, remoteId, remoteUrl, input.error, errorDetail].some(
             (value) =>
               value != null &&
               (typeof value !== "string" || value.length > 2000 || value.includes("\u0000")),
@@ -2961,7 +2965,7 @@ export function createIntelligentContentRepository(
         )
           throw new Error("INVALID_PUBLICATION_RESULT");
         const rows = await client.query(
-          "UPDATE distribution.studio_publication_job SET status=$3,account_id=coalesce($4,account_id),remote_id=$5,remote_url=$6,last_error=$7,checkpoint=$8,available_at=clock_timestamp()+($9::int*interval '1 second'),lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *",
+          "UPDATE distribution.studio_publication_job SET status=$3,account_id=coalesce($4,account_id),remote_id=$5,remote_url=$6,last_error=$7,checkpoint=$8,available_at=clock_timestamp()+($9::int*interval '1 second'),last_error_detail=$10,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 RETURNING *",
           [
             row.id,
             pkg.isTest,
@@ -2972,9 +2976,14 @@ export function createIntelligentContentRepository(
             input.error ?? null,
             checkpoint,
             retryAfterSeconds,
+            errorDetail,
           ],
         );
-        await attempt(client, row, input.status, { remoteId, error: input.error ?? null });
+        await attempt(client, row, input.status, {
+          remoteId,
+          error: input.error ?? null,
+          ...(errorDetail ? { errorDetail } : {}),
+        });
         return publication(rows.rows[0] as QueryResultRow);
       }),
     /** After repeated channel rejections, hold the rest of that account's queue.
@@ -2987,7 +2996,7 @@ export function createIntelligentContentRepository(
         );
         if (!studioPublishingShouldPause(recent.rows.map((row) => String(row.status)))) return 0;
         const paused = await client.query(
-          "UPDATE distribution.studio_publication_job SET status='BLOCKED',last_error='STUDIO_PUBLISHING_PAUSED_AFTER_REJECTIONS',updated_at=clock_timestamp() WHERE is_test=$1 AND status='QUEUED' AND channel=$3 AND (account_id=$2 OR account_id IS NULL) AND lease_token IS NULL RETURNING *",
+          "UPDATE distribution.studio_publication_job SET status='BLOCKED',last_error='STUDIO_PUBLISHING_PAUSED_AFTER_REJECTIONS',last_error_detail=NULL,updated_at=clock_timestamp() WHERE is_test=$1 AND status='QUEUED' AND channel=$3 AND (account_id=$2 OR account_id IS NULL) AND lease_token IS NULL RETURNING *",
           [claim.publication.isTest, accountId, claim.publication.channel],
         );
         for (const row of paused.rows)

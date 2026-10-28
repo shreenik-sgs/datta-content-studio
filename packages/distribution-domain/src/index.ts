@@ -151,3 +151,4 @@ export * from "./studio-file-workflow";
 export * from "./studio-shared-assets";
 export * from "./studio-series-workflow";
 export * from "./studio-contributors";
+export * from "./studio-provider-errors";

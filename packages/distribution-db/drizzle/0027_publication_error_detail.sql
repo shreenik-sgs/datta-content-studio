@@ -1,0 +1,1 @@
+ALTER TABLE "distribution"."studio_publication_job" ADD COLUMN "last_error_detail" text;

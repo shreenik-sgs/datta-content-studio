@@ -76,6 +76,7 @@ it("offers Post again for a channel-rejected file but not for one with an unknow
     status: "FAILED" as const,
     attempt: 1,
     error: "BUFFER_PUBLISH_FAILED",
+    errorDetail: "The user has exceeded the number of videos they may upload.",
     remoteId: "buffer-rejected",
     remoteUrl: null,
     createdAt: "2026-10-27T13:09:00.000Z",

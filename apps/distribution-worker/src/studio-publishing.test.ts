@@ -87,6 +87,7 @@ function fixture(isTest = false) {
     accountId: null,
     attempt: 1,
     error: null,
+    errorDetail: null,
     remoteId: null,
     remoteUrl: null,
     createdAt: now,
@@ -337,15 +338,23 @@ describe("durable Studio publication worker", () => {
   it("records a channel rejection as failed and asks for the account's queue to be paused", async () => {
     const { ports, repository, fetcher, claim, output } = fixture();
     await configure(ports);
-    fetcher
-      .mockResolvedValueOnce(channel())
-      .mockResolvedValueOnce(
-        Response.json({ data: { createPost: { post: providerPost(output.body, "error") } } }),
-      );
+    fetcher.mockResolvedValueOnce(channel()).mockResolvedValueOnce(
+      Response.json({
+        data: {
+          createPost: {
+            post: {
+              ...providerPost(output.body, "error"),
+              error: { message: "The user has exceeded the number of videos they may upload." },
+            },
+          },
+        },
+      }),
+    );
     await runStudioPublicationOnce(ports);
     expect(repository.completePublication.mock.calls[0]?.[1]).toMatchObject({
       status: "FAILED",
       error: "BUFFER_PUBLISH_FAILED",
+      errorDetail: "The user has exceeded the number of videos they may upload.",
       remoteId: "provider-post-1",
     });
     expect(repository.pausePublicationsAfterRejections).toHaveBeenCalledWith(claim, "account-1");

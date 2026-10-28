@@ -265,6 +265,39 @@ describe("Studio publishing adapters — injected HTTP only", () => {
       expect((await adapter.advance(input, null)).kind).not.toBe("PUBLISHED");
     },
   );
+  it("carries the channel's own reason for a rejection, reduced to one plain line", async () => {
+    const { adapter, fetcher } = fixture();
+    fetcher.mockResolvedValueOnce(channel()).mockResolvedValueOnce(
+      creation({
+        status: "error",
+        error: {
+          message: "  The user has exceeded the number of videos\nthey may upload.  ",
+          rawError: '{"domain":"youtube.video","reason":"uploadLimitExceeded"}',
+        },
+      }),
+    );
+    expect(await adapter.advance(input, null)).toMatchObject({
+      kind: "REJECTED",
+      code: "BUFFER_PUBLISH_FAILED",
+      detail: "The user has exceeded the number of videos they may upload.",
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)).query).toContain(
+      "error { message }",
+    );
+  });
+  it("carries Buffer's refusal message when it will not create the post", async () => {
+    const { adapter, fetcher } = fixture();
+    fetcher.mockResolvedValueOnce(channel()).mockResolvedValueOnce(
+      Response.json({
+        data: { createPost: { message: "Channel is locked. Upgrade your plan." } },
+      }),
+    );
+    expect(await adapter.advance(input, null)).toEqual({
+      kind: "REJECTED",
+      code: "BUFFER_CREATE_REJECTED",
+      detail: "Channel is locked. Upgrade your plan.",
+    });
+  });
   it("binds persisted checkpoints to the publication, account, text and media checksum", async () => {
     const { adapter, fetcher } = fixture();
     fetcher.mockResolvedValueOnce(channel()).mockResolvedValueOnce(creation());

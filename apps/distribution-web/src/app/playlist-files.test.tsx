@@ -234,6 +234,7 @@ it("keeps approval separate from another account's posted receipt", async () => 
     selectedAccountId: "account-a",
     attempt: 1,
     error: null,
+    errorDetail: null,
     remoteId: "existing-video",
     remoteUrl: "https://www.youtube.com/watch?v=existing",
     createdAt: first.updatedAt,

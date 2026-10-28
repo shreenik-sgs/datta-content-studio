@@ -16,6 +16,7 @@ const receipt: PublicStudioPublication = {
   selectedAccountId: "guru",
   attempt: 1,
   error: null,
+  errorDetail: null,
   remoteId: "video",
   remoteUrl: "https://www.youtube.com/watch?v=example",
   createdAt: "2026-10-23T01:00:00Z",

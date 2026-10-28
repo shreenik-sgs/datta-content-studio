@@ -359,6 +359,7 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
               : "BLOCKED",
         accountId: account.id,
         error: result.code,
+        ...(result.detail ? { errorDetail: result.detail } : {}),
         ...(result.checkpoint
           ? { checkpoint: { ...result.checkpoint }, remoteId: result.checkpoint.providerPostId }
           : {}),

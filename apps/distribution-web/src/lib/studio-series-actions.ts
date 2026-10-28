@@ -14,6 +14,7 @@ import {
   type StudioBlockedOperator,
   studioBlockerMessage,
   studioMessage,
+  studioPublicationMessage,
 } from "./studio-model";
 
 export type SeriesAction = "submit" | "approve" | "post" | "retract";
@@ -276,7 +277,7 @@ export async function runSeriesAction(
                   ? pkg.isTest
                     ? "Test publication queued. Nothing is sent to a channel."
                     : "Queued for posting after the duplicate check. This is not a delivery confirmation."
-                  : `${STUDIO_PUBLICATION_LABELS[job.status]}${job.error ? `: ${studioMessage(job.error)}` : ""}`,
+                  : `${STUDIO_PUBLICATION_LABELS[job.status]}${job.error ? `: ${studioPublicationMessage(job)}` : ""}`,
               remoteUrl: job.remoteUrl,
             });
           } else

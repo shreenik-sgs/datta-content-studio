@@ -32,6 +32,7 @@ import {
   type StudioListing,
   studioBlockerMessage,
   studioMessage,
+  studioPublicationMessage,
   studioSourceName,
   studioStatusLabel,
 } from "../lib/studio-model";
@@ -1813,7 +1814,7 @@ export function StudioPanel({
                       .map((publication) => (
                         <div key={publication.id} aria-live="polite" style={{ marginTop: 16 }}>
                           <strong>{STUDIO_PUBLICATION_LABELS[publication.status]}</strong>
-                          {publication.error && <p>{studioMessage(publication.error)}</p>}
+                          {publication.error && <p>{studioPublicationMessage(publication)}</p>}
                           {publication.remoteUrl && (
                             <a
                               className="button"
