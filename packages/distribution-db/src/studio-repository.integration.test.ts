@@ -2811,12 +2811,14 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
       ).rows[0]?.detail,
     ).toBe("The user has exceeded the number of videos they may upload.");
     const retried = await studio.publish(f.reviewer, pkg.id, { expectedRevision: pkg.revision });
-    expect(retried.find((value) => value.id === first.publication.id)).toMatchObject({
+    const requeued = retried.find((value) => value.id === first.publication.id);
+    expect(requeued).toMatchObject({
       status: "QUEUED",
       remoteId: null,
       error: null,
       errorDetail: null,
     });
+    expect(requeued?.createdAt).toBe(first.publication.createdAt);
     const retries = (
       await migration.query(
         "SELECT detail FROM distribution.studio_publication_attempt WHERE publication_id=$1 AND detail->>'action'='EXPLICIT_RETRY'",
@@ -2835,6 +2837,9 @@ suite("durable intelligent Studio on isolated local PostgreSQL", () => {
     });
     if (!second) throw new Error("MISSING_CLAIM");
     expect(second.checkpoint).toBeNull();
+    // The worker's private media link runs 24 hours from the latest request: the explicit Post.
+    expect(first.requestedAt).toBe(first.publication.createdAt);
+    expect(Date.parse(second.requestedAt)).toBeGreaterThan(Date.parse(first.requestedAt));
     await studio.completePublication(second, {
       status: "UNCERTAIN",
       error: "PUBLICATION_OUTCOME_UNKNOWN",

@@ -125,6 +125,52 @@ const messages: Record<string, string> = {
     "The channel rejected this upload after Buffer created the post. The channel's own reason is shown with this message when Buffer reported one; a YouTube daily upload limit clears after 24 hours. Fix the cause, then Post again; Studio sends a fresh request. The rejected Buffer post is never published and can be deleted in Buffer.",
   BUFFER_CREATE_REJECTED:
     "Buffer refused to create this post. The reason Buffer gave is shown with this message. Fix the cause, then Post again.",
+  STUDIO_MEDIA_ACCESS_EXPIRED:
+    "This posting request is more than 24 hours old, so the private media link the channel needs had expired. Nothing was sent. Post again; Studio makes a fresh request with a new link.",
+  STUDIO_MEDIA_ACCESS_NOT_CONFIGURED:
+    "The service cannot hand private media to the channel because its media signing is not configured. Nothing was sent. Ask an Admin to check the service configuration.",
+  STUDIO_PUBLIC_ORIGIN_REQUIRED:
+    "The service has no public https origin for the channel to fetch media from. Nothing was sent. Ask an Admin to check the service configuration.",
+  APPROVED_PUBLICATION_CHANGED:
+    "The approved file or its source changed after this request was made. Nothing was sent. Review and approve the current revision, then Post again.",
+  STUDIO_ASSET_REQUIRED:
+    "The approved file has no rendered media to send. Generate and approve the media, then Post again.",
+  ASSET_INTEGRITY_FAILED:
+    "The stored media did not match its recorded checksum, so it was not sent. Regenerate the file before posting.",
+  CHECKPOINT_INVALID:
+    "Studio's saved record of this post did not match the account or file. Nothing new was sent. Check Posting history before posting again.",
+  CHECKPOINT_MISMATCH:
+    "Studio's saved record of this post did not match the account or file. Nothing new was sent. Check Posting history before posting again.",
+  PUBLICATION_TIMEOUT:
+    "The channel did not answer in time. Studio keeps checking the result; nothing is sent twice.",
+  PUBLICATION_OUTCOME_UNKNOWN:
+    "Studio could not confirm whether the channel received this post. Check Posting history and the channel before posting again.",
+  PUBLISH_OUTCOME_UNKNOWN:
+    "Studio could not confirm whether the channel received this post. Check Posting history and the channel before posting again.",
+  PUBLICATION_VALIDATION_FAILED:
+    "The request could not be prepared for the channel, so nothing was sent. Refresh the package and check its media and account, then Post again.",
+  RECEIPT_RETRY_EXHAUSTED:
+    "Buffer did not report a final result after repeated checks. Check the post in Buffer before posting again.",
+  BUFFER_CREATE_OUTCOME_UNKNOWN:
+    "Buffer gave no usable answer when Studio created the post. Check Buffer for the post before posting again; nothing is sent twice automatically.",
+  BUFFER_RECEIPT_INVALID:
+    "Buffer's record of this post could not be read. Check the post in Buffer before posting again.",
+  BUFFER_RECEIPT_MISMATCH:
+    "Buffer's record of this post did not match the request. Check the post in Buffer before posting again.",
+  BUFFER_SENT_RECEIPT_INCOMPLETE:
+    "Buffer reports the post as sent but gave no link or time. Check the channel before posting again.",
+  AUTOMATIC_PUBLISHING_REQUIRED:
+    "The Buffer channel is set to reminders instead of automatic publishing. Switch it to automatic in Buffer, then Post again.",
+  BUFFER_CHANNEL_NOT_READY:
+    "The Buffer channel is disconnected, locked or paused. Fix it in Buffer, then Post again. Nothing was sent.",
+  BUFFER_CHANNEL_CHECK_FAILED:
+    "Buffer did not answer when Studio checked the channel. Nothing was sent. Try again later.",
+  AUTHORIZATION_STALE:
+    "The approval could not be re-confirmed at send time. Nothing was sent. Refresh and Post again.",
+  AUTHORIZATION_UNAVAILABLE:
+    "The approval could not be re-confirmed at send time. Nothing was sent. Refresh and Post again.",
+  APPROVAL_OR_ACCOUNT_CHANGED:
+    "The approval or the publishing account changed before sending. Nothing was sent. Refresh and Post again.",
   BUFFER_APPROVAL_REQUIRED:
     "Buffer is holding this post as a draft or for approval. Release it in Buffer, or change the Buffer queue settings and Post again.",
   BUFFER_STATUS_UNKNOWN:
@@ -403,7 +449,11 @@ export function studioPublicationMessage(
   publication: Pick<StudioPublication, "error"> & { errorDetail?: string | null },
 ): string {
   if (!publication.error) return "";
-  const message = studioMessage(publication.error);
+  // A posting request must never hide behind the generic refresh text: name the code.
+  const message =
+    publication.error in messages
+      ? studioMessage(publication.error)
+      : `Posting stopped with code ${publication.error}. Nothing further was sent. Refresh the package; if this repeats, report the code.`;
   return publication.errorDetail
     ? `${message} The channel reported: “${publication.errorDetail}”`
     : message;

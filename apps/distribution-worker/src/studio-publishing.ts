@@ -230,7 +230,9 @@ export async function runStudioPublicationOnce(ports: StudioPublishingPorts): Pr
         : "text";
     let media: StudioPublicationInput["media"];
     if (kind === "video" || kind === "image") {
-      const expiresAt = Date.parse(claim.publication.createdAt) + 24 * 60 * 60 * 1000;
+      // Valid for 24 hours from the latest request (creation or an explicit Post); an older
+      // request is blocked before any external call, and Post makes a fresh request.
+      const expiresAt = Date.parse(claim.requestedAt) + 24 * 60 * 60 * 1000;
       if (
         !Number.isSafeInteger(expiresAt) ||
         expiresAt <= Date.now() ||

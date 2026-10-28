@@ -96,6 +96,9 @@ export type StudioPublicationClaim = {
   package: StudioPackage;
   output: StudioOutput;
   checkpoint: Record<string, unknown> | null;
+  /** When this request was last made: the request's creation, or the operator's latest explicit Post.
+   * The worker's private media link is valid for 24 hours from this time. */
+  requestedAt: string;
   leaseToken: string;
   leaseOwner: string;
 };
@@ -2829,11 +2832,21 @@ export function createIntelligentContentRepository(
           );
           const claimed = updated.rows[0] as QueryResultRow;
           await attempt(client, claimed, "RUNNING", { resuming: row.status === "PROCESSING" });
+          const explicitRetry = await client.query(
+            "SELECT max(created_at) AS at FROM distribution.studio_publication_attempt WHERE publication_id=$1 AND is_test=$2 AND detail->>'action'='EXPLICIT_RETRY'",
+            [row.id, input.isTest],
+          );
+          const latestRequest = explicitRetry.rows[0]?.at ?? claimed.created_at;
           return {
             publication: publication(claimed),
             package: pkg,
             output,
             checkpoint: row.checkpoint ?? null,
+            requestedAt: iso(
+              new Date(latestRequest) > new Date(claimed.created_at)
+                ? latestRequest
+                : claimed.created_at,
+            ),
             leaseToken,
             leaseOwner: input.workerId,
           };

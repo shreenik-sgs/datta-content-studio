@@ -98,6 +98,7 @@ function fixture(isTest = false) {
     package: pkg,
     output,
     checkpoint: null,
+    requestedAt: now,
     leaseToken: "lease",
     leaseOwner: "worker",
   };
@@ -529,12 +530,27 @@ describe("durable Studio publication worker", () => {
     const { ports, repository, fetcher, claim } = fixture();
     await configure(ports);
     claim.publication.createdAt = "2020-01-01T00:00:00Z";
+    claim.requestedAt = "2020-01-01T00:00:00Z";
     await runStudioPublicationOnce(ports);
     expect(repository.completePublication.mock.calls[0]?.[1]).toMatchObject({
       status: "BLOCKED",
       error: "STUDIO_MEDIA_ACCESS_EXPIRED",
     });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("signs the media link from the latest explicit Post, not the original request", async () => {
+    const { ports, repository, fetcher, claim, output } = fixture();
+    await configure(ports);
+    claim.publication.createdAt = "2020-01-01T00:00:00Z";
+    fetcher
+      .mockResolvedValueOnce(channel())
+      .mockResolvedValueOnce(
+        Response.json({ data: { createPost: { post: providerPost(output.body) } } }),
+      );
+    await runStudioPublicationOnce(ports);
+    expect(repository.completePublication.mock.calls[0]?.[1]).toMatchObject({
+      status: "PROCESSING",
+    });
   });
 });
 
