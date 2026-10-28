@@ -1,6 +1,7 @@
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  MAX_STUDIO_VIDEO_BYTES,
   STUDIO_PICTURE,
   STUDIO_SUBTITLE_TOP,
   type StudioClosingCard,
@@ -580,7 +581,7 @@ export async function renderStudioVideo(input: {
     ...studioRenderBudget(durationMs + holdMs),
     ...(input.signal ? { signal: input.signal } : {}),
   });
-  if ((await stat(destination)).size > 100 * 1024 * 1024)
+  if ((await stat(destination)).size > MAX_STUDIO_VIDEO_BYTES)
     throw new Error("RENDER_OUTPUT_TOO_LARGE");
   if (input.hasAudio) {
     const measured = await measureStudioAudio({

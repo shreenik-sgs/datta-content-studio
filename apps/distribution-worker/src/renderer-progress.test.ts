@@ -12,7 +12,9 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
 });
-function start(options: { deadlineMs?: number; signal?: AbortSignal } = {}) {
+function start(
+  options: { deadlineMs?: number; progressTimeoutMs?: number; signal?: AbortSignal } = {},
+) {
   const process = new EventEmitter();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -33,7 +35,7 @@ function start(options: { deadlineMs?: number; signal?: AbortSignal } = {}) {
     args: ["-progress", "pipe:5"],
     cwd: "/tmp",
     deadline: Date.now() + (options.deadlineMs ?? 1000),
-    progressTimeoutMs: 100,
+    progressTimeoutMs: options.progressTimeoutMs ?? 100,
     ...(options.signal ? { signal: options.signal } : {}),
   }).catch((error: Error) => error.message);
   return { process, progress, stdout, kill, result };
@@ -91,8 +93,32 @@ it("cancels active encoding and removes its watchdogs", async () => {
 it("allows long portrait encoding but retains a bounded overall runtime", () => {
   expect(studioRenderBudget(10000).timeoutMs).toBe(600000);
   expect(studioRenderBudget(120000).timeoutMs).toBe(3600000);
-  expect(studioRenderBudget(600000).timeoutMs).toBe(3600000);
+  expect(studioRenderBudget(600000).timeoutMs).toBe(18000000);
+  expect(studioRenderBudget(1800000).timeoutMs).toBe(54000000);
+  expect(studioRenderBudget(Number.MAX_SAFE_INTEGER).timeoutMs).toBe(54000000);
   expect(studioRenderBudget(120000).progressTimeoutMs).toBe(300000);
   for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5])
     expect(() => studioRenderBudget(value)).toThrow("RENDER_DURATION_LIMIT");
+});
+it("lets an advancing complete-story render finish after an hour without removing the watchdog", async () => {
+  const budget = studioRenderBudget(923000);
+  const child = start({
+    deadlineMs: budget.timeoutMs,
+    progressTimeoutMs: budget.progressTimeoutMs,
+  });
+  for (let frame = 1; frame <= 16; frame++) {
+    await vi.advanceTimersByTimeAsync(240000);
+    child.progress.write(`frame=${frame}\n`);
+  }
+  expect(child.kill).not.toHaveBeenCalled();
+  child.process.emit("close", 0);
+  expect(await child.result).toBe("");
+
+  const stalled = start({
+    deadlineMs: budget.timeoutMs,
+    progressTimeoutMs: budget.progressTimeoutMs,
+  });
+  stalled.progress.write("frame=1\n");
+  await vi.advanceTimersByTimeAsync(300000);
+  expect(await stalled.result).toBe("RENDER_STALLED");
 });
