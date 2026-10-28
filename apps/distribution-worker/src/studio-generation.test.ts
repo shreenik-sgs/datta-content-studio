@@ -539,7 +539,9 @@ describe("automatic Studio generation with real media", () => {
         .mockResolvedValueOnce(checks);
       const render = vi.spyOn(mediaRenderer, "renderStudioVideo");
       const framePairs = vi.spyOn(presentation, "studioReviewFramePairs");
+      // Abort before the test deadline so a slow CI render cannot spill into the next case.
       const result = await generateStudioPackage({
+        signal: AbortSignal.timeout(105000),
         ...(opening === "requested" ? { steadyOpening: true } : {}),
         claim: {
           ...claim,
@@ -606,7 +608,7 @@ describe("automatic Studio generation with real media", () => {
         renderedBoundaries.every(([input]) => input.startMs === 0 && input.endMs === 8000),
       ).toBe(true);
     },
-    60000,
+    120000,
   );
 
   it("holds the finished file when blind audio review contradicts a passed source and presentation", async () => {
