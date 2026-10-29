@@ -1,4 +1,7 @@
-import { STUDIO_MEDIA_PIPELINE_VERSION } from "@satsang/distribution-domain";
+import {
+  STUDIO_MEDIA_PIPELINE_VERSION,
+  validateStudioSourceScreen,
+} from "@satsang/distribution-domain";
 import { beforeEach, expect, it, vi } from "vitest";
 import { StudioNoSuitableContentError } from "./studio-checkpoints";
 import { StudioContentQualityError } from "./studio-content-review";
@@ -106,6 +109,47 @@ it("records safe failure locations without logging raw provider messages or toke
   expect(JSON.stringify(onFailureDiagnostic.mock.calls)).not.toMatch(
     /Private token|example.test|secret/,
   );
+});
+
+it("records rejected storyboard constraints without source prompts and never retries unchanged work", async () => {
+  let failure: unknown;
+  try {
+    validateStudioSourceScreen(
+      {
+        openingComplete: true,
+        endingComplete: true,
+        naturalStart: true,
+        naturalEnd: true,
+        reason: "Private source words",
+        scenes: [],
+        illustrations: [
+          {
+            assetId: "private/secret",
+            startMs: 6000,
+            endMs: 10000,
+            sourceSegmentIds: ["private-id"],
+            reason: "Private source words",
+            prompt: "Private prompt",
+          },
+        ],
+      },
+      20000,
+    );
+  } catch (error) {
+    failure = error;
+  }
+  vi.mocked(generateStudioPackage).mockRejectedValue(failure);
+  const onFailureDiagnostic = vi.fn();
+  await runStudioGenerationOnce({ ...input(), onFailureDiagnostic });
+  expect(onFailureDiagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      code: "STUDIO_PRESENTATION_REVIEW_INVALID",
+      illustrationValidation: { index: 0, rules: ["assetId"] },
+    }),
+  );
+  expect(JSON.stringify(onFailureDiagnostic.mock.calls)).not.toMatch(/Private|secret|private-id/);
+  expect(repository.deferGeneration).not.toHaveBeenCalled();
+  expect(repository.failGeneration).toHaveBeenCalledOnce();
 });
 it("queues a timed retry for a drafting rate limit while retaining checkpoints", async () => {
   vi.mocked(generateStudioPackage).mockImplementation(async ({ checkpoints }) => {

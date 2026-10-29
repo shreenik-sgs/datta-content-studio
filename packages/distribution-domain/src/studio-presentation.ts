@@ -185,6 +185,30 @@ export function alignStudioIllustration(
 }
 const bool = (x: unknown) => typeof x === "boolean";
 const reason = (x: unknown) => typeof x === "string" && x.trim().length > 0 && x.length <= 4000;
+/** Static constraints are safe to send back for correction or log without source content. */
+export const STUDIO_ILLUSTRATION_VALIDATION_RULES = {
+  missing: "Return an illustration object.",
+  assetId: "assetId must match ^[a-z][a-z-]{0,60}$: lowercase letters and hyphens only.",
+  timing: "startMs and endMs must be safe integer milliseconds relative to the excerpt.",
+  opening: "startMs must leave at least limits.openingMs of original opening footage.",
+  ordering:
+    "Keep illustrations in chronological order, without overlap, with limits.gapMs between them.",
+  ending: "endMs must leave at least limits.endingMs before the excerpt ends.",
+  minimumDuration: "Each illustration must last at least limits.minMs.",
+  maximumDuration:
+    "Each illustration must last no longer than limits.maxMs unless already extended by the curator.",
+  citations:
+    "sourceSegmentIds must be a nonempty array of string IDs, each at most 100 characters.",
+  reason: "reason must be a nonempty string of at most 4000 characters.",
+} as const;
+export class StudioIllustrationValidationError extends Error {
+  constructor(
+    readonly illustrationIndex: number,
+    readonly rules: (keyof typeof STUDIO_ILLUSTRATION_VALIDATION_RULES)[],
+  ) {
+    super("STUDIO_PRESENTATION_REVIEW_INVALID");
+  }
+}
 export function validateStudioSourceScreen(
   value: StudioSourceScreen,
   durationMs: number,
@@ -231,24 +255,31 @@ export function validateStudioSourceScreen(
       throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
     let end = 0;
     let total = 0;
-    for (const shot of value.illustrations) {
-      if (
-        !shot ||
-        !/^[a-z][a-z-]{0,60}$/.test(shot.assetId) ||
-        !Number.isSafeInteger(shot.startMs) ||
-        !Number.isSafeInteger(shot.endMs) ||
-        shot.startMs < limits.openingMs ||
-        shot.startMs < end + (end ? limits.gapMs : 0) ||
-        shot.endMs > durationMs - limits.endingMs ||
-        shot.endMs - shot.startMs < limits.minMs ||
-        shot.endMs - shot.startMs >
-          (shot.extendedByCurator ? Math.max(8000, limits.maxMs) : limits.maxMs) ||
-        !Array.isArray(shot.sourceSegmentIds) ||
-        !shot.sourceSegmentIds.length ||
-        shot.sourceSegmentIds.some((id) => typeof id !== "string" || id.length > 100) ||
-        !reason(shot.reason)
-      )
-        throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
+    for (const [index, shot] of value.illustrations.entries()) {
+      const rules: (keyof typeof STUDIO_ILLUSTRATION_VALIDATION_RULES)[] = [];
+      if (!shot) rules.push("missing");
+      else {
+        if (!/^[a-z][a-z-]{0,60}$/.test(shot.assetId)) rules.push("assetId");
+        if (!Number.isSafeInteger(shot.startMs) || !Number.isSafeInteger(shot.endMs))
+          rules.push("timing");
+        if (shot.startMs < limits.openingMs) rules.push("opening");
+        if (shot.startMs < end + (end ? limits.gapMs : 0)) rules.push("ordering");
+        if (shot.endMs > durationMs - limits.endingMs) rules.push("ending");
+        if (shot.endMs - shot.startMs < limits.minMs) rules.push("minimumDuration");
+        if (
+          shot.endMs - shot.startMs >
+          (shot.extendedByCurator ? Math.max(8000, limits.maxMs) : limits.maxMs)
+        )
+          rules.push("maximumDuration");
+        if (
+          !Array.isArray(shot.sourceSegmentIds) ||
+          !shot.sourceSegmentIds.length ||
+          shot.sourceSegmentIds.some((id) => typeof id !== "string" || id.length > 100)
+        )
+          rules.push("citations");
+        if (!reason(shot.reason)) rules.push("reason");
+      }
+      if (rules.length) throw new StudioIllustrationValidationError(index, rules);
       if (shot.prompt !== undefined && (!reason(shot.prompt) || shot.prompt.length > 2000))
         throw Error("STUDIO_ILLUSTRATION_INVALID");
       if (shot.generated) {

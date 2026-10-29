@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   STUDIO_FRAME,
   STUDIO_ILLUSTRATION_POLICY,
+  STUDIO_ILLUSTRATION_VALIDATION_RULES,
   STUDIO_NARRATIVE_ILLUSTRATION_GUIDANCE,
   STUDIO_NARRATIVE_ILLUSTRATION_POLICY,
   STUDIO_PICTURE,
@@ -11,6 +12,7 @@ import {
   STUDIO_STORYBOARD_CONTINUITY_GUIDANCE,
   STUDIO_VIDEO_ILLUSTRATION_GUIDANCE,
   STUDIO_VISUAL_ART_DIRECTION,
+  StudioIllustrationValidationError,
   type StudioPresentationLayout,
   type StudioPresentationReview,
   type StudioPresentationStyle,
@@ -401,6 +403,16 @@ ${input.learnedRules ? `${input.learnedRules} Write every brief so that these ru
       correction = {
         previous: raw,
         validation: error instanceof Error ? error.message : "STUDIO_PRESENTATION_REVIEW_INVALID",
+        ...(error instanceof StudioIllustrationValidationError
+          ? {
+              violations: error.rules.map((rule) => ({
+                illustrationIndex: error.illustrationIndex,
+                rule,
+                requirement: STUDIO_ILLUSTRATION_VALIDATION_RULES[rule],
+              })),
+              limits,
+            }
+          : {}),
         instruction: `Repair the storyboard without changing the teaching. Use the supplied excerpt-relative segment times: each ${limits.minMs / 1000}–${limits.maxMs / 1000} second insert must fit wholly within its cited words, with the required opening/ending margins${limits.gapMs ? " and gaps" : ""}. Do not invent segment IDs or shift the audio. Omit an optional insert if it cannot fit meaningfully. Preserve accurate boundary findings and safe scene geometry.`,
       };
       continue;

@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { studioClosingCardPlan } from "./studio-ending";
 import { studioFullPictureRegion } from "./studio-framing";
 import {
+  StudioIllustrationValidationError,
   type StudioPresentationReview,
   type StudioSourceScreen,
   alignStudioIllustration,
@@ -136,6 +137,39 @@ it("keeps illustrations brief, separated, and out of the opening and ending", ()
       30000,
     ),
   ).toThrow();
+});
+
+it("reports only static illustration constraints and the failing index, preserving strict validation", () => {
+  const privateReason = "Private source words";
+  const draft = {
+    ...screen,
+    illustrations: [
+      illustration,
+      {
+        ...illustration,
+        assetId: "../../private-token",
+        startMs: 15000,
+        endMs: 17000,
+        sourceSegmentIds: [],
+        reason: privateReason,
+      },
+    ],
+  };
+  const before = structuredClone(draft);
+  let failure: unknown;
+  try {
+    validateStudioSourceScreen(draft, 30000);
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(StudioIllustrationValidationError);
+  expect(failure).toMatchObject({
+    message: "STUDIO_PRESENTATION_REVIEW_INVALID",
+    illustrationIndex: 1,
+    rules: ["assetId", "ordering", "minimumDuration", "citations"],
+  });
+  expect(JSON.stringify(failure)).not.toMatch(/Private source words|private-token/);
+  expect(draft).toEqual(before);
 });
 it("covers all intervening speech while allowing natural silence between cited phrases", () => {
   const shot = {

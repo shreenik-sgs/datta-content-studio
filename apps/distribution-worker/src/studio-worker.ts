@@ -1,7 +1,11 @@
 import { setTimeout as pause } from "node:timers/promises";
 import type { PrivateAssetStore } from "@satsang/distribution-assets";
 import type { createIntelligentContentRepository } from "@satsang/distribution-db";
-import { type StudioGenerationProgress, studioMediaPipeline } from "@satsang/distribution-domain";
+import {
+  type StudioGenerationProgress,
+  StudioIllustrationValidationError,
+  studioMediaPipeline,
+} from "@satsang/distribution-domain";
 import { studioCapacity } from "./studio-capacity.js";
 import { StudioNoSuitableContentError } from "./studio-checkpoints.js";
 import { StudioClosingPreservationError } from "./studio-closing-refresh.js";
@@ -29,6 +33,7 @@ export type StudioWorkerInput = {
     errorType: string;
     sourceLocations: string[];
     mediaPipeline: string;
+    illustrationValidation?: { index: number; rules: StudioIllustrationValidationError["rules"] };
   }) => void;
 };
 export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise<boolean> {
@@ -142,6 +147,9 @@ export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise
       phase: progress.phase,
       provider: progress.provider,
       mediaPipeline,
+      ...(error instanceof StudioIllustrationValidationError
+        ? { illustrationValidation: { index: error.illustrationIndex, rules: error.rules } }
+        : {}),
       errorType:
         error instanceof Error &&
         ["Error", "TypeError", "RangeError", "SyntaxError", "AbortError", "TimeoutError"].includes(

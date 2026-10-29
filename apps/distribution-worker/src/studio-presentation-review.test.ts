@@ -141,6 +141,56 @@ it("repairs an out-of-citation storyboard once using explicit relative timings b
   expect(invalid).toHaveBeenCalledTimes(2);
 });
 
+it("identifies invalid illustration fields in the existing bounded correction without accepting bad evidence", async () => {
+  const shot = {
+    assetId: "generated-1",
+    startMs: 5000,
+    endMs: 15000,
+    sourceSegmentIds: ["one"],
+    reason: "Illustrates the cited teaching.",
+    prompt: "An unlettered manuscript being studied.",
+  };
+  const invalid = { ...screen, illustrations: [shot] };
+  const corrected = {
+    ...screen,
+    illustrations: [{ ...shot, assetId: "generated-one", endMs: 10000 }],
+  };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(response(invalid))
+    .mockResolvedValueOnce(response(corrected));
+  expect((await screenStudioSource({ ...input, fetcher })).illustrations).toEqual(
+    corrected.illustrations,
+  );
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const body = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body));
+  const context = JSON.parse(body.contents[0].parts[0].text);
+  expect(context.correction.violations).toEqual([
+    {
+      illustrationIndex: 0,
+      rule: "assetId",
+      requirement: expect.stringContaining("lowercase letters and hyphens only"),
+    },
+    {
+      illustrationIndex: 0,
+      rule: "ending",
+      requirement: expect.stringContaining("limits.endingMs"),
+    },
+    {
+      illustrationIndex: 0,
+      rule: "maximumDuration",
+      requirement: expect.stringContaining("limits.maxMs"),
+    },
+  ]);
+  expect(context.correction.limits).toMatchObject({ maxMs: 8000, endingMs: 6500 });
+  expect(context.correction.previous).toEqual(invalid);
+  const stillInvalid = vi.fn<typeof fetch>().mockImplementation(async () => response(invalid));
+  await expect(screenStudioSource({ ...input, fetcher: stillInvalid })).rejects.toThrow(
+    "STUDIO_PRESENTATION_REVIEW_INVALID",
+  );
+  expect(stillInvalid).toHaveBeenCalledTimes(2);
+});
+
 it("compares delivered foreground pixels without the blurred background and preserves a failed verdict", async () => {
   const { default: sharp } = await import("sharp");
   const { studioReviewFitFrame } = await import("./studio-presentation-review");
