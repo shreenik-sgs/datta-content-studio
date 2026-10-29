@@ -16,7 +16,7 @@ import {
   studioVisualLessonsText,
   validateStudioVisualLessonRule,
 } from "./studio-visual-lessons";
-import { studioPresentationStyle } from "./studio-visual-preferences";
+import { studioImageryDefault, studioPresentationStyle } from "./studio-visual-preferences";
 const screen: StudioSourceScreen = {
   openingComplete: true,
   endingComplete: true,
@@ -515,6 +515,25 @@ it("accepts only known presentation styles and defaults to the immersive narrati
     { layout: "immersive", storyboard: "narrative", imagery: "overnight" },
   ])
     expect(() => studioPresentationStyle(value)).toThrow("INVALID_PRESENTATION_STYLE");
+  // An installation may default to immediate delivery; a saved choice still wins.
+  expect(studioImageryDefault({})).toBe("batch");
+  expect(studioImageryDefault({ STUDIO_IMAGERY_DEFAULT: " immediate " })).toBe("immediate");
+  expect(() => studioImageryDefault({ STUDIO_IMAGERY_DEFAULT: "overnight" })).toThrow(
+    "INVALID_IMAGERY_DEFAULT",
+  );
+  expect(studioPresentationStyle(undefined, { imagery: "immediate" }).imagery).toBe("immediate");
+  expect(
+    studioPresentationStyle(
+      { layout: "classic", storyboard: "restrained" },
+      { imagery: "immediate" },
+    ).imagery,
+  ).toBe("immediate");
+  expect(
+    studioPresentationStyle(
+      { layout: "classic", storyboard: "restrained", imagery: "batch" },
+      { imagery: "immediate" },
+    ).imagery,
+  ).toBe("batch");
   expect(studioFullPictureRegion(1920, 1080, "immersive")).toEqual({
     x: 0,
     y: 656,

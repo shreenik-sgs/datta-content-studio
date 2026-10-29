@@ -40,7 +40,9 @@ storage, backup destinations and service identifiers must be isolated for DP.
   local; a code deployment does not authorize copying media to staging.
 - DP: `STUDIO_IDENTITY=dp`, origin `https://dp.sgsdattasannidhi.org`.
   Start empty, with its own operators, database and storage. No GBADPT imports or
-  channel credentials. Its publishing account will be configured later.
+  channel credentials. Its publishing account will be configured later. Its runtime
+  sets `STUDIO_IMAGERY_DEFAULT=immediate`: scene images are drawn right away unless an
+  Admin chooses batch delivery in Settings (GBADPT keeps the batch default).
 
 Before activating either, test that an authenticated account/session, media ID,
 asset URL and queued job from the other installation cannot access its data.

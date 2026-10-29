@@ -13,6 +13,7 @@ import {
   STUDIO_CHANNELS,
   studioAppLinks,
   studioDefaultAccount,
+  studioImageryDefault,
   studioPresentationStyle,
   studioVisualPreference,
   studioYoutubeClosing,
@@ -180,7 +181,9 @@ function projection(config: StudioProviderConfig, isTest: boolean) {
   return {
     revision: studioSettingsRevision(config),
     visualPreference: studioVisualPreference(config.visualPreference),
-    presentation: studioPresentationStyle(config.presentation),
+    presentation: studioPresentationStyle(config.presentation, {
+      imagery: studioImageryDefault(process.env),
+    }),
     appLinks: studioAppLinks(config.appLinks),
     maxMasterUploadMb: config.maxMasterUploadMb ?? MAX_MASTER_BYTES / 1024 / 1024,
     maxMasterUploadCapacityMb: MAX_MASTER_BYTES / 1024 / 1024,
@@ -280,7 +283,9 @@ export async function POST(request: Request) {
     else if (command.action === "visuals") {
       config.visualPreference = studioVisualPreference(command.visualPreference);
       if (command.layout || command.storyboard || command.imagery) {
-        const current = studioPresentationStyle(config.presentation);
+        const current = studioPresentationStyle(config.presentation, {
+          imagery: studioImageryDefault(process.env),
+        });
         config.presentation = studioPresentationStyle({
           layout: command.layout ?? current.layout,
           storyboard: command.storyboard ?? current.storyboard,

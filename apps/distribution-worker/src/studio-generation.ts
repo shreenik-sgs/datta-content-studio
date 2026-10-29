@@ -62,6 +62,7 @@ import {
   studioDiscoveryOverlaps,
   studioFullPictureRegion,
   studioGenerationReadiness,
+  studioImageryDefault,
   studioOpeningCardPlan,
   studioOutputKey,
   studioPresentationStyle,
@@ -307,6 +308,7 @@ export async function generateStudioPackage(input: {
   // Layout and storyboard mode of this generation; approved files keep their reviewed composition.
   const presentation = studioPresentationStyle(
     input.presentation ?? (await settings()).presentation,
+    { imagery: studioImageryDefault(env) },
   );
   // Rules are frozen for the life of one generation job: a rule learned while this job's
   // images are in the batch queue applies to the next job, not to this one's cached work.

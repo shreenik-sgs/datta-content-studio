@@ -35,8 +35,25 @@ export const DEFAULT_STUDIO_PRESENTATION_STYLE: Readonly<StudioPresentationStyle
   storyboard: "narrative",
   imagery: "batch",
 };
-export function studioPresentationStyle(value?: unknown): StudioPresentationStyle {
-  if (value === undefined) return { ...DEFAULT_STUDIO_PRESENTATION_STYLE };
+/**
+ * The installation's scene image delivery when Settings has never chosen one. GBADPT keeps the
+ * half-price batch queue; an installation that sets `STUDIO_IMAGERY_DEFAULT=immediate` (DP) draws
+ * each scene right away until an Admin picks otherwise. Anything else is a configuration error.
+ */
+export function studioImageryDefault(
+  env: Record<string, string | undefined>,
+): StudioPresentationStyle["imagery"] {
+  const value = env.STUDIO_IMAGERY_DEFAULT?.trim();
+  if (value === undefined || value === "") return DEFAULT_STUDIO_PRESENTATION_STYLE.imagery;
+  if (value === "batch" || value === "immediate") return value;
+  throw Error("INVALID_IMAGERY_DEFAULT");
+}
+export function studioPresentationStyle(
+  value?: unknown,
+  defaults?: { imagery?: StudioPresentationStyle["imagery"] },
+): StudioPresentationStyle {
+  const imagery = defaults?.imagery ?? DEFAULT_STUDIO_PRESENTATION_STYLE.imagery;
+  if (value === undefined) return { ...DEFAULT_STUDIO_PRESENTATION_STYLE, imagery };
   if (
     !value ||
     typeof value !== "object" ||
@@ -49,11 +66,11 @@ export function studioPresentationStyle(value?: unknown): StudioPresentationStyl
   )
     throw Error("INVALID_PRESENTATION_STYLE");
   const style = value as StudioPresentationStyle;
-  // Settings saved before image delivery existed use the default.
+  // Settings saved before image delivery existed use the installation's default.
   return {
     layout: style.layout,
     storyboard: style.storyboard,
-    imagery: style.imagery ?? DEFAULT_STUDIO_PRESENTATION_STYLE.imagery,
+    imagery: style.imagery ?? imagery,
   };
 }
 
