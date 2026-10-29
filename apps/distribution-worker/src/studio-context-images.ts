@@ -24,6 +24,8 @@ import {
 } from "./studio-provider-retry.js";
 
 export const STUDIO_CONTEXT_IMAGE_MODEL = "gemini-3.1-flash-image";
+/** Bounded JSON envelope for one generated image, including base64 and provider metadata. */
+export const STUDIO_IMAGE_RESPONSE_MAX_BYTES = 32 * 1024 * 1024;
 type Connection = { apiKey: string; model: string; signal?: AbortSignal; fetcher?: typeof fetch };
 type Shot = NonNullable<StudioSourceScreen["illustrations"]>[number];
 type Evidence = NonNullable<Shot["generated"]>;
@@ -192,7 +194,7 @@ export async function generateStudioContextImage(
   input: Connection & StudioImageRequest,
 ): Promise<Buffer> {
   return decodeStudioImageResponse(
-    await call(input, studioImageRequestBody(input), 32 * 1024 * 1024),
+    await call(input, studioImageRequestBody(input), STUDIO_IMAGE_RESPONSE_MAX_BYTES),
   );
 }
 

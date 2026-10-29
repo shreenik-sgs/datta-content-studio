@@ -12,6 +12,7 @@ import {
 import { type StudioCheckpoints, studioFingerprint } from "./studio-checkpoints.js";
 import {
   type ContinuityReference,
+  STUDIO_IMAGE_RESPONSE_MAX_BYTES,
   type StudioIllustrationEvidence,
   type StudioIllustrationShot,
   decodeStudioImageResponse,
@@ -32,6 +33,8 @@ export const STUDIO_IMAGE_BATCH_POLICY = "gemini-batch-v1" as const;
 export const STUDIO_IMAGE_BATCH_CHECK_MS = 10 * 60 * 1000;
 /** Provider limit is 100 concurrent batch jobs; leave room for other work. */
 export const STUDIO_IMAGE_BATCH_MAX_ACTIVE = 80;
+/** Keep the aggregate read bounded even for callers submitting more than a storyboard. */
+export const STUDIO_IMAGE_BATCH_RESPONSE_MAX_BYTES = 512 * 1024 * 1024;
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 export class StudioImageBatchPending extends Error {
@@ -107,12 +110,25 @@ export type StudioImageBatchState =
 export async function readStudioImageBatch(
   input: Omit<Connection, "model"> & { name: string; keys: string[] },
 ): Promise<StudioImageBatchState> {
-  if (!BATCH_NAME.test(input.name)) throw Error("STUDIO_IMAGE_BATCH_INVALID");
+  if (
+    !BATCH_NAME.test(input.name) ||
+    !input.keys.length ||
+    input.keys.length > 200 ||
+    new Set(input.keys).size !== input.keys.length
+  )
+    throw Error("STUDIO_IMAGE_BATCH_INVALID");
+  // Inline results contain all requested images. Reuse the single-image envelope
+  // budget so a valid 14-scene storyboard can be read from its saved batch name.
+  // This is a GET: neither a larger allowance nor native recovery resubmits images.
+  const maximum = Math.min(
+    STUDIO_IMAGE_BATCH_RESPONSE_MAX_BYTES,
+    Math.max(64 * 1024 * 1024, input.keys.length * STUDIO_IMAGE_RESPONSE_MAX_BYTES + 1024 * 1024),
+  );
   const job = await providerJson(
     (url, init) => fetchGeminiWithRetry(input.fetcher ?? fetch, String(url), init ?? {}),
     `${base}/${input.name}`,
     { method: "GET", redirect: "error", signal: signalFor(input), headers: headers(input.apiKey) },
-    64 * 1024 * 1024,
+    maximum,
   );
   if (!record(job)) throw Error("STUDIO_IMAGE_BATCH_INVALID");
   const metadata = record(job.metadata) ? job.metadata : {};

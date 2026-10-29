@@ -31,6 +31,78 @@ const reviewed = (value: unknown) => ({
     { finishReason: "STOP", content: { role: "model", parts: [{ text: JSON.stringify(value) }] } },
   ],
 });
+
+it("reads a saved 14-image batch larger than 64 MiB with one GET and no image resubmission", async () => {
+  const keys = Array.from({ length: 14 }, (_, i) => `scene-${i}`);
+  // Transport fixture only: raster decoding and independent image review remain
+  // separate mandatory steps. Each base64 field fits the existing image budget.
+  const encoded = Buffer.alloc(4 * 1024 * 1024).toString("base64");
+  let index = -1;
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(
+    async () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            if (index === -1) {
+              index++;
+              controller.enqueue(
+                Buffer.from('{"state":"JOB_STATE_SUCCEEDED","response":{"inlinedResponses":['),
+              );
+            } else if (index < keys.length) {
+              controller.enqueue(
+                Buffer.from(
+                  `${index ? "," : ""}${JSON.stringify({ metadata: { key: keys[index] }, response: { candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: encoded } }] } }] } })}`,
+                ),
+              );
+              index++;
+            } else {
+              controller.enqueue(Buffer.from("]}}"));
+              controller.close();
+            }
+          },
+        }),
+      ),
+  );
+  const state = await readStudioImageBatch({
+    apiKey: "synthetic",
+    name: "batches/saved",
+    keys,
+    fetcher,
+  });
+  expect(
+    state.done && state.state === "JOB_STATE_SUCCEEDED" && [...state.responses.keys()],
+  ).toEqual(keys);
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+    "https://generativelanguage.googleapis.com/v1beta/batches/saved",
+    expect.objectContaining({ method: "GET" }),
+  );
+});
+
+it("cancels a response that exceeds its request-count budget without another provider call", async () => {
+  const cancel = vi.fn();
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(
+    async () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.enqueue(new Uint8Array(1024 * 1024));
+          },
+          cancel,
+        }),
+      ),
+  );
+  await expect(
+    readStudioImageBatch({ apiKey: "synthetic", name: "batches/saved", keys: ["one"], fetcher }),
+  ).rejects.toThrow("STUDIO_PROVIDER_RESPONSE_LIMIT");
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(fetcher).toHaveBeenCalledOnce();
+  for (const keys of [[], ["one", "one"], Array.from({ length: 201 }, (_, i) => String(i))]) {
+    await expect(
+      readStudioImageBatch({ apiKey: "synthetic", name: "batches/saved", keys, fetcher }),
+    ).rejects.toThrow("STUDIO_IMAGE_BATCH_INVALID");
+  }
+  expect(fetcher).toHaveBeenCalledOnce();
+});
 const checks = {
   contextFaithful: true,
   nonDeceptive: true,
