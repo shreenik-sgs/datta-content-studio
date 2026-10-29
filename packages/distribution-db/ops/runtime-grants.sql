@@ -57,6 +57,10 @@ BEGIN
   IF to_regclass('distribution.studio_settings') IS NOT NULL THEN
     EXECUTE format('GRANT SELECT,INSERT,UPDATE ON distribution.studio_settings TO %I', runtime_role);
   END IF;
+  IF to_regclass('distribution.studio_visual_lesson') IS NOT NULL THEN
+    EXECUTE format('GRANT SELECT,INSERT ON distribution.studio_visual_lesson TO %I', runtime_role);
+    EXECUTE format('GRANT UPDATE(hits,status,retired_by,retired_at,updated_at) ON distribution.studio_visual_lesson TO %I', runtime_role);
+  END IF;
   IF to_regclass('distribution.studio_package') IS NOT NULL THEN
     EXECUTE format('GRANT SELECT,INSERT ON distribution.studio_package,distribution.studio_revision,distribution.studio_feedback,distribution.studio_generation_job,distribution.studio_publication_job,distribution.studio_publication_attempt TO %I', runtime_role);
     EXECUTE format('GRANT UPDATE(revision,updated_at,generation_checkpoint,deleted_at) ON distribution.studio_package TO %I', runtime_role);

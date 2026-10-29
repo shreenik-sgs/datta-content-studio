@@ -8,10 +8,12 @@ import {
   STUDIO_CHANNELS,
   type StudioAppLinks,
   type StudioChannel,
+  type StudioPresentationStyle,
   type StudioReadiness,
   studioAppLinks,
   studioChannelLabel,
   studioDefaultAccount,
+  studioPresentationStyle,
   studioVisualPreference,
   studioYoutubeClosing,
 } from "@satsang/distribution-domain";
@@ -57,6 +59,8 @@ export type StudioProviderConfig = {
   version: 1;
   maxMasterUploadMb?: number;
   visualPreference?: string;
+  /** Layout and storyboard mode for new videos; absent means the current defaults. */
+  presentation?: StudioPresentationStyle;
   appLinks?: StudioAppLinks;
   accounts: StudioProviderCredential[];
   trustedMediaOrigins: string[];
@@ -245,6 +249,7 @@ export function parseStudioProviderConfig(value: unknown, key?: string): StudioP
       studioAppLinks(raw.appLinks);
     }
     if (raw.visualPreference !== undefined) studioVisualPreference(raw.visualPreference);
+    if (raw.presentation !== undefined) studioPresentationStyle(raw.presentation);
     const defaults = new Set<string>();
     const destinations = new Set<string>();
     const ids = new Set<string>();

@@ -15,7 +15,10 @@ import {
   STUDIO_BOUNDARY_EVIDENCE_POLICY,
   STUDIO_BOUNDARY_REVIEW_POLICY,
   STUDIO_CLOSING_CARD_POLICY,
+  STUDIO_FRAME,
   STUDIO_ICONOGRAPHY_POLICY,
+  STUDIO_NARRATIVE_GUIDANCE_VERSION,
+  STUDIO_NARRATIVE_ILLUSTRATION_POLICY,
   STUDIO_OPENING_CARD_POLICY,
   STUDIO_POST_ART_POLICY,
   STUDIO_PRESENTATION_POLICY,
@@ -36,9 +39,11 @@ import {
   type StudioOutput,
   type StudioPlan,
   type StudioPresentationReview,
+  type StudioPresentationStyle,
   type StudioProvenance,
   type StudioSourceScreen,
   type StudioTranscript,
+  type StudioVisualLesson,
   applyStudioBoundaryReview,
   assertStudioDiscoveryIsolation,
   canExcludeRenderedStudioCandidate,
@@ -59,11 +64,13 @@ import {
   studioGenerationReadiness,
   studioOpeningCardPlan,
   studioOutputKey,
+  studioPresentationStyle,
   studioScopedGenerationProgress,
   studioSelectedMessageGroups,
   studioSourceBranding,
   studioSourceRange,
   studioVideoDurationLimitMs,
+  studioVisualLessonsText,
   studioVisualPreference,
   validateStudioMessagePassages,
   validateStudioOutputs,
@@ -92,6 +99,7 @@ import {
   studioContextIllustrationShots,
 } from "./studio-context-images.js";
 import { studioClosingCard, studioOpeningCard } from "./studio-ending.js";
+import { studioBatchedContextIllustrationShots } from "./studio-image-batch.js";
 import { normalizeStudioTranscription, transcribeStudioAudio } from "./studio-intelligence.js";
 import {
   STUDIO_VIDEO_FRAME,
@@ -263,6 +271,10 @@ async function transcriptFor(
 
 export async function generateStudioPackage(input: {
   visualPreference?: string;
+  presentation?: StudioPresentationStyle;
+  /** Rules learned from earlier rejected images; they shape briefs, generation and review. */
+  visualLessons?: StudioVisualLesson[];
+  onReviewRejected?: (finding: { reason: string; brief: string }) => Promise<void>;
   appLinks?: StudioAppLinks;
   renderOnly?: boolean;
   closingOnly?: boolean;
@@ -280,23 +292,34 @@ export async function generateStudioPackage(input: {
 }): Promise<{ outputs: StudioOutput[]; provenance: StudioProvenance }> {
   const { claim, store, env, signal, checkpoints } = input;
   const sourceBrand = studioSourceBranding(claim.package.request.sourceBranding);
-  const visualPreference = studioVisualPreference(
-    input.visualPreference ??
-      (
-        await loadStudioProviderConfig(
-          studioSettingsPath(env, claim.package.isTest),
-          env.STUDIO_CHANNEL_CONFIG_KEY,
-        )
-      ).visualPreference,
-  );
-  const appLinks =
-    input.appLinks ??
-    (
-      await loadStudioProviderConfig(
+  let loadedSettings: Awaited<ReturnType<typeof loadStudioProviderConfig>> | undefined;
+  const settings = async () => {
+    if (!loadedSettings)
+      loadedSettings = await loadStudioProviderConfig(
         studioSettingsPath(env, claim.package.isTest),
         env.STUDIO_CHANNEL_CONFIG_KEY,
-      )
-    ).appLinks;
+      );
+    return loadedSettings;
+  };
+  const visualPreference = studioVisualPreference(
+    input.visualPreference ?? (await settings()).visualPreference,
+  );
+  // Layout and storyboard mode of this generation; approved files keep their reviewed composition.
+  const presentation = studioPresentationStyle(
+    input.presentation ?? (await settings()).presentation,
+  );
+  // Rules are frozen for the life of one generation job: a rule learned while this job's
+  // images are in the batch queue applies to the next job, not to this one's cached work.
+  const rulesKey = sha(Buffer.from(claim.id));
+  const frozenRules = checkpoints?.get<string>("learned-rules", rulesKey);
+  const learnedRules = frozenRules ?? studioVisualLessonsText(input.visualLessons ?? []);
+  if (checkpoints && frozenRules === undefined)
+    await checkpoints.set("learned-rules", rulesKey, learnedRules);
+  const storyboardPolicy =
+    presentation.storyboard === "narrative"
+      ? STUDIO_NARRATIVE_ILLUSTRATION_POLICY
+      : ("context-rich-v2" as const);
+  const appLinks = input.appLinks ?? (await settings()).appLinks;
   const scope = claim.package.generation;
   if (input.closingOnly && !input.steadyOpening && !input.illustrationTimings?.length) {
     return refreshStudioClosingCards({ ...input, ...(appLinks ? { appLinks } : {}) });
@@ -393,6 +416,7 @@ export async function generateStudioPackage(input: {
       const result = await generateStudioPackage({
         ...input,
         visualPreference,
+        presentation,
         appLinks: studioAppLinks(appLinks),
         // Each selected file resumes its own reviewed draft and render after an interruption.
         ...(checkpoints
@@ -659,7 +683,10 @@ export async function generateStudioPackage(input: {
         sourceSpeaker: sourceBrand,
         policy: STUDIO_PRESENTATION_POLICY,
         framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
-        storyboard: "context-rich-v2",
+        storyboard: storyboardPolicy,
+        storyboardGuidance: STUDIO_NARRATIVE_GUIDANCE_VERSION,
+        layout: presentation.layout,
+        learnedRules,
         storyboardContinuity: STUDIO_STORYBOARD_CONTINUITY_POLICY,
         illustrationSelection: STUDIO_VIDEO_ILLUSTRATION_POLICY,
         iconography: STUDIO_ICONOGRAPHY_POLICY,
@@ -707,6 +734,9 @@ export async function generateStudioPackage(input: {
           durationMs: range.endMs - range.startMs,
           segments: range.segments,
           clipStartMs: range.startMs,
+          storyboard: presentation.storyboard,
+          layout: presentation.layout,
+          ...(learnedRules ? { learnedRules } : {}),
           context: {
             illustrationStyle: visualPreference,
             visualStylePolicy: STUDIO_VISUAL_STYLE_POLICY,
@@ -901,7 +931,10 @@ export async function generateStudioPackage(input: {
         framingPolicy: STUDIO_SOURCE_FRAMING_POLICY,
         editorialReview: STUDIO_EDITORIAL_REVIEW_POLICY,
         ...(reviewAudio ? { audioReview: "selected-source-windows-v1" } : {}),
-        storyboard: "context-rich-v2",
+        storyboard: storyboardPolicy,
+        storyboardGuidance: STUDIO_NARRATIVE_GUIDANCE_VERSION,
+        layout: presentation.layout,
+        learnedRules,
         storyboardContinuity: STUDIO_STORYBOARD_CONTINUITY_POLICY,
         iconography: STUDIO_ICONOGRAPHY_POLICY,
         presentation: STUDIO_PRESENTATION_POLICY,
@@ -1041,7 +1074,10 @@ export async function generateStudioPackage(input: {
       illustrationTimings: input.illustrationTimings,
       visualPreference,
       imageModel,
-      storyboard: "context-rich-v2",
+      storyboard: storyboardPolicy,
+      storyboardGuidance: STUDIO_NARRATIVE_GUIDANCE_VERSION,
+      layout: presentation.layout,
+      learnedRules,
       sharedMediaPolicy: "immutable-shared-media-v1",
       storyboardContinuity: STUDIO_STORYBOARD_CONTINUITY_POLICY,
       illustrationSelection: STUDIO_VIDEO_ILLUSTRATION_POLICY,
@@ -1342,6 +1378,11 @@ export async function generateStudioPackage(input: {
             await excludeBoundary(screened.screen.reason);
             continue;
           }
+          // A preserved composition (closing-only or timing-only repair) keeps the
+          // layout it was reviewed with; a new render uses the workspace setting.
+          const layout: StudioPresentationStyle["layout"] = preservedScreen
+            ? (priorPresentation?.layout ?? "classic")
+            : presentation.layout;
           let rejectedIllustration = false;
           const illustrations = preservedScreen
             ? await Promise.all(
@@ -1354,36 +1395,57 @@ export async function generateStudioPackage(input: {
                 }),
               )
             : screened
-              ? await studioContextIllustrationShots({
-                  screen: screened.screen,
-                  segments: range.segments,
-                  clipStartMs: range.startMs,
-                  sourceSha256: claim.source.sha256,
-                  sourceTitle: claim.package.source.title,
-                  identity,
-                  store,
-                  ...(checkpoints ? { checkpoints } : {}),
-                  apiKey: videoConnection.apiKey,
-                  imageModel,
-                  reviewerModel: videoConnection.model,
-                  visualPreference,
-                  ...(hasVideo
-                    ? {
-                        onRejected: () => {
-                          rejectedIllustration = true;
-                          output.warnings.push(
-                            "An optional illustration did not pass review. Original source footage was retained and the final video was screened again.",
-                          );
-                        },
-                      }
-                    : {}),
-                  ...(signal ? { signal } : {}),
-                })
+              ? await (async () => {
+                  const illustrationInput = {
+                    screen: screened.screen,
+                    segments: range.segments,
+                    clipStartMs: range.startMs,
+                    sourceSha256: claim.source.sha256,
+                    sourceTitle: claim.package.source.title,
+                    identity,
+                    store,
+                    ...(checkpoints ? { checkpoints } : {}),
+                    apiKey: videoConnection.apiKey,
+                    imageModel,
+                    reviewerModel: videoConnection.model,
+                    visualPreference,
+                    ...(layout === "immersive" ? { aspectRatio: "9:16" as const } : {}),
+                    ...(learnedRules ? { learnedRules } : {}),
+                    ...(input.onReviewRejected ? { onReviewRejected: input.onReviewRejected } : {}),
+                    ...(hasVideo
+                      ? {
+                          onRejected: () => {
+                            rejectedIllustration = true;
+                            output.warnings.push(
+                              "An optional illustration did not pass review. Original source footage was retained and the final video was screened again.",
+                            );
+                          },
+                        }
+                      : {}),
+                    ...(signal ? { signal } : {}),
+                  };
+                  // Batch delivery parks this job (STUDIO_IMAGE_BATCH_PENDING) until the
+                  // provider's half-price queue returns the scene images.
+                  return presentation.imagery === "batch" && checkpoints
+                    ? studioBatchedContextIllustrationShots({
+                        ...illustrationInput,
+                        checkpoints,
+                        batchPrefix: `dcs-${env.STUDIO_IDENTITY ?? "local"}-${claim.package.isTest ? "test" : "live"}`,
+                      })
+                    : studioContextIllustrationShots(illustrationInput);
+                })()
               : [];
           // A storyboard can leave a portrait interval gap for an insert. If the
           // insert is omitted, use a consistent uncropped picture throughout;
           // otherwise that gap would briefly shrink and enlarge the speaker.
-          if (rejectedIllustration || prior?.mediaEdits?.framing === "full-picture") scenes = [];
+          // In the immersive layout the speaker crop is the whole picture, so a dropped
+          // scene simply shows the speaker; falling back to the framed picture would
+          // shrink the entire video because one illustration failed review.
+          if (
+            (rejectedIllustration && layout !== "immersive") ||
+            prior?.mediaEdits?.framing === "full-picture"
+          )
+            scenes = [];
           for (let attempt = 0; attempt < 2; attempt++) {
             const openingPlan = wantsOpening
               ? studioOpeningCardPlan(range.endMs - range.startMs, scenes)
@@ -1405,6 +1467,7 @@ export async function generateStudioPackage(input: {
             const videoStream = media.streams?.find((s) => s.codec_type === "video");
             const path = await renderStudioVideo({
               ...(prior?.mediaEdits ? { mediaEdits: prior.mediaEdits } : {}),
+              layout,
               ffmpeg: env.DISTRIBUTION_FFMPEG_PATH ?? "ffmpeg",
               directory: folder,
               sourcePath,
@@ -1448,6 +1511,7 @@ export async function generateStudioPackage(input: {
               const fitRegion = studioFullPictureRegion(
                 videoStream?.width ?? 1280,
                 videoStream?.height ?? 720,
+                layout,
               );
               const proxy = await studioReviewProxy({
                 ffmpeg: env.DISTRIBUTION_FFMPEG_PATH ?? "ffmpeg",
@@ -1511,8 +1575,9 @@ export async function generateStudioPackage(input: {
                     startMs: page.startMs - range.startMs,
                     endMs: page.endMs - range.startMs,
                   })),
+                  layout,
                   foregroundPicture: {
-                    portraitRegion: STUDIO_VIDEO_FRAME,
+                    portraitRegion: layout === "immersive" ? STUDIO_FRAME : STUDIO_VIDEO_FRAME,
                     fitRegion,
                   },
                   scenes,
@@ -1566,6 +1631,7 @@ export async function generateStudioPackage(input: {
                 sourceRange: { startMs: range.startMs, endMs: range.endMs },
                 renderedSha256: sha(bytes),
                 attempt,
+                layout,
                 framing: scenes.length ? "screened-portrait" : "full-picture",
                 scenes,
                 speechEndMs: closing.plan.speechEndMs,
@@ -1613,6 +1679,7 @@ export async function generateStudioPackage(input: {
                   sourceSha256: claim.source.sha256,
                   model: videoConnection.model,
                   reviewedAt: new Date().toISOString(),
+                  layout,
                   framing: scenes.length ? "screened-portrait" : "full-picture",
                   repairs: attempt,
                   source: {

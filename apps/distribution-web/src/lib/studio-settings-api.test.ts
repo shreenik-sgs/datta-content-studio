@@ -3,8 +3,36 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_STUDIO_VISUAL_PREFERENCE } from "@satsang/distribution-domain";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ access: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  access: vi.fn(),
+  lessons: [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      rule: "A serpent's tail tapers to a point; never draw a head at the tail end.",
+      scope: "anatomy",
+      source: "IMAGE_REVIEW",
+      sourceReason: "Tail ends in a head.",
+      packageId: null,
+      hits: 2,
+      status: "ACTIVE",
+      createdAt: "2026-10-29T08:00:00.000Z",
+      updatedAt: "2026-10-29T08:00:00.000Z",
+    },
+  ],
+  retired: [] as string[],
+}));
 vi.mock("./runtime", () => ({ access: mocks.access }));
+vi.mock("./studio-runtime", () => ({
+  studioRepository: () => ({
+    listVisualLessons: async () =>
+      mocks.lessons.map((l) => (mocks.retired.includes(l.id) ? { ...l, status: "RETIRED" } : l)),
+    retireVisualLesson: async (_ctx: unknown, id: string) => {
+      if (!mocks.lessons.some((l) => l.id === id)) throw Error("VISUAL_LESSON_NOT_FOUND");
+      mocks.retired.push(id);
+      return true;
+    },
+  }),
+}));
 import { GET, POST } from "../app/api/settings/route";
 let root: string;
 beforeEach(async () => {
@@ -388,4 +416,76 @@ it("saves named YouTube targets without fabricated credentials and connects the 
   });
   expect(response.status).toBe(400);
   expect((await response.json()).error).toBe("ACCOUNT_DESTINATION_IMMUTABLE");
+});
+
+it("remembers the video layout and narration imagery alongside the visual preference", async () => {
+  const initial = await (await get()).json();
+  expect(initial.presentation).toEqual({
+    layout: "immersive",
+    storyboard: "narrative",
+    imagery: "batch",
+  });
+  const saved = await post({
+    action: "visuals",
+    expectedRevision: initial.revision,
+    visualPreference: "Scenic nature",
+    layout: "classic",
+    storyboard: "restrained",
+    imagery: "immediate",
+  });
+  expect(saved.status).toBe(200);
+  const current = await (await get()).json();
+  expect(current.presentation).toEqual({
+    layout: "classic",
+    storyboard: "restrained",
+    imagery: "immediate",
+  });
+  expect(current.visualPreference).toBe("Scenic nature");
+  // A write without the selects keeps the remembered style.
+  expect(
+    (
+      await post({
+        action: "visuals",
+        expectedRevision: current.revision,
+        visualPreference: "Scenic nature again",
+      })
+    ).status,
+  ).toBe(200);
+  expect((await (await get()).json()).presentation).toEqual({
+    layout: "classic",
+    storyboard: "restrained",
+    imagery: "immediate",
+  });
+  expect(
+    (
+      await post({
+        action: "visuals",
+        expectedRevision: (await (await get()).json()).revision,
+        visualPreference: "x",
+        layout: "wide",
+      })
+    ).status,
+  ).toBe(400);
+});
+
+it("lists the rules the Studio learned and lets an admin retire one", async () => {
+  const initial = await (await get()).json();
+  expect(initial.visualLessons).toHaveLength(1);
+  expect(initial.visualLessons[0]).toMatchObject({ scope: "anatomy", status: "ACTIVE", hits: 2 });
+  expect(
+    (
+      await post({
+        action: "retire-lesson",
+        expectedRevision: initial.revision,
+        id: "22222222-2222-4222-8222-222222222222",
+      })
+    ).status,
+  ).toBeGreaterThanOrEqual(400);
+  const retired = await post({
+    action: "retire-lesson",
+    expectedRevision: initial.revision,
+    id: "11111111-1111-4111-8111-111111111111",
+  });
+  expect(retired.status).toBe(200);
+  expect((await retired.json()).visualLessons[0].status).toBe("RETIRED");
 });

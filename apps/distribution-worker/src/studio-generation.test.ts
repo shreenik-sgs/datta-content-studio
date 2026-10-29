@@ -1224,7 +1224,7 @@ describe("automatic Studio generation with real media", () => {
       checkpoints: {
         get: () => undefined,
         set: async (key, fingerprint, value) => {
-          expect(key).toMatch(/^[a-z0-9:_-]{1,160}$/);
+          expect(key).toMatch(/^[a-z0-9:_-]{1,240}$/);
           expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
           expect(JSON.stringify(value).length).toBeLessThan(4 * 1024 * 1024);
         },

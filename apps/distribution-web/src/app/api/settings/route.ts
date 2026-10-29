@@ -13,12 +13,14 @@ import {
   STUDIO_CHANNELS,
   studioAppLinks,
   studioDefaultAccount,
+  studioPresentationStyle,
   studioVisualPreference,
   studioYoutubeClosing,
 } from "@satsang/distribution-domain";
 import { z } from "zod";
 import { json, readBoundedBody } from "../../../lib/http";
 import { access } from "../../../lib/runtime";
+import { studioRepository } from "../../../lib/studio-runtime";
 
 const identifier = z.string().regex(/^[A-Za-z0-9_.:@-]{1,160}$/);
 const secret = z
@@ -121,6 +123,16 @@ const commandSchema = z.discriminatedUnion("action", [
       action: z.literal("visuals"),
       expectedRevision: z.string().length(64),
       visualPreference: z.string().trim().min(1).max(1000),
+      layout: z.enum(["immersive", "classic"]).optional(),
+      storyboard: z.enum(["narrative", "restrained"]).optional(),
+      imagery: z.enum(["batch", "immediate"]).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("retire-lesson"),
+      expectedRevision: z.string().length(64),
+      id: z.string().uuid(),
     })
     .strict(),
   z
@@ -168,6 +180,7 @@ function projection(config: StudioProviderConfig, isTest: boolean) {
   return {
     revision: studioSettingsRevision(config),
     visualPreference: studioVisualPreference(config.visualPreference),
+    presentation: studioPresentationStyle(config.presentation),
     appLinks: studioAppLinks(config.appLinks),
     maxMasterUploadMb: config.maxMasterUploadMb ?? MAX_MASTER_BYTES / 1024 / 1024,
     maxMasterUploadCapacityMb: MAX_MASTER_BYTES / 1024 / 1024,
@@ -208,12 +221,13 @@ export async function GET(request: Request) {
   const auth = await access(request, "operations.manage");
   if (!auth.ok) return auth.response;
   try {
-    return json(
-      projection(
+    return json({
+      ...projection(
         await loadStudioProviderConfig(studioSettingsPath(process.env, auth.context.isTest)),
         auth.context.isTest,
       ),
-    );
+      visualLessons: await studioRepository().listVisualLessons(auth.context.isTest, "ALL"),
+    });
   } catch {
     return json(
       { error: "Settings storage is unavailable. No credentials have been exposed." },
@@ -230,6 +244,15 @@ export async function POST(request: Request) {
     );
     const path = studioSettingsPath(process.env, auth.context.isTest);
     const config = await loadStudioProviderConfig(path);
+    if (command.action === "retire-lesson") {
+      if (studioSettingsRevision(config) !== command.expectedRevision)
+        return json({ error: "SETTINGS_CHANGED" }, 409);
+      await studioRepository().retireVisualLesson(auth.context, command.id);
+      return json({
+        ...projection(config, auth.context.isTest),
+        visualLessons: await studioRepository().listVisualLessons(auth.context.isTest, "ALL"),
+      });
+    }
     if (command.action === "youtube-target") {
       const target = studioYoutubeClosing({ label: command.label, url: command.url });
       if (config.accounts.some((a) => a.platform === "youtube" && a.channelUrl === target.url))
@@ -254,9 +277,17 @@ export async function POST(request: Request) {
     } else if (command.action === "app-links") {
       config.appLinks = studioAppLinks(command.appLinks);
     } else if (command.action === "uploads") config.maxMasterUploadMb = command.maxMasterUploadMb;
-    else if (command.action === "visuals")
+    else if (command.action === "visuals") {
       config.visualPreference = studioVisualPreference(command.visualPreference);
-    else if (command.action === "media") config.trustedMediaOrigins = command.trustedMediaOrigins;
+      if (command.layout || command.storyboard || command.imagery) {
+        const current = studioPresentationStyle(config.presentation);
+        config.presentation = studioPresentationStyle({
+          layout: command.layout ?? current.layout,
+          storyboard: command.storyboard ?? current.storyboard,
+          imagery: command.imagery ?? current.imagery,
+        });
+      }
+    } else if (command.action === "media") config.trustedMediaOrigins = command.trustedMediaOrigins;
     else if (command.action === "default-account") {
       const selected = config.accounts.find((a) => a.id === command.accountId);
       if (!selected) return json({ error: "ACCOUNT_NOT_FOUND" }, 400);

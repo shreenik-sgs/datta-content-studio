@@ -128,6 +128,7 @@ export * from "./studio-framing";
 export * from "./studio-generation-recovery";
 export * from "./studio-ending";
 export * from "./studio-closing-destination";
+export * from "./studio-visual-lessons";
 export * from "./studio-visual-preferences";
 
 export * from "./online-video";

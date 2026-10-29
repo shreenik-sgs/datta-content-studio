@@ -8,6 +8,7 @@ import {
   type PlaylistCuration,
   type PostingCheck,
   STUDIO_PUBLISHING_PAUSE_REJECTIONS,
+  STUDIO_VISUAL_LESSON_SCOPES,
   type StudioAdditionalMessage,
   type StudioChannel,
   type StudioFeedback,
@@ -18,6 +19,8 @@ import {
   type StudioProvenance,
   type StudioPublication,
   type StudioTranscript,
+  type StudioVisualLesson,
+  type StudioVisualLessonScope,
   appendStudioMessage,
   assertStudioCorrectionIsolation,
   assertStudioDiscoveryIsolation,
@@ -52,6 +55,7 @@ import {
   validateStudioGenerationRequest,
   validateStudioOutputs,
   validateStudioProvenance,
+  validateStudioVisualLessonRule,
 } from "@satsang/distribution-domain";
 import type { Pool, PoolClient, QueryResultRow } from "pg";
 import {
@@ -113,6 +117,7 @@ function comment(value: string | undefined, required = false): string {
   return result;
 }
 const knownFailures = new Set([
+  "STUDIO_IMAGE_BATCH_PENDING",
   "STUDIO_EXPORT_CARD_MISMATCH",
   "STUDIO_EXPORT_CAPTIONS_INVALID",
   "STUDIO_EXPORT_INVALID",
@@ -271,6 +276,20 @@ function worker(input: { isTest: boolean; workerId: string; leaseMs?: number | u
 }
 
 /** Durable content workflow. Immutable revisions and feedback are separate from queue state. */
+function visualLesson(row: Record<string, unknown>): StudioVisualLesson {
+  return {
+    id: String(row.id),
+    rule: String(row.rule),
+    scope: row.scope as StudioVisualLessonScope,
+    source: row.source as StudioVisualLesson["source"],
+    sourceReason: String(row.source_reason),
+    packageId: row.package_id ? String(row.package_id) : null,
+    hits: Number(row.hits),
+    status: row.status as StudioVisualLesson["status"],
+    createdAt: new Date(row.created_at as string).toISOString(),
+    updatedAt: new Date(row.updated_at as string).toISOString(),
+  };
+}
 export function createIntelligentContentRepository(
   pool: Pool,
   options: { authorize?: StudioRoleAuthority } = {},
@@ -2449,8 +2468,10 @@ export function createIntelligentContentRepository(
             [claim.id, pkg.isTest, input.progress],
           );
         } else {
+          // A per-file correction prefixes every key with "correction:<output id>:",
+          // and the render evidence key carries an output key plus a fingerprint.
           if (
-            !/^[a-z0-9:_-]{1,160}$/.test(input.key) ||
+            !/^[a-z0-9:_-]{1,240}$/.test(input.key) ||
             !/^[a-f0-9]{64}$/.test(input.fingerprint) ||
             JSON.stringify(input.value).length > 4 * 1024 * 1024
           )
@@ -2490,6 +2511,91 @@ export function createIntelligentContentRepository(
               errorCode: failure(code),
               retryAt: new Date(Date.now() + delay).toISOString(),
             },
+          ],
+        );
+        return true;
+      }),
+    /** Rules the Studio learned from its own rejected images; newest and most-hit first. */
+    listVisualLessons: (isTest: boolean, status: "ACTIVE" | "ALL" = "ACTIVE") =>
+      pool
+        .query(
+          `SELECT id,rule,scope,source,source_reason,package_id,hits,status,created_at,updated_at FROM distribution.studio_visual_lesson WHERE is_test=$1${status === "ACTIVE" ? " AND status='ACTIVE'" : ""} ORDER BY hits DESC, updated_at DESC LIMIT 200`,
+          [isTest],
+        )
+        .then((result) => result.rows.map(visualLesson)),
+    /** Keep a distilled rule; an identical active rule just counts another hit. */
+    recordVisualLesson: (
+      isTest: boolean,
+      input: {
+        rule: string;
+        scope: StudioVisualLessonScope;
+        source: StudioVisualLesson["source"];
+        sourceReason: string;
+        packageId?: string | null;
+        duplicateOf?: string | null;
+      },
+    ) =>
+      transaction(async (client) => {
+        const rule = validateStudioVisualLessonRule(input.rule);
+        if (
+          !STUDIO_VISUAL_LESSON_SCOPES.includes(input.scope) ||
+          !["IMAGE_REVIEW", "CURATOR"].includes(input.source) ||
+          typeof input.sourceReason !== "string" ||
+          !input.sourceReason.trim() ||
+          input.sourceReason.length > 4000
+        )
+          throw Error("INVALID_VISUAL_LESSON");
+        const existing = await client.query(
+          "SELECT id FROM distribution.studio_visual_lesson WHERE is_test=$1 AND status='ACTIVE' AND (id=$2::uuid OR lower(rule)=lower($3)) ORDER BY (id=$2::uuid) DESC LIMIT 1",
+          [isTest, input.duplicateOf ?? null, rule],
+        );
+        const found = existing.rows[0]?.id as string | undefined;
+        if (found) {
+          await client.query(
+            "UPDATE distribution.studio_visual_lesson SET hits=hits+1,updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2",
+            [found, isTest],
+          );
+          return { id: found, created: false };
+        }
+        const inserted = await client.query(
+          "INSERT INTO distribution.studio_visual_lesson(is_test,rule,scope,source,source_reason,package_id) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",
+          [isTest, rule, input.scope, input.source, input.sourceReason, input.packageId ?? null],
+        );
+        return { id: inserted.rows[0].id as string, created: true };
+      }),
+    /** An Admin can switch a learned rule off; it stays visible as RETIRED. */
+    retireVisualLesson: (ctx: DistributionContext, id: string) =>
+      transaction(async (client) => {
+        await access(client, ctx);
+        const changed = await client.query(
+          "UPDATE distribution.studio_visual_lesson SET status='RETIRED',retired_by=$3,retired_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2 AND status='ACTIVE'",
+          [id, ctx.isTest, ctx.userId],
+        );
+        if (changed.rowCount !== 1) throw Error("VISUAL_LESSON_NOT_FOUND");
+        return true;
+      }),
+    /** Park a job while provider work completes elsewhere (a batch of scene images). Unlike a
+     * deferral this is not a failed attempt: the re-claim's increment is given back, so a job
+     * may wait for hours in bounded intervals without exhausting its retries. */
+    waitGeneration: (
+      claim: StudioGenerationClaim,
+      code: string,
+      delayMs: number,
+      progress: StudioGenerationProgress,
+    ) =>
+      transaction(async (client) => {
+        const { pkg, row } = await checkedGeneration(client, claim);
+        if (pkg.revision !== row.package_revision || !["QUEUED", "GENERATING"].includes(pkg.status))
+          return false;
+        const delay = Math.min(3600000, Math.max(60000, delayMs));
+        await client.query(
+          "UPDATE distribution.studio_generation_job SET status='QUEUED',attempts=GREATEST(attempts-1,0),available_at=clock_timestamp()+($3::int*interval '1 millisecond'),last_error=$4,progress=$5,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND is_test=$2",
+          [
+            claim.id,
+            pkg.isTest,
+            delay,
+            failure(code),
+            { ...progress, retryAt: new Date(Date.now() + delay).toISOString() },
           ],
         );
         return true;

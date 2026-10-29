@@ -174,3 +174,97 @@ it("never vertically crops a tall speaker's head even when a portrait scene was 
     await rm(directory, { recursive: true, force: true });
   }
 }, 60000);
+
+it("fills the whole frame in the immersive layout and lets a moving still cover it", async () => {
+  const directory = await mkdtemp(join(realpathSync(tmpdir()), "studio-framing-immersive-"));
+  try {
+    const sourcePath = join(directory, "source.mp4");
+    // Markers: top of the head (magenta, top centre) and the bottom attribution band (cyan).
+    execFileSync(ffmpeg, [
+      "-v",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "color=c=black:s=640x360:r=30,drawbox=x=0:y=120:w=40:h=40:c=red:t=fill,drawbox=x=300:y=0:w=40:h=40:c=magenta:t=fill,drawbox=x=0:y=324:w=640:h=36:c=cyan:t=fill",
+      "-t",
+      "2",
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-threads",
+      "1",
+      sourcePath,
+    ]);
+    const renderDirectory = join(directory, "render");
+    await mkdir(renderDirectory);
+    const still = await sharp({
+      create: { width: 1080, height: 1920, channels: 3, background: "#ffa500" },
+    })
+      .png()
+      .toBuffer();
+    const path = await renderStudioVideo({
+      layout: "immersive",
+      ffmpeg,
+      directory: renderDirectory,
+      sourcePath,
+      mimeType: "video/mp4",
+      backdrop: await sharp({
+        create: { width: 1080, height: 1920, channels: 4, background: "#00000000" },
+      })
+        .png()
+        .toBuffer(),
+      hasVideo: true,
+      hasAudio: false,
+      sourceWidth: 640,
+      sourceHeight: 360,
+      startMs: 0,
+      endMs: 2000,
+      captions: [],
+      scenes: [{ startMs: 0, endMs: 2000, bodyTop: 0, bodyBottom: 0.9 }],
+      illustrations: [{ bytes: still, startMs: 800, endMs: 1600 }],
+    });
+    const frameAt = (seconds: string) =>
+      execFileSync(
+        ffmpeg,
+        [
+          "-v",
+          "error",
+          "-ss",
+          seconds,
+          "-i",
+          path,
+          "-frames:v",
+          "1",
+          "-f",
+          "image2pipe",
+          "-vcodec",
+          "png",
+          "pipe:1",
+        ],
+        { maxBuffer: 12 * 1024 * 1024 },
+      );
+    const speaker = frameAt("0.4");
+    expect(await sharp(speaker).metadata()).toMatchObject({ width: 1080, height: 1920 });
+    // The head marker reaches the very top of the frame; the band sits at the very bottom at
+    // full width; the far-left red marker is outside the enlarged portrait crop.
+    closeColor(await colorAt(speaker, 540, 60), [255, 0, 255]);
+    closeColor(await colorAt(speaker, 540, 1900), [0, 255, 255]);
+    closeColor(await colorAt(speaker, 20, 1900), [0, 255, 255]);
+    closeColor(await colorAt(speaker, 20, 800), [0, 0, 0]);
+    const illustrated = frameAt("1.2");
+    for (const [x, y] of [
+      [20, 20],
+      [1060, 20],
+      [540, 960],
+      [20, 1900],
+      [1060, 1900],
+    ] as const)
+      closeColor(await colorAt(illustrated, x, y), [255, 165, 0]);
+    // After the still ends, the speaker is back without any frozen frame of the still.
+    closeColor(await colorAt(frameAt("1.8"), 540, 60), [255, 0, 255]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 90000);

@@ -7,9 +7,11 @@ import { StudioNoSuitableContentError } from "./studio-checkpoints.js";
 import { StudioClosingPreservationError } from "./studio-closing-refresh.js";
 import { StudioContentQualityError } from "./studio-content-review.js";
 import { generateStudioPackage } from "./studio-generation.js";
+import { StudioImageBatchPending } from "./studio-image-batch.js";
 import { refreshStudioPreviewClosings } from "./studio-preview-closing.js";
 import { StudioProviderError } from "./studio-provider-error.js";
 import { runStudioPublicationOnce } from "./studio-publishing.js";
+import { createStudioLearning } from "./studio-visual-lessons.js";
 
 export type StudioWorkerInput = {
   repository: ReturnType<typeof createIntelligentContentRepository>;
@@ -76,11 +78,24 @@ export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise
         saved[key] = structuredClone(after);
       },
     });
+    const learning = createStudioLearning({
+      repository: input.repository,
+      env: input.env,
+      isTest: claim.package?.isTest ?? false,
+      packageId: claim.package?.id ?? "",
+      signal,
+    });
+    const visualLessons = await learning.load();
+    // A curator's rejection is a lesson too; each comment is distilled once.
+    for (const feedback of (claim.package?.feedback ?? []).filter((f) => f.action === "REJECTED"))
+      await learning.learn({ reason: feedback.comment, brief: "", source: "CURATOR" });
     const result = await generateStudioPackage({
       claim,
       store: input.store,
       env: input.env,
       signal,
+      visualLessons,
+      onReviewRejected: (finding) => learning.learn({ ...finding, source: "IMAGE_REVIEW" }),
       checkpoints: {
         get: <T>(key: string, fingerprint: string) =>
           saved[key]?.fingerprint === fingerprint
@@ -102,6 +117,23 @@ export async function runStudioGenerationOnce(input: StudioWorkerInput): Promise
       error instanceof Error && /^[A-Z_]{1,100}$/.test(error.message)
         ? error.message
         : "GENERATION_FAILED";
+    // Scene images are queued at the provider: park the job, not a failure or a used attempt.
+    if (
+      error instanceof StudioImageBatchPending &&
+      (await input.repository.waitGeneration(
+        claim,
+        "STUDIO_IMAGE_BATCH_PENDING",
+        error.retryAfterMs,
+        {
+          ...progress,
+          imageBatch: {
+            ...error.batch,
+            checkAt: new Date(Date.now() + error.retryAfterMs).toISOString(),
+          },
+        },
+      ))
+    )
+      return true;
     // Log source locations, never provider payloads, credentials, or raw error messages.
     const mediaPipeline = studioMediaPipeline(input.env);
     input.onFailureDiagnostic?.({

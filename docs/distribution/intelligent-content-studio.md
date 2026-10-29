@@ -203,7 +203,7 @@ retrieved from the official YouTube channel on 13 October 2026. Published Hub bl
 its matching public copy in `apps/distribution-web/public/brand/`. This changes curated
 content branding, not the application name. Original source branding is preserved.
 
-Portrait videos retain the complete source picture at y=460–1220 on a 1080×1920 canvas.
+Portrait videos use the immersive full-screen layout by default since 29 October 2026 (the picture fills the 1080×1920 frame, captions overlay its lower band); the classic layout retains the complete source picture inside a framed region on the canvas. Settings → Visual settings choose the layout and whether narration is illustrated scene by scene (narrative) or sparingly (restrained); see the content quality rulebook.
 Timed subtitles use up to two lines, 30px text, below the picture, ending at y=1620;
 the remaining lower area stays clear for platform controls. Only the selected output
 language's caption file is exported. English output keeps the original spoken audio and

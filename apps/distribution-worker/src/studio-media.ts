@@ -2,12 +2,14 @@ import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   MAX_STUDIO_VIDEO_BYTES,
+  STUDIO_FRAME,
   STUDIO_PICTURE,
   STUDIO_SUBTITLE_TOP,
   type StudioClosingCard,
   type StudioMediaEdits,
   type StudioOpeningCard,
   type StudioPortraitScene,
+  type StudioPresentationLayout,
   type StudioSegment,
   type StudioSourceBranding,
   studioFullPictureRegion,
@@ -309,8 +311,18 @@ export function studioCaptionPages(segments: StudioSegment[]): StudioSegment[] {
     });
   });
 }
+/** Immersive stills are prepared slightly larger than the frame so the slow camera move crops, never upscales. */
+export const STUDIO_MOTION_STILL = { width: 1296, height: 2304 } as const;
 /** Fit the complete image without adding generator badges or obscuring sacred details. */
-export async function studioIllustrationFrame(bytes: Uint8Array): Promise<Buffer> {
+export async function studioIllustrationFrame(
+  bytes: Uint8Array,
+  layout: StudioPresentationLayout = "classic",
+): Promise<Buffer> {
+  if (layout === "immersive")
+    return sharp(bytes)
+      .resize(STUDIO_MOTION_STILL.width, STUDIO_MOTION_STILL.height, { fit: "cover" })
+      .png()
+      .toBuffer();
   const background = await sharp(bytes)
     .resize(STUDIO_VIDEO_FRAME.width, STUDIO_VIDEO_FRAME.height, { fit: "cover" })
     .blur(25)
@@ -334,8 +346,18 @@ export async function studioIllustrationFrame(bytes: Uint8Array): Promise<Buffer
     .toBuffer();
 }
 
+/** A slow, alternating camera move on each still, so narration imagery reads as footage. */
+export function studioMotionFilter(index: number, durationMs: number) {
+  const frames = Math.max(2, Math.round((durationMs / 1000) * 30));
+  const zoom = index % 2 === 0 ? `1+0.08*on/${frames}` : `1.08-0.08*on/${frames}`;
+  const drift =
+    index % 4 < 2 ? "0.5" : index % 4 === 2 ? `0.45+0.1*on/${frames}` : `0.55-0.1*on/${frames}`;
+  return `zoompan=z='${zoom}':x='(iw-iw/zoom)*(${drift})':y='(ih-ih/zoom)/2':d=${frames}:s=${STUDIO_FRAME.width}x${STUDIO_FRAME.height}:fps=30`;
+}
 export async function renderStudioVideo(input: {
   mediaEdits?: StudioMediaEdits;
+  /** immersive fills the whole frame; classic keeps the framed picture with captions below. */
+  layout?: StudioPresentationLayout;
   ffmpeg: string;
   directory: string;
   sourcePath: string;
@@ -360,6 +382,7 @@ export async function renderStudioVideo(input: {
   await writeFile(backdrop, input.backdrop, { mode: 0o600 });
   const width = input.sourceWidth ?? 1920;
   const height = input.sourceHeight ?? 1080;
+  const layout = input.layout ?? "classic";
   const scenes = input.mediaEdits?.framing === "full-picture" ? [] : (input.scenes ?? []);
   const illustrations = input.illustrations ?? [];
   const closing = input.closingCard;
@@ -389,10 +412,10 @@ export async function renderStudioVideo(input: {
     )
       throw Error("STUDIO_ILLUSTRATION_INVALID");
     const path = join(input.directory, `illustration-${i}.png`);
-    await writeFile(path, await studioIllustrationFrame(shot.bytes), { mode: 0o600 });
+    await writeFile(path, await studioIllustrationFrame(shot.bytes, layout), { mode: 0o600 });
     illustrationFiles.push(path);
   }
-  const fitRegion = studioFullPictureRegion(width, height);
+  const fitRegion = studioFullPictureRegion(width, height, layout);
   const fitCaptionTop = Math.min(STUDIO_CAPTION_TOP, fitRegion.y + fitRegion.height + 12);
   const timeline = await captionTimeline(
     input.directory,
@@ -410,7 +433,7 @@ export async function renderStudioVideo(input: {
       fontSize: studioSubtitleSize(input.mediaEdits),
     },
   );
-  const frame = STUDIO_VIDEO_FRAME;
+  const frame = layout === "immersive" ? STUDIO_FRAME : STUDIO_VIDEO_FRAME;
   const filter: string[] = [];
   if (input.hasVideo) {
     const branches = ["blur", "fit", ...scenes.map((_, i) => `shot${i}`)];
@@ -466,12 +489,24 @@ export async function renderStudioVideo(input: {
   } else filter.push("[0:v]null[base]");
   let finalBase = "base";
   for (const [i, shot] of illustrations.entries()) {
-    filter.push(
-      `[${3 + i}:v]format=rgba,fade=t=in:st=${shot.startMs / 1000}:d=0.25:alpha=1,fade=t=out:st=${shot.endMs / 1000 - 0.25}:d=0.25:alpha=1[illustration${i}]`,
-    );
-    filter.push(
-      `[${finalBase}][illustration${i}]overlay=0:${frame.y}:shortest=1:enable='gte(t,${shot.startMs / 1000})*lt(t,${shot.endMs / 1000})'[illustrated${i}]`,
-    );
+    if (layout === "immersive") {
+      // A finite moving stream placed at its start time: the base picture passes
+      // through before it begins and after it ends, so stills can follow each other.
+      const length = (shot.endMs - shot.startMs) / 1000;
+      filter.push(
+        `[${3 + i}:v]${studioMotionFilter(i, shot.endMs - shot.startMs)},format=rgba,fade=t=in:st=0:d=0.3:alpha=1,fade=t=out:st=${Math.max(0, length - 0.3)}:d=0.3:alpha=1,setpts=PTS-STARTPTS+${shot.startMs / 1000}/TB[illustration${i}]`,
+      );
+      filter.push(
+        `[${finalBase}][illustration${i}]overlay=0:0:eof_action=pass:repeatlast=0:enable='gte(t,${shot.startMs / 1000})*lt(t,${shot.endMs / 1000})'[illustrated${i}]`,
+      );
+    } else {
+      filter.push(
+        `[${3 + i}:v]format=rgba,fade=t=in:st=${shot.startMs / 1000}:d=0.25:alpha=1,fade=t=out:st=${shot.endMs / 1000 - 0.25}:d=0.25:alpha=1[illustration${i}]`,
+      );
+      filter.push(
+        `[${finalBase}][illustration${i}]overlay=0:${frame.y}:shortest=1:enable='gte(t,${shot.startMs / 1000})*lt(t,${shot.endMs / 1000})'[illustrated${i}]`,
+      );
+    }
     finalBase = `illustrated${i}`;
   }
   if (closing) {
@@ -528,8 +563,8 @@ export async function renderStudioVideo(input: {
     ...illustrationFiles.flatMap((path) => [
       "-protocol_whitelist",
       "file,pipe",
-      "-loop",
-      "1",
+      // The immersive camera move generates its own frames from one still.
+      ...(layout === "immersive" ? [] : ["-loop", "1"]),
       "-framerate",
       "30",
       "-i",

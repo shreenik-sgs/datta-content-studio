@@ -232,3 +232,36 @@ export const distributionStudioSettings = distributionSchema.table(
   },
   (table) => [check("studio_settings_size", sql`octet_length(${table.sealed}) <= 65536`)],
 );
+
+/** Rules the Studio learned from its own rejected image reviews and curator rejections.
+ * Active rules are injected into every later brief, generation and review (self-improvement). */
+export const distributionStudioVisualLesson = distributionSchema.table(
+  "studio_visual_lesson",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    isTest: boolean("is_test").notNull(),
+    rule: text("rule").notNull(),
+    scope: text("scope").notNull(),
+    source: text("source").notNull(),
+    sourceReason: text("source_reason").notNull(),
+    packageId: uuid("package_id"),
+    hits: integer("hits").notNull().default(1),
+    status: text("status").notNull().default("ACTIVE"),
+    retiredBy: text("retired_by"),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("studio_visual_lesson_active").on(table.isTest, table.status, table.updatedAt),
+    check("studio_visual_lesson_rule_size", sql`char_length(${table.rule}) BETWEEN 12 AND 400`),
+    check("studio_visual_lesson_reason_size", sql`char_length(${table.sourceReason}) <= 4000`),
+    check(
+      "studio_visual_lesson_scope",
+      sql`${table.scope} IN ('iconography','anatomy','composition','style','continuity','text')`,
+    ),
+    check("studio_visual_lesson_status", sql`${table.status} IN ('ACTIVE','RETIRED')`),
+    check("studio_visual_lesson_source", sql`${table.source} IN ('IMAGE_REVIEW','CURATOR')`),
+    check("studio_visual_lesson_hits", sql`${table.hits}>=1`),
+  ],
+);

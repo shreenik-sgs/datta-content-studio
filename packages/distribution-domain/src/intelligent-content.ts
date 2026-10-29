@@ -165,6 +165,8 @@ export type StudioGenerationProgress = {
   channel?: StudioChannel;
   retryAt?: string;
   errorCode?: string;
+  /** Scene images are waiting in the provider's batch queue; the job resumes when they arrive. */
+  imageBatch?: { round: number; images: number; submittedAt: string; checkAt: string };
   reviewIssues?: StudioContentReview[];
   presentationIssues?: string[];
   /** Source suitability decisions, not service errors or approval of an empty package. */

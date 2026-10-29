@@ -7,11 +7,15 @@ import {
   validateStudioOpeningCard,
 } from "./studio-ending";
 import { STUDIO_SOURCE_SCENE_MARGIN_MS } from "./studio-timing";
+import { STUDIO_NARRATIVE_ILLUSTRATION_POLICY } from "./studio-visual-preferences";
 /** Geometry and evidence rules are shared by the renderer and output validation. */
 export const STUDIO_PRESENTATION_POLICY = "source-safe-portrait-v1" as const;
 /** A devotional backdrop alone does not require shrinking a single live speaker. */
 export const STUDIO_SOURCE_FRAMING_POLICY = "speaker-first-framing-v2" as const;
 export const STUDIO_PICTURE = { x: 0, y: 72, width: 1080, height: 1280 } as const;
+/** The immersive layout fills the whole portrait frame; captions overlay its lower band. */
+export const STUDIO_FRAME = { x: 0, y: 0, width: 1080, height: 1920 } as const;
+export type StudioPresentationLayout = "immersive" | "classic";
 export const STUDIO_SUBTITLE_TOP = STUDIO_PICTURE.y + STUDIO_PICTURE.height + 12;
 export type StudioPortraitScene = {
   startMs: number;
@@ -21,12 +25,38 @@ export type StudioPortraitScene = {
   bodyBottom: number;
 };
 export const STUDIO_ILLUSTRATION_POLICY = "context-rich-v2" as const;
-export const STUDIO_ICONOGRAPHY_POLICY = "deity-identity-v3" as const;
+export const STUDIO_ICONOGRAPHY_POLICY = "deity-identity-v4" as const;
 /** Art direction for generated illustrations, not a claim that all traditional forms look alike. */
 export const STUDIO_SACRED_ICONOGRAPHY =
-  "Deity identity is a mandatory accuracy check. Resolve the central deity from the actual passage, not a name merely mentioned in comparison. Never interchange Durga, Lakshmi, Saraswati, Parvati or other forms of Devi, or combine their attributes into an invented hybrid. For a general depiction of Durga when no particular form is specified, use a serene traditional multi-armed Durga with eight distinct arms, a clearly visible lion or tiger mount, a trident and coherent protective weapons, alongside a gentle blessing gesture. Compose the identifying mount and attributes fully inside the visible illustration area. Count the visible arms when checking this general Durga composition: do not approve an ordinary two-armed figure for this brief. A specifically named traditional form may use its supported count instead. Photorealistic material treatment must preserve the sacred form and its multiple arms; it does not mean reducing a deity to an everyday human. A lotus-seated, lotus-bearing goddess alone is ambiguous and must not be labeled Durga; gold coins, abundance vessels or elephant ablutions can suggest Lakshmi, and a veena or swan can suggest Saraswati. Do not decide identity from one shared object, clothing color, beauty, the caption, or the prompt's claimed name. Evaluate the combination of visible features against the intended form. Traditional forms vary: when a specific form or tradition is named, preserve its supported iconography rather than impose this general Durga convention. Do not invent an unfamiliar form; use a source-faithful symbolic scene or retain speaker footage when identity cannot be established. Keep devotional artwork sacred, serene and elegant; do not add a violent battle merely to identify Durga. In comparisons such as Durga being gentler than Lakshmi, illustrate the intended subject Durga, not the comparison deity. For Vishnu and avatar narratives, resolve the precise form and episode before composing the image. Do not turn every mention of Vishnu into a generic blue royal figure or mix avatar attributes. A general four-armed Vishnu composition uses coherent conch, discus, mace and lotus attributes; do not impose that form on Rama or Krishna. Rama's bow, Krishna's flute or cowherd setting, Narasimha's lion-headed human-bodied form, and Varaha's boar form belong only where that identity and narrative context support them. A named alternate traditional form takes precedence over these general examples. Match age, companions, relationships and costume to the spoken episode; do not put a royal court in an exile scene or add a battle, miracle, flute, weapon or companion merely for decoration. Distinguish the devotee Prahlada from the deity Narasimha and the antagonist Hiranyakashipu. Never conflate narrator, worshipper, deity or comparison figure. Depict only the passage-supported action, without inventing a violent or sensational scene. When the source does not establish the form or episode sufficiently, use a faithful symbolic image or source footage.";
+  "Deity identity is a mandatory accuracy check. Resolve the central deity from the actual passage, not a name merely mentioned in comparison. Never interchange Durga, Lakshmi, Saraswati, Parvati or other forms of Devi, or combine their attributes into an invented hybrid. For a general depiction of Durga when no particular form is specified, use a serene traditional multi-armed Durga with eight distinct arms, a clearly visible lion or tiger mount, a trident and coherent protective weapons, alongside a gentle blessing gesture. Compose the identifying mount and attributes fully inside the visible illustration area. Count the visible arms when checking this general Durga composition: do not approve an ordinary two-armed figure for this brief. A specifically named traditional form may use its supported count instead. Photorealistic material treatment must preserve the sacred form and its multiple arms; it does not mean reducing a deity to an everyday human. A lotus-seated, lotus-bearing goddess alone is ambiguous and must not be labeled Durga; gold coins, abundance vessels or elephant ablutions can suggest Lakshmi, and a veena or swan can suggest Saraswati. Do not decide identity from one shared object, clothing color, beauty, the caption, or the prompt's claimed name. Evaluate the combination of visible features against the intended form. Traditional forms vary: when a specific form or tradition is named, preserve its supported iconography rather than impose this general Durga convention. Do not invent an unfamiliar form; use a source-faithful symbolic scene or retain speaker footage when identity cannot be established. Keep devotional artwork sacred, serene and elegant; do not add a violent battle merely to identify Durga. In comparisons such as Durga being gentler than Lakshmi, illustrate the intended subject Durga, not the comparison deity. For Vishnu and avatar narratives, resolve the precise form and episode before composing the image. Do not turn every mention of Vishnu into a generic blue royal figure or mix avatar attributes. A general four-armed Vishnu composition uses coherent conch, discus, mace and lotus attributes; do not impose that form on Rama or Krishna. Rama's bow, Krishna's flute or cowherd setting, Narasimha's lion-headed human-bodied form, and Varaha's boar form belong only where that identity and narrative context support them. A named alternate traditional form takes precedence over these general examples. Match age, companions, relationships and costume to the spoken episode; do not put a royal court in an exile scene or add a battle, miracle, flute, weapon or companion merely for decoration. Distinguish the devotee Prahlada from the deity Narasimha and the antagonist Hiranyakashipu. Never conflate narrator, worshipper, deity or comparison figure. Depict only the passage-supported action, without inventing a violent or sensational scene. When the source does not establish the form or episode sufficiently, use a faithful symbolic image or source footage. Countable attributes are fixed for the whole storyboard: a recurring deity, serpent or figure keeps exactly the same number of hoods, heads, faces and arms, and the same mount, weapons, colours and costume, in every scene where it appears. Every brief that shows such a figure states the exact count in words and asks for it to be rendered clearly countable; the reviewer counts them in the pixels and fails any scene whose count differs from the brief or from the previous accepted scene. Kaliya, the serpent subdued by Krishna in the Yamuna, is shown with exactly seven hoods in every scene unless the cited passage states a different number: describe them as one taller central hood with three smaller hoods fanned on each side, all facing forward, clearly separated and fully visible, so the seven can be counted at a glance; Adishesha is shown with many hoods, seven visible when a count must be chosen; the same rule applies to every multi-headed or multi-armed form. Anatomy must stay coherent: a serpent such as Kaliya or Adishesha has one body whose hoods rise together at the head end only, and a tail that tapers to a point and never ends in another head, face or hood; no figure has duplicated faces, extra limbs or heads growing from the wrong place. Never draw a phone, device frame, bezel, screen mockup, border or inset around a scene.";
+export type StudioIllustrationPolicy =
+  | typeof STUDIO_ILLUSTRATION_POLICY
+  | typeof STUDIO_NARRATIVE_ILLUSTRATION_POLICY;
+/** Storyboard limits per policy: milliseconds, counts and the share of the excerpt. */
+export function studioIllustrationLimits(policy?: StudioIllustrationPolicy) {
+  if (policy === STUDIO_NARRATIVE_ILLUSTRATION_POLICY)
+    return {
+      maxShots: 14,
+      minMs: 3000,
+      maxMs: 12000,
+      openingMs: 2500,
+      endingMs: 6500,
+      gapMs: 0,
+      share: 0.85,
+    };
+  const rich = policy === STUDIO_ILLUSTRATION_POLICY;
+  return {
+    maxShots: rich ? 6 : 3,
+    minMs: 3000,
+    maxMs: rich ? 8000 : 5000,
+    openingMs: 5000,
+    endingMs: rich ? 6500 : 5000,
+    gapMs: 3000,
+    share: rich ? 0.4 : 0.2,
+  };
+}
 export type StudioSourceScreen = {
-  illustrationPolicy?: typeof STUDIO_ILLUSTRATION_POLICY;
+  illustrationPolicy?: StudioIllustrationPolicy;
   openingCardRecommended?: boolean;
   illustrations?: {
     assetId: string;
@@ -80,6 +110,8 @@ export type StudioPresentationReview = {
   closingCard?: StudioClosingCard;
   openingCard?: StudioOpeningCard;
   illustrationMode?: "context-generated";
+  /** Absent on files rendered before the immersive layout existed: those are classic. */
+  layout?: StudioPresentationLayout;
   policy: typeof STUDIO_PRESENTATION_POLICY;
   sourceSha256: string;
   renderedSha256: string;
@@ -142,11 +174,11 @@ export function alignStudioIllustration(
       s.startMs < endMs + clipStartMs &&
       s.endMs > startMs + clipStartMs,
   );
+  const limits = studioIllustrationLimits(policy);
   if (
     crossesUncitedSpeech ||
-    endMs - startMs < 3000 ||
-    endMs - startMs >
-      (shot.extendedByCurator || policy === STUDIO_ILLUSTRATION_POLICY ? 8000 : 5000)
+    endMs - startMs < limits.minMs ||
+    endMs - startMs > (shot.extendedByCurator ? Math.max(8000, limits.maxMs) : limits.maxMs)
   )
     throw Error("STUDIO_ILLUSTRATION_INVALID");
   return { ...shot, startMs, endMs };
@@ -161,7 +193,8 @@ export function validateStudioSourceScreen(
   if (
     !value ||
     (value.illustrationPolicy !== undefined &&
-      value.illustrationPolicy !== STUDIO_ILLUSTRATION_POLICY) ||
+      value.illustrationPolicy !== STUDIO_ILLUSTRATION_POLICY &&
+      value.illustrationPolicy !== STUDIO_NARRATIVE_ILLUSTRATION_POLICY) ||
     ![value.openingComplete, value.endingComplete, value.naturalStart, value.naturalEnd].every(
       bool,
     ) ||
@@ -192,9 +225,9 @@ export function validateStudioSourceScreen(
       throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
     previous = scene.endMs;
   }
-  const rich = value.illustrationPolicy === STUDIO_ILLUSTRATION_POLICY;
+  const limits = studioIllustrationLimits(value.illustrationPolicy);
   if (value.illustrations !== undefined) {
-    if (!Array.isArray(value.illustrations) || value.illustrations.length > (rich ? 6 : 3))
+    if (!Array.isArray(value.illustrations) || value.illustrations.length > limits.maxShots)
       throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
     let end = 0;
     let total = 0;
@@ -204,11 +237,12 @@ export function validateStudioSourceScreen(
         !/^[a-z][a-z-]{0,60}$/.test(shot.assetId) ||
         !Number.isSafeInteger(shot.startMs) ||
         !Number.isSafeInteger(shot.endMs) ||
-        shot.startMs < 5000 ||
-        shot.startMs < end + (end ? 3000 : 0) ||
-        shot.endMs > durationMs - (rich ? 6500 : 5000) ||
-        shot.endMs - shot.startMs < 3000 ||
-        shot.endMs - shot.startMs > (shot.extendedByCurator || rich ? 8000 : 5000) ||
+        shot.startMs < limits.openingMs ||
+        shot.startMs < end + (end ? limits.gapMs : 0) ||
+        shot.endMs > durationMs - limits.endingMs ||
+        shot.endMs - shot.startMs < limits.minMs ||
+        shot.endMs - shot.startMs >
+          (shot.extendedByCurator ? Math.max(8000, limits.maxMs) : limits.maxMs) ||
         !Array.isArray(shot.sourceSegmentIds) ||
         !shot.sourceSegmentIds.length ||
         shot.sourceSegmentIds.some((id) => typeof id !== "string" || id.length > 100) ||
@@ -251,11 +285,11 @@ export function validateStudioSourceScreen(
       end = shot.endMs;
       total += shot.endMs - shot.startMs;
     }
-    if (
-      total >
-      durationMs * (rich ? 0.4 : value.illustrations.some((s) => s.extendedByCurator) ? 0.3 : 0.2)
-    )
-      throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
+    const share =
+      value.illustrationPolicy === undefined && value.illustrations.some((s) => s.extendedByCurator)
+        ? 0.3
+        : limits.share;
+    if (total > durationMs * share) throw Error("STUDIO_PRESENTATION_REVIEW_INVALID");
   }
   if (citation && value.illustrations?.length)
     return validateStudioSourceScreen(
@@ -319,6 +353,7 @@ export function validateStudioPresentationReview(
     !reason(value.model) ||
     !Number.isFinite(Date.parse(value.reviewedAt)) ||
     !["screened-portrait", "full-picture"].includes(value.framing) ||
+    (value.layout !== undefined && !["immersive", "classic"].includes(value.layout)) ||
     !Number.isSafeInteger(value.repairs) ||
     value.repairs < 0 ||
     value.repairs > 1 ||

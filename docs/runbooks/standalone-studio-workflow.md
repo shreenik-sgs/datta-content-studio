@@ -79,3 +79,7 @@ that the real Bhagavat series has completed. Staging acceptance must exercise th
 native controls and inspect actual saved final evidence before reporting counts
 or completion. Longer MP4s are downloadable for YouTube Studio; Buffer supports
 Shorts only. The already verified and approved Vishnu files remain untouched.
+
+## Visual settings, batch delivery and learned rules (29 October 2026)
+
+Settings → Visual settings holds four controls: video layout (full screen or classic), narration imagery (narrative or restrained), scene image delivery (batch at half price, or immediate) and the default visual preference. A file generated with batch delivery shows as queued with "images waiting in the batch queue" and resumes by itself; nothing needs to be clicked. Below the controls the page lists every rule the Studio learned from rejected images or curator rejections, with a Retire button. Deploying this needs migration `0028_visual_lessons` and `packages/distribution-db/ops/runtime-grants.sql` before the new worker starts.

@@ -1,14 +1,22 @@
 import { expect, it } from "vitest";
 import { studioClosingCardPlan } from "./studio-ending";
+import { studioFullPictureRegion } from "./studio-framing";
 import {
   type StudioPresentationReview,
   type StudioSourceScreen,
   alignStudioIllustration,
   retimeStudioIllustrations,
   safeStudioPortraitScenes,
+  studioIllustrationLimits,
   validateStudioPresentationReview,
   validateStudioSourceScreen,
 } from "./studio-presentation";
+import {
+  STUDIO_VISUAL_LESSON_LIMIT,
+  studioVisualLessonsText,
+  validateStudioVisualLessonRule,
+} from "./studio-visual-lessons";
+import { studioPresentationStyle } from "./studio-visual-preferences";
 const screen: StudioSourceScreen = {
   openingComplete: true,
   endingComplete: true,
@@ -362,4 +370,215 @@ it("allows sustained, contextual imagery under the new policy without changing l
   expect(() =>
     alignStudioIllustration({ ...illustration, startMs: 5000, endMs: 13000 }, segment, 100000),
   ).toThrow();
+});
+
+it("lets a narrative storyboard illustrate most of the teaching with consecutive scenes", () => {
+  const narrative: StudioSourceScreen = {
+    ...screen,
+    illustrationPolicy: "narrative-storyboard-v3",
+    scenes: [],
+    illustrations: [
+      { ...illustration, assetId: "scene-one", startMs: 2500, endMs: 12000 },
+      { ...illustration, assetId: "scene-two", startMs: 12000, endMs: 24000 },
+      { ...illustration, assetId: "scene-three", startMs: 24000, endMs: 30000 },
+      { ...illustration, assetId: "scene-four", startMs: 33000, endMs: 44000 },
+      { ...illustration, assetId: "scene-five", startMs: 44000, endMs: 53000 },
+    ],
+  };
+  expect(validateStudioSourceScreen(narrative, 60000)).toEqual(narrative);
+  expect(studioIllustrationLimits("narrative-storyboard-v3")).toMatchObject({
+    maxShots: 14,
+    maxMs: 12000,
+    openingMs: 2500,
+    gapMs: 0,
+    share: 0.85,
+  });
+  // The opening seconds, the closing margin and the citation rules still hold.
+  expect(() =>
+    validateStudioSourceScreen(
+      { ...narrative, illustrations: [{ ...illustration, startMs: 2000, endMs: 8000 }] },
+      60000,
+    ),
+  ).toThrow();
+  expect(() =>
+    validateStudioSourceScreen(
+      { ...narrative, illustrations: [{ ...illustration, startMs: 40000, endMs: 54000 }] },
+      60000,
+    ),
+  ).toThrow();
+  expect(() =>
+    validateStudioSourceScreen(
+      { ...narrative, illustrations: [{ ...illustration, startMs: 2500, endMs: 15000 }] },
+      60000,
+    ),
+  ).toThrow();
+  expect(() =>
+    validateStudioSourceScreen(
+      {
+        ...narrative,
+        illustrations: [
+          { ...illustration, startMs: 2500, endMs: 12000 },
+          { ...illustration, startMs: 11000, endMs: 20000 },
+        ],
+      },
+      60000,
+    ),
+  ).toThrow();
+  // Eighty-five percent of a 70 second excerpt is 59.5 seconds.
+  const scenes = [
+    { ...illustration, startMs: 2500, endMs: 14500 },
+    { ...illustration, startMs: 14500, endMs: 26500 },
+    { ...illustration, startMs: 26500, endMs: 38500 },
+    { ...illustration, startMs: 38500, endMs: 50500 },
+  ];
+  expect(() =>
+    validateStudioSourceScreen(
+      {
+        ...narrative,
+        illustrations: [...scenes, { ...illustration, startMs: 50500, endMs: 61500 }],
+      },
+      70000,
+    ),
+  ).not.toThrow();
+  expect(() =>
+    validateStudioSourceScreen(
+      {
+        ...narrative,
+        illustrations: [...scenes, { ...illustration, startMs: 50500, endMs: 62500 }],
+      },
+      70000,
+    ),
+  ).toThrow();
+  const segment = [{ id: "one", text: "Source", startMs: 100000, endMs: 120000 }];
+  expect(
+    alignStudioIllustration(
+      { ...illustration, startMs: 2500, endMs: 14500 },
+      segment,
+      100000,
+      "narrative-storyboard-v3",
+    ).endMs,
+  ).toBe(14500);
+  // The legacy and context-rich policies keep their own limits.
+  expect(() =>
+    validateStudioSourceScreen(
+      {
+        ...screen,
+        illustrationPolicy: "context-rich-v2",
+        scenes: [],
+        illustrations: [{ ...illustration, startMs: 5000, endMs: 14000 }],
+      },
+      60000,
+    ),
+  ).toThrow();
+});
+
+it("accepts only known presentation styles and defaults to the immersive narrative", () => {
+  const review: StudioPresentationReview = {
+    policy: "source-safe-portrait-v1",
+    sourceSha256: "a".repeat(64),
+    renderedSha256: "b".repeat(64),
+    fileVersion: 2,
+    model: "gemini-test",
+    reviewedAt: new Date().toISOString(),
+    framing: "screened-portrait",
+    repairs: 0,
+    source: screen,
+    checks: {
+      textIntact: true,
+      subjectIntact: true,
+      captionsClear: true,
+      naturalBoundaries: true,
+      illustrationsRelevant: true,
+      reason: "All checks passed.",
+    },
+  };
+  expect(studioPresentationStyle()).toEqual({
+    layout: "immersive",
+    storyboard: "narrative",
+    imagery: "batch",
+  });
+  // Settings saved before image delivery existed take the batch default.
+  expect(studioPresentationStyle({ layout: "classic", storyboard: "restrained" })).toEqual({
+    layout: "classic",
+    storyboard: "restrained",
+    imagery: "batch",
+  });
+  expect(
+    studioPresentationStyle({ layout: "classic", storyboard: "restrained", imagery: "immediate" }),
+  ).toEqual({ layout: "classic", storyboard: "restrained", imagery: "immediate" });
+  for (const value of [
+    null,
+    "immersive",
+    { layout: "wide", storyboard: "narrative" },
+    { layout: "immersive" },
+    { layout: "immersive", storyboard: "narrative", motion: "video" },
+    { layout: "immersive", storyboard: "narrative", imagery: "overnight" },
+  ])
+    expect(() => studioPresentationStyle(value)).toThrow("INVALID_PRESENTATION_STYLE");
+  expect(studioFullPictureRegion(1920, 1080, "immersive")).toEqual({
+    x: 0,
+    y: 656,
+    width: 1080,
+    height: 606,
+  });
+  expect(
+    validateStudioPresentationReview(
+      { ...review, layout: "immersive" },
+      {
+        sourceSha256: review.sourceSha256,
+        renderedSha256: review.renderedSha256,
+        fileVersion: review.fileVersion,
+        durationMs: 60000,
+      },
+    ),
+  ).toBeUndefined();
+  expect(() =>
+    validateStudioPresentationReview(
+      { ...review, layout: "wide" as "classic" },
+      {
+        sourceSha256: review.sourceSha256,
+        renderedSha256: review.renderedSha256,
+        fileVersion: review.fileVersion,
+        durationMs: 60000,
+      },
+    ),
+  ).toThrow();
+});
+
+it("turns learned rules into one bounded prompt block, most-hit first, and nothing when empty", () => {
+  const base = {
+    source: "IMAGE_REVIEW" as const,
+    sourceReason: "r",
+    packageId: null,
+    status: "ACTIVE" as const,
+    createdAt: "2026-10-29T08:00:00.000Z",
+    updatedAt: "2026-10-29T08:00:00.000Z",
+  };
+  expect(studioVisualLessonsText([])).toBe("");
+  const text = studioVisualLessonsText([
+    { ...base, id: "a", rule: "Rule with one hit about tails.", scope: "anatomy", hits: 1 },
+    { ...base, id: "b", rule: "Rule with five hits about hoods.", scope: "iconography", hits: 5 },
+    {
+      ...base,
+      id: "c",
+      rule: "Retired rule must not appear.",
+      scope: "style",
+      hits: 9,
+      status: "RETIRED",
+    },
+  ]);
+  expect(text.startsWith("Rules this Studio learned")).toBe(true);
+  expect(text).toContain("1. [iconography] Rule with five hits about hoods.");
+  expect(text).toContain("2. [anatomy] Rule with one hit about tails.");
+  expect(text).not.toContain("Retired");
+  const many = Array.from({ length: 60 }, (_, i) => ({
+    ...base,
+    id: String(i),
+    rule: `Rule number ${i} is long enough to count as a rule.`,
+    scope: "style" as const,
+    hits: 60 - i,
+  }));
+  expect(studioVisualLessonsText(many).split("\n")).toHaveLength(STUDIO_VISUAL_LESSON_LIMIT + 1);
+  for (const value of ["short", "x".repeat(401), "bad\u0000rule here", 12])
+    expect(() => validateStudioVisualLessonRule(value)).toThrow("INVALID_VISUAL_LESSON");
 });

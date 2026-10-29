@@ -181,3 +181,112 @@ it("compares delivered foreground pixels without the blurred background and pres
   expect(parts.at(-2).text).toContain("actual sharp foreground pixels");
   expect(parts.at(-1).inlineData.data).toBe(isolated.toString("base64"));
 });
+
+it("plans a continuous full-screen storyboard in the narrative mode and keeps the restrained rules otherwise", async () => {
+  const story = {
+    ...screen,
+    illustrations: [
+      {
+        assetId: "scene-one",
+        prompt: "Dawn",
+        startMs: 2500,
+        endMs: 7000,
+        sourceSegmentIds: ["one"],
+        reason: "Sunrise.",
+      },
+      {
+        assetId: "scene-two",
+        prompt: "Study",
+        startMs: 7000,
+        endMs: 10000,
+        sourceSegmentIds: ["one"],
+        reason: "Reading.",
+      },
+    ],
+  };
+  // The fixture's one cited segment spans half the excerpt, so the coverage pass asks once more.
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response(story));
+  expect(
+    await screenStudioSource({ ...input, fetcher, storyboard: "narrative", layout: "immersive" }),
+  ).toEqual({ ...story, illustrationPolicy: "narrative-storyboard-v3" });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
+  const text = body.systemInstruction.parts[0].text;
+  expect(body.generationConfig.responseJsonSchema.properties.illustrations.maxItems).toBe(14);
+  expect(text).toContain("Illustrate the narration continuously");
+  expect(text).toContain("Design up to 14 CUSTOM scenes");
+  expect(text).toContain("Each insert lasts 3000-12000ms, starts at least 2500ms into the excerpt");
+  expect(text).toContain("may directly follow the previous insert");
+  expect(text).toContain("total insert time is <=85%");
+  expect(text).toContain("full-bleed vertical 9:16 picture");
+  expect(text).toContain("Sanatana Dharma");
+  expect(text).toContain("bottu or tilak");
+  expect(text).toContain("exactly seven hoods");
+  expect(text).toContain("ONE fixed appearance line");
+  expect(text).toContain("never ends in another head");
+  expect(text).not.toContain("Return zero illustrations");
+  expect(JSON.parse(body.contents[0].parts[0].text)).toMatchObject({
+    layout: "immersive",
+    portraitPicture: { x: 0, y: 0, width: 1080, height: 1920 },
+  });
+  // Consecutive scenes are rejected under the restrained storyboard.
+  const restrained = vi.fn<typeof fetch>().mockResolvedValue(response(story));
+  await expect(screenStudioSource({ ...input, fetcher: restrained })).rejects.toThrow();
+  const retry = JSON.parse(String(restrained.mock.calls[0]?.[1]?.body));
+  expect(retry.generationConfig.responseJsonSchema.properties.illustrations.maxItems).toBe(6);
+  expect(retry.systemInstruction.parts[0].text).toContain(
+    "Each insert lasts 3000-8000ms, starts at least 5000ms into the excerpt",
+  );
+});
+
+it("asks once for more narrative scenes when most of the words are left uncovered", async () => {
+  const sparse = {
+    ...screen,
+    illustrations: [
+      {
+        assetId: "scene-one",
+        prompt: "Dawn",
+        startMs: 2500,
+        endMs: 5500,
+        sourceSegmentIds: ["one"],
+        reason: "Sunrise.",
+      },
+    ],
+  };
+  const fuller = {
+    ...sparse,
+    illustrations: [
+      ...sparse.illustrations,
+      {
+        assetId: "scene-two",
+        prompt: "Study",
+        startMs: 6000,
+        endMs: 10000,
+        sourceSegmentIds: ["one"],
+        reason: "Reading.",
+      },
+    ],
+  };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(response(sparse))
+    .mockResolvedValueOnce(response(fuller));
+  const result = await screenStudioSource({ ...input, fetcher, storyboard: "narrative" });
+  expect(result.illustrations).toHaveLength(2);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const second = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body));
+  const context = JSON.parse(second.contents[0].parts[0].text);
+  expect(context.correction.coverage).toMatchObject({ coveredMs: 3000, expectedShare: 0.6 });
+  expect(context.correction.coverage.uncoveredSpans).toEqual([
+    { segmentId: "one", startMs: 5500, endMs: 10000, text: "Relevant scripture study." },
+  ]);
+  expect(context.correction.instruction).toContain(
+    "Keep every existing scene exactly as it is and ADD scenes",
+  );
+  // The restrained storyboard never asks for more imagery.
+  const restrained = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(response({ ...screen, illustrations: [] }));
+  await screenStudioSource({ ...input, fetcher: restrained });
+  expect(restrained).toHaveBeenCalledTimes(1);
+});

@@ -1,4 +1,10 @@
-export const STUDIO_VISUAL_STYLE_POLICY = "photorealistic-clean-art-v3" as const;
+export const STUDIO_VISUAL_STYLE_POLICY = "sanatana-photoreal-v4" as const;
+/** Illustrate the narration continuously, like the reference devotional Shorts, within citation rules. */
+export const STUDIO_NARRATIVE_ILLUSTRATION_POLICY = "narrative-storyboard-v3" as const;
+export const STUDIO_NARRATIVE_ILLUSTRATION_GUIDANCE =
+  "Illustrate the narration continuously, as a visual story told in step with the speech. Plan one scene for every distinct spoken idea, event, character, place, object or metaphor, in spoken order, so a viewer who never saw the speaker still sees the teaching unfold. Keep original speaker footage for the opening seconds so the viewer first meets the speaker, for moments where the speaker's own gesture, demonstration or direct address carries the meaning, and wherever no faithful scene exists for the words. Consecutive scenes may follow one another directly without returning to the speaker between them. Each scene must still depict only what the cited words say: never invent an event, character, dialogue or outcome to make the story flow, and never show a fabricated likeness of a living guru. Give complex sacred scenes enough time to read; a scene may be long when the speech dwells on it. A decorative or doubtful picture is worse than the speaker: leave those words uncovered. Expect the great majority of the excerpt to be illustrated: a teaching of sixty to ninety-five seconds normally yields eight to fourteen scenes, one per spoken idea, so that the speaker is seen mainly at the opening and in the final seconds. Four scenes for a ninety-second story is too few when the words describe people, places and actions throughout.";
+/** Bump when the narrative guidance changes, so saved source screenings are planned again. */
+export const STUDIO_NARRATIVE_GUIDANCE_VERSION = 3 as const;
 export const STUDIO_VIDEO_ILLUSTRATION_POLICY = "source-first-when-explanatory-v1" as const;
 export const STUDIO_STORYBOARD_CONTINUITY_POLICY = "source-cued-approved-reference-v4" as const;
 export const STUDIO_STORYBOARD_CONTINUITY_GUIDANCE =
@@ -6,12 +12,50 @@ export const STUDIO_STORYBOARD_CONTINUITY_GUIDANCE =
 export const STUDIO_VIDEO_ILLUSTRATION_GUIDANCE =
   "Original speaker footage is the default. Generated imagery is optional, never a requirement or quota. Return zero illustrations when the original footage communicates the teaching well. Add an image only when it materially helps viewers understand the specific spoken idea; topical decoration, variety and visual beauty alone are insufficient reasons. Preserve the speaker's meaningful gestures, expressions and demonstrations. Explain what each proposed insert clarifies beyond the original picture. If an optional generated image fails review, retain the actual source footage rather than force an image or block an otherwise valid video.";
 
+/** Owner requirement, 29 October 2026: every picture follows Sanatana Dharma norms. */
+export const STUDIO_SANATANA_DHARMA_ART_DIRECTION =
+  "All imagery follows true Hindu and Sanatana Dharma norms. Depict Hindu deities with their correct traditional iconography, attributes, mounts and companions, serene and respectful, never casual, comic or modernized. Depict people as devotees of Bharat: men and women wear a clear bottu or tilak on the forehead (kumkum, vibhuti or chandan as fits the tradition and the passage) and traditional Hindu attire such as dhoti or panche with angavastram, kurta, saree, pavada or veshti; sages and ascetics wear ochre or white cloth with rudraksha or tulasi beads; married women may wear sindoor, bangles and mangalasutra. Settings are Hindu temples, ashramas, homes with puja rooms and oil lamps, riverbanks, forests, villages and towns of Bharat, with details such as rangoli, tulasi plants, banana leaves, brass and bronze vessels, flowers and incense. Even a modern everyday scene, such as a worker beside a vehicle or a family at a meal, keeps these devotional markers in a natural way. Never use Western or generic international stock-photo styling, Western clothing as the default, or non-Hindu religious symbols. Preserve every rule of sacred iconography and the ban on fabricated guru likenesses.";
 /** Shared art direction applies even when a saved preference predates this policy. */
-export const STUDIO_VISUAL_ART_DIRECTION =
-  "Use photorealistic devotional imagery with the visual treatment of a carefully lit cinematic photograph, not a devotional calendar painting: believable natural light, lifelike skin and fabric, authentic material textures, realistic depth and coherent anatomy. Keep it sacred, serene, scenic and elegant, with one meaningful focal action. Avoid painted brushwork, airbrushed skin, outlined foliage, cartoons, plastic-looking CGI and exaggerated fantasy effects. When a teaching uses a metaphor such as a fortress or shelter, express it through realistic stone architecture, natural surroundings and composition; do not draw a glowing diagram, neon force field or holographic castle. Sacred symbolism must not turn the whole image into fantasy concept art. The initial brief must explicitly request photographic textures and light. Photorealism describes light and materials, not a change to the subject: retain all required sacred anatomy, multiple arms, attributes and mounts exactly as specified. Never simplify a deity into an ordinary two-armed person to make it photographic. Sacred subjects remain respectful conceptual visualizations with accurate traditional iconography, never fabricated documentary evidence. Never fabricate the likeness of a living guru. Do not add AI-generated labels, generator badges, signatures or watermarks. Keep generated artwork free of typography; the renderer adds only approved channel text, captions and attribution.";
+export const STUDIO_VISUAL_ART_DIRECTION = `Use photorealistic devotional imagery with the visual treatment of a carefully lit cinematic photograph, not a devotional calendar painting: believable natural light, lifelike skin and fabric, authentic material textures, realistic depth and coherent anatomy. Keep it sacred, serene, scenic and elegant, with one meaningful focal action. Avoid painted brushwork, airbrushed skin, outlined foliage, cartoons, plastic-looking CGI and exaggerated fantasy effects. When a teaching uses a metaphor such as a fortress or shelter, express it through realistic stone architecture, natural surroundings and composition; do not draw a glowing diagram, neon force field or holographic castle. Sacred symbolism must not turn the whole image into fantasy concept art. The initial brief must explicitly request photographic textures and light. Photorealism describes light and materials, not a change to the subject: retain all required sacred anatomy, multiple arms, attributes and mounts exactly as specified. Never simplify a deity into an ordinary two-armed person to make it photographic. Sacred subjects remain respectful conceptual visualizations with accurate traditional iconography, never fabricated documentary evidence. Never fabricate the likeness of a living guru. Do not add AI-generated labels, generator badges, signatures or watermarks. Keep generated artwork free of typography; the renderer adds only approved channel text, captions and attribution. ${STUDIO_SANATANA_DHARMA_ART_DIRECTION}`;
 
 export const DEFAULT_STUDIO_VISUAL_PREFERENCE =
-  "In videos, retain original speaker footage by default; add generated images only when they help explain the specific teaching, and use none when unnecessary. When imagery is appropriate, prefer photorealistic, sacred, serene and elegant nature and scenic imagery: rivers, forests, mountains, gardens, lotus ponds, dawn and gentle natural light that express the teaching. Avoid unrelated scenery, generic stock people or objects. Retain a specific sacred figure or narrative scene when the cited passage requires it.";
+  "In videos, illustrate the narration scene by scene: deities, sages, devotees and places exactly as the cited words describe them, in photorealistic, sacred, serene and elegant devotional imagery following Sanatana Dharma norms, with people wearing bottu or tilak and traditional Hindu attire. Use nature and scenic imagery such as rivers, forests, mountains, gardens, lotus ponds and dawn light where they express the teaching. Avoid unrelated scenery, generic stock people or objects. Keep the speaker on screen where the words have no faithful scene.";
+
+/** How new videos are presented. Approved files keep the layout they were reviewed with. */
+export type StudioPresentationStyle = {
+  /** immersive: the picture fills the whole 1080×1920 frame with captions over its lower band. classic: the framed picture with captions below. */
+  layout: "immersive" | "classic";
+  /** narrative: illustrate the narration continuously. restrained: speaker first, a few inserts. */
+  storyboard: "narrative" | "restrained";
+  /** batch: scene images through the provider's half-price batch queue (hours). immediate: full price, minutes. */
+  imagery: "batch" | "immediate";
+};
+export const DEFAULT_STUDIO_PRESENTATION_STYLE: Readonly<StudioPresentationStyle> = {
+  layout: "immersive",
+  storyboard: "narrative",
+  imagery: "batch",
+};
+export function studioPresentationStyle(value?: unknown): StudioPresentationStyle {
+  if (value === undefined) return { ...DEFAULT_STUDIO_PRESENTATION_STYLE };
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !Object.hasOwn(DEFAULT_STUDIO_PRESENTATION_STYLE, key)) ||
+    !["immersive", "classic"].includes((value as StudioPresentationStyle).layout) ||
+    !["narrative", "restrained"].includes((value as StudioPresentationStyle).storyboard) ||
+    ((value as StudioPresentationStyle).imagery !== undefined &&
+      !["batch", "immediate"].includes((value as StudioPresentationStyle).imagery))
+  )
+    throw Error("INVALID_PRESENTATION_STYLE");
+  const style = value as StudioPresentationStyle;
+  // Settings saved before image delivery existed use the default.
+  return {
+    layout: style.layout,
+    storyboard: style.storyboard,
+    imagery: style.imagery ?? DEFAULT_STUDIO_PRESENTATION_STYLE.imagery,
+  };
+}
 
 /** Style guides presentation; it never overrides source fidelity or approval requirements. */
 export function studioVisualPreference(value?: unknown): string {

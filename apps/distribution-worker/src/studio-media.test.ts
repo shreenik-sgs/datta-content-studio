@@ -8,6 +8,7 @@ import {
   studioCaptionLines,
   studioCaptionPages,
   studioIllustrationFrame,
+  studioMotionFilter,
   studioVideoThumbnail,
   studioVtt,
 } from "./studio-media";
@@ -259,4 +260,23 @@ it("fits the complete supporting image without burning in a badge", async () => 
   const actual = await sharp(frame).removeAlpha().raw().toBuffer();
   const expected = await sharp(image).removeAlpha().raw().toBuffer();
   expect(actual.equals(expected)).toBe(true);
+});
+
+it("prepares immersive stills larger than the frame and moves the camera slowly on each", async () => {
+  const image = await sharp({
+    create: { width: 900, height: 1600, channels: 3, background: "#738c56" },
+  })
+    .png()
+    .toBuffer();
+  expect(await sharp(await studioIllustrationFrame(image, "immersive")).metadata()).toMatchObject({
+    width: 1296,
+    height: 2304,
+  });
+  // Even scenes zoom in, odd scenes zoom out; the move lasts exactly the insert.
+  expect(studioMotionFilter(0, 4000)).toBe(
+    "zoompan=z='1+0.08*on/120':x='(iw-iw/zoom)*(0.5)':y='(ih-ih/zoom)/2':d=120:s=1080x1920:fps=30",
+  );
+  expect(studioMotionFilter(1, 2000)).toContain("z='1.08-0.08*on/60'");
+  expect(studioMotionFilter(2, 2000)).toContain("x='(iw-iw/zoom)*(0.45+0.1*on/60)'");
+  expect(studioMotionFilter(3, 2000)).toContain("x='(iw-iw/zoom)*(0.55-0.1*on/60)'");
 });

@@ -36,8 +36,25 @@ type Account = {
     };
   };
 };
+type VisualLesson = {
+  id: string;
+  rule: string;
+  scope: string;
+  source: "IMAGE_REVIEW" | "CURATOR";
+  sourceReason: string;
+  hits: number;
+  status: "ACTIVE" | "RETIRED";
+  createdAt: string;
+};
 type Settings = {
   visualPreference: string;
+  visualLessons?: VisualLesson[];
+  /** Absent from responses of older servers: treated as the immersive narrative default. */
+  presentation?: {
+    layout: "immersive" | "classic";
+    storyboard: "narrative" | "restrained";
+    imagery?: "batch" | "immediate";
+  };
   appLinks: { web: string; ios?: string; android?: string };
   revision: string;
   maxMasterUploadMb: number;
@@ -265,15 +282,63 @@ export function CurationSettings() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            const form = new FormData(event.currentTarget);
             void save({
               action: "visuals",
-              visualPreference: String(
-                new FormData(event.currentTarget).get("visualPreference") ?? "",
-              ),
+              visualPreference: String(form.get("visualPreference") ?? ""),
+              layout: String(form.get("layout") ?? "immersive"),
+              storyboard: String(form.get("storyboard") ?? "narrative"),
+              imagery: String(form.get("imagery") ?? "batch"),
             });
           }}
         >
           <fieldset disabled={busy || !value.writable}>
+            <label>
+              Video layout
+              <select
+                key={value.presentation?.layout ?? "immersive"}
+                name="layout"
+                defaultValue={value.presentation?.layout ?? "immersive"}
+              >
+                <option value="immersive">Full screen: the picture fills the phone screen</option>
+                <option value="classic">Classic: framed picture with captions below</option>
+              </select>
+            </label>
+            <label>
+              Narration imagery
+              <select
+                key={value.presentation?.storyboard ?? "narrative"}
+                name="storyboard"
+                defaultValue={value.presentation?.storyboard ?? "narrative"}
+              >
+                <option value="narrative">
+                  Narrative: illustrate the whole teaching, scene by scene
+                </option>
+                <option value="restrained">Restrained: speaker first, a few inserts</option>
+              </select>
+            </label>
+            <label>
+              Scene image delivery
+              <select
+                key={value.presentation?.imagery ?? "batch"}
+                name="imagery"
+                defaultValue={value.presentation?.imagery ?? "batch"}
+              >
+                <option value="batch">Batch: half price, images arrive within hours</option>
+                <option value="immediate">Immediate: full price, images in minutes</option>
+              </select>
+            </label>
+            <p className="muted">
+              Batch delivery sends every scene of a file to the provider's batch queue at half the
+              image price; the file waits, usually a few hours and at most a day per correction
+              round, and finishes on its own. Immediate delivery draws each scene right away. Full
+              screen enlarges the speaker to the whole 1080×1920 frame and overlays captions on the
+              lower band. Narrative imagery illustrates up to 85% of a Short with full-screen scenes
+              that follow the spoken words, with a slow camera move on each. Every scene follows
+              Sanatana Dharma norms: deities in their correct iconography, people with bottu or
+              tilak in traditional Hindu attire. Files already approved keep the composition they
+              were reviewed with.
+            </p>
             <label>
               Default visual preference
               <textarea
@@ -291,8 +356,45 @@ export function CurationSettings() {
               unchanged.
             </p>
             <button type="submit" className="button">
-              Save visual preference
+              Save visual settings
             </button>
+            <details open={Boolean(value.visualLessons?.some((l) => l.status === "ACTIVE"))}>
+              <summary>
+                Rules the Studio learned from its own rejected images (
+                {value.visualLessons?.filter((l) => l.status === "ACTIVE").length ?? 0} active)
+              </summary>
+              <p className="muted">
+                Whenever the image reviewer or a curator rejects a scene, the Studio distils the
+                finding into one general rule and applies it to every later brief, image and review.
+                Retire a rule here if it is wrong; retired rules stay listed.
+              </p>
+              {value.visualLessons?.length ? (
+                <ul>
+                  {value.visualLessons.map((lesson) => (
+                    <li key={lesson.id}>
+                      <strong>{lesson.scope}</strong>: {lesson.rule}{" "}
+                      <span className="muted">
+                        ({lesson.source === "CURATOR" ? "curator" : "reviewer"}, applied{" "}
+                        {lesson.hits}×, {lesson.createdAt.slice(0, 10)}
+                        {lesson.status === "RETIRED" ? ", retired" : ""})
+                      </span>{" "}
+                      {lesson.status === "ACTIVE" && (
+                        <button
+                          type="button"
+                          className="link"
+                          disabled={busy || !value.writable}
+                          onClick={() => void save({ action: "retire-lesson", id: lesson.id })}
+                        >
+                          Retire
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">No rules learned yet.</p>
+              )}
+            </details>
             <details>
               <summary>Curation rules applied automatically</summary>
               <ul>

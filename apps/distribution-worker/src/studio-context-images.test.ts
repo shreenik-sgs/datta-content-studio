@@ -247,8 +247,9 @@ it.each([false, true])(
         expect.objectContaining({ sourceSegmentIds: ["one"] }),
       );
     } else await expect(result).rejects.toThrow("STUDIO_IMAGE_REVIEW_REQUIRED");
-    expect(fetcher).toHaveBeenCalledTimes(4);
-    expect(write).toHaveBeenCalledTimes(2);
+    // One generation plus two bounded corrections, each independently reviewed.
+    expect(fetcher).toHaveBeenCalledTimes(6);
+    expect(write).toHaveBeenCalledTimes(3);
     expect(progress).toHaveBeenCalledWith(
       expect.objectContaining({ presentationIssues: [failed.reason] }),
     );
@@ -302,14 +303,15 @@ it("uses only the previous accepted scene as a separately labeled continuity ref
     bodies.push(body);
     if (body.generationConfig.imageConfig) {
       generation++;
-      const bytes = generated[generation === 1 ? 0 : generation === 4 ? 2 : 1];
+      // Scene order: first (1 try), second (1 try + 2 corrections, all rejected), third (1 try).
+      const bytes = generated[generation === 1 ? 0 : generation === 5 ? 2 : 1];
       return response([{ inlineData: { mimeType: "image/png", data: bytes?.toString("base64") } }]);
     }
     review++;
     return response([
       {
         text: JSON.stringify(
-          review === 2 || review === 3
+          review === 2 || review === 3 || review === 4
             ? {
                 ...checks,
                 continuityConsistent: false,
@@ -349,7 +351,7 @@ it("uses only the previous accepted scene as a separately labeled continuity ref
   const generationBodies = bodies.filter((b) => b.generationConfig.imageConfig);
   const firstParts = generationBodies[0]?.contents[0]?.parts ?? [];
   expect(firstParts.filter((p) => p.inlineData)).toHaveLength(0);
-  const lastParts = generationBodies[3]?.contents[0]?.parts ?? [];
+  const lastParts = generationBodies[4]?.contents[0]?.parts ?? [];
   expect(lastParts.filter((p) => p.inlineData).map((p) => p.inlineData?.data)).toEqual([
     result[0]?.bytes.toString("base64"),
   ]);
@@ -473,7 +475,7 @@ it.each([
       checkpoints: { get: () => undefined, set: async () => {}, progress },
     }),
   ).rejects.toThrow("STUDIO_IMAGE_REVIEW_REQUIRED");
-  expect(fetcher).toHaveBeenCalledTimes(4);
+  expect(fetcher).toHaveBeenCalledTimes(6);
   expect(progress).toHaveBeenCalledWith(
     expect.objectContaining({ presentationIssues: [failed.reason] }),
   );
