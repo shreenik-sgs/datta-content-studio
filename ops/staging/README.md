@@ -28,12 +28,17 @@ use the same operator password, rate limit and role authorization.
 
 ## Separate GBADPT and DP installations
 
-The existing single-instance stack belongs to GBADPT. Its hostname replaces
-`studio-staging.sgsdattasannidhi.org`; the old DNS record is removed, with no
-redirect. Existing database, media, accounts and resource identifiers remain in
-place. The launch script accepts only GBADPT (and the legacy hostname for rollback),
-requires the configured origin to match, and refuses DP. Resource names, credentials,
-storage, backup destinations and service identifiers must be isolated for DP.
+The original single-instance stack (`DattaContentStudio-staging`) belongs to GBADPT.
+Its hostname replaces `studio-staging.sgsdattasannidhi.org`; the old DNS record is
+removed, with no redirect. Existing database, media, accounts and resource identifiers
+remain in place. `foundation.json` takes an `Identity` parameter: `gbadpt` (default)
+keeps every existing staging resource name, so updating the GBADPT stack is a tag-only
+change; `dp` deploys `DattaContentStudio-dp` with its own VPC (10.75.0.0/16), host,
+retained volume, bucket `datta-content-studio-dp-…`, parameter path
+`/datta-content-studio/dp/`, image repository `datta-content-studio-dp` and DNS record;
+nothing in DP's configuration, role or storage refers to GBADPT. The launch script and `runtime-database.py` accept a hostname only together
+with its own `STUDIO_IDENTITY`, bucket and database names. Resource names,
+credentials, storage, backup destinations and service identifiers stay isolated.
 
 - GBADPT: `STUDIO_IDENTITY=gbadpt`, origin `https://gbadpt.sgsdattasannidhi.org`.
   Owns the Vishnu Purana masters and 95 Shorts. The owner currently keeps these

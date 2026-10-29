@@ -45,8 +45,27 @@ it("backs up the correct isolated database for both TEST and explicitly enabled 
         ),
       }),
     ).toBe("datta_content_studio_staging");
+    const dp = {
+      STUDIO_IDENTITY: "dp",
+      DISTRIBUTION_APP_ORIGIN: "https://dp.sgsdattasannidhi.org",
+      DISTRIBUTION_HUB_STAGE: "TEST",
+      STUDIO_PUBLISHING_ENABLED: "false",
+      DISTRIBUTION_DATABASE_URL: "postgres://user:synthetic@127.0.0.1:5432/datta_content_studio_dp",
+      DISTRIBUTION_S3_BUCKET: "datta-content-studio-dp-510724490093-ap-south-1",
+      DISTRIBUTION_S3_PREFIX: "test/",
+    };
+    expect(await run(dp)).toBe("datta_content_studio_dp");
+    // DP may never point at GBADPT's bucket or database, nor GBADPT at DP's.
+    for (const override of [
+      { DISTRIBUTION_S3_BUCKET: runtime.DISTRIBUTION_S3_BUCKET },
+      { DISTRIBUTION_DATABASE_URL: runtime.DISTRIBUTION_DATABASE_URL },
+      { STUDIO_IDENTITY: "gbadpt" },
+      { DISTRIBUTION_APP_ORIGIN: runtime.DISTRIBUTION_APP_ORIGIN },
+    ])
+      await expect(run({ ...dp, ...override })).rejects.toThrow("Studio runtime validation failed");
     for (const override of [
       { STUDIO_IDENTITY: "dp" },
+      { DISTRIBUTION_S3_BUCKET: dp.DISTRIBUTION_S3_BUCKET },
       { DISTRIBUTION_APP_ORIGIN: "https://sgsdattasannidhi.org" },
       {
         DISTRIBUTION_DATABASE_URL: runtime.DISTRIBUTION_DATABASE_URL.replace(

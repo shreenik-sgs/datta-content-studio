@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Isolated Datta Media Studio staging. Never targets Sannidhi ECS, databases or media. Persistent data retained on deletion.",
+  "Description": "Isolated Datta Media Studio installation (GBADPT staging or DP). Never targets Sannidhi ECS, databases or media. Persistent data retained on deletion.",
   "Parameters": {
     "Ami": {
       "Type": "AWS::EC2::Image::Id",
@@ -13,13 +13,34 @@
       "Type": "String",
       "AllowedPattern": "[a-z0-9.-]+",
       "Default": "gbadpt.sgsdattasannidhi.org"
+    },
+    "Identity": {
+      "Type": "String",
+      "Default": "gbadpt",
+      "AllowedValues": ["gbadpt", "dp"],
+      "Description": "Which isolated installation this stack is. gbadpt keeps every existing staging resource name; dp gets its own VPC, host, volume, bucket, image repository, parameter path and DNS record and shares nothing with GBADPT."
     }
   },
   "Resources": {
     "Vpc": {
       "Type": "AWS::EC2::VPC",
       "Properties": {
-        "CidrBlock": "10.74.0.0/16",
+        "CidrBlock": {
+          "Fn::Sub": [
+            "${Prefix}.0.0/16",
+            {
+              "Prefix": {
+                "Fn::FindInMap": [
+                  "Installation",
+                  {
+                    "Ref": "Identity"
+                  },
+                  "CidrPrefix"
+                ]
+              }
+            }
+          ]
+        },
         "EnableDnsHostnames": true,
         "EnableDnsSupport": true,
         "Tags": [
@@ -29,7 +50,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ]
       }
@@ -44,7 +73,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ]
       }
@@ -66,9 +103,37 @@
         "VpcId": {
           "Ref": "Vpc"
         },
-        "CidrBlock": "10.74.1.0/24",
+        "CidrBlock": {
+          "Fn::Sub": [
+            "${Prefix}.1.0/24",
+            {
+              "Prefix": {
+                "Fn::FindInMap": [
+                  "Installation",
+                  {
+                    "Ref": "Identity"
+                  },
+                  "CidrPrefix"
+                ]
+              }
+            }
+          ]
+        },
         "AvailabilityZone": {
-          "Fn::Sub": "${AWS::Region}a"
+          "Fn::Sub": [
+            "${AWS::Region}${Zone}",
+            {
+              "Zone": {
+                "Fn::FindInMap": [
+                  "Installation",
+                  {
+                    "Ref": "Identity"
+                  },
+                  "Zone"
+                ]
+              }
+            }
+          ]
         },
         "MapPublicIpOnLaunch": true,
         "Tags": [
@@ -78,7 +143,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ]
       }
@@ -96,7 +169,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ]
       }
@@ -147,7 +228,22 @@
         "VpcId": {
           "Ref": "Vpc"
         },
-        "GroupDescription": "Content Studio staging HTTPS only; administration through SSM",
+        "GroupDescription": {
+          "Fn::Sub": [
+            "Content Studio ${Suffix} HTTPS only; administration through SSM",
+            {
+              "Suffix": {
+                "Fn::FindInMap": [
+                  "Installation",
+                  {
+                    "Ref": "Identity"
+                  },
+                  "Suffix"
+                ]
+              }
+            }
+          ]
+        },
         "SecurityGroupIngress": [
           {
             "IpProtocol": "tcp",
@@ -169,7 +265,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ]
       }
@@ -178,7 +282,20 @@
       "Type": "AWS::S3::Bucket",
       "Properties": {
         "BucketName": {
-          "Fn::Sub": "datta-content-studio-staging-${AWS::AccountId}-${AWS::Region}"
+          "Fn::Sub": [
+            "datta-content-studio-${Suffix}-${AWS::AccountId}-${AWS::Region}",
+            {
+              "Suffix": {
+                "Fn::FindInMap": [
+                  "Installation",
+                  {
+                    "Ref": "Identity"
+                  },
+                  "Suffix"
+                ]
+              }
+            }
+          ]
         },
         "VersioningConfiguration": {
           "Status": "Enabled"
@@ -223,7 +340,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ],
         "AccelerateConfiguration": {
@@ -267,7 +392,22 @@
     "Images": {
       "Type": "AWS::ECR::Repository",
       "Properties": {
-        "RepositoryName": "datta-content-studio-staging",
+        "RepositoryName": {
+          "Fn::Sub": [
+            "datta-content-studio-${Suffix}",
+            {
+              "Suffix": {
+                "Fn::FindInMap": [
+                  "Installation",
+                  {
+                    "Ref": "Identity"
+                  },
+                  "Suffix"
+                ]
+              }
+            }
+          ]
+        },
         "ImageTagMutability": "IMMUTABLE",
         "ImageScanningConfiguration": {
           "ScanOnPush": true
@@ -282,7 +422,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ]
       },
@@ -311,7 +459,22 @@
         ],
         "Policies": [
           {
-            "PolicyName": "ContentStudioStagingOnly",
+            "PolicyName": {
+              "Fn::Sub": [
+                "ContentStudio${Suffix}Only",
+                {
+                  "Suffix": {
+                    "Fn::FindInMap": [
+                      "Installation",
+                      {
+                        "Ref": "Identity"
+                      },
+                      "Suffix"
+                    ]
+                  }
+                }
+              ]
+            },
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -359,7 +522,20 @@
                   "Effect": "Allow",
                   "Action": ["ssm:GetParameter"],
                   "Resource": {
-                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/datta-content-studio/staging/*"
+                    "Fn::Sub": [
+                      "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/datta-content-studio/${Suffix}/*",
+                      {
+                        "Suffix": {
+                          "Fn::FindInMap": [
+                            "Installation",
+                            {
+                              "Ref": "Identity"
+                            },
+                            "Suffix"
+                          ]
+                        }
+                      }
+                    ]
                   }
                 },
                 {
@@ -393,7 +569,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ]
       }
@@ -451,11 +635,34 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           },
           {
             "Key": "Name",
-            "Value": "datta-content-studio-staging"
+            "Value": {
+              "Fn::Sub": [
+                "datta-content-studio-${Suffix}",
+                {
+                  "Suffix": {
+                    "Fn::FindInMap": [
+                      "Installation",
+                      {
+                        "Ref": "Identity"
+                      },
+                      "Suffix"
+                    ]
+                  }
+                }
+              ]
+            }
           }
         ]
       },
@@ -477,11 +684,34 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           },
           {
             "Key": "Name",
-            "Value": "datta-content-studio-staging-data"
+            "Value": {
+              "Fn::Sub": [
+                "datta-content-studio-${Suffix}-data",
+                {
+                  "Suffix": {
+                    "Fn::FindInMap": [
+                      "Installation",
+                      {
+                        "Ref": "Identity"
+                      },
+                      "Suffix"
+                    ]
+                  }
+                }
+              ]
+            }
           }
         ]
       },
@@ -511,7 +741,15 @@
           },
           {
             "Key": "Environment",
-            "Value": "staging"
+            "Value": {
+              "Fn::FindInMap": [
+                "Installation",
+                {
+                  "Ref": "Identity"
+                },
+                "Environment"
+              ]
+            }
           }
         ]
       },
@@ -549,7 +787,22 @@
     "HostFailureAlarm": {
       "Type": "AWS::CloudWatch::Alarm",
       "Properties": {
-        "AlarmDescription": "Content Studio staging host status check failed",
+        "AlarmDescription": {
+          "Fn::Sub": [
+            "Content Studio ${Suffix} host status check failed",
+            {
+              "Suffix": {
+                "Fn::FindInMap": [
+                  "Installation",
+                  {
+                    "Ref": "Identity"
+                  },
+                  "Suffix"
+                ]
+              }
+            }
+          ]
+        },
         "Namespace": "AWS/EC2",
         "MetricName": "StatusCheckFailed",
         "Dimensions": [
@@ -593,6 +846,22 @@
     "Origin": {
       "Value": {
         "Fn::Sub": "https://${Hostname}"
+      }
+    }
+  },
+  "Mappings": {
+    "Installation": {
+      "gbadpt": {
+        "Suffix": "staging",
+        "Environment": "staging",
+        "CidrPrefix": "10.74",
+        "Zone": "a"
+      },
+      "dp": {
+        "Suffix": "dp",
+        "Environment": "dp",
+        "CidrPrefix": "10.75",
+        "Zone": "b"
       }
     }
   }

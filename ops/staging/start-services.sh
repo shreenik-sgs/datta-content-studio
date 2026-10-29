@@ -5,16 +5,17 @@ umask 077
 : "${STUDIO_IMAGE_REPOSITORY:?Required Studio ECR repository}"
 : "${STUDIO_RELEASE:?Required immutable release tag}"
 : "${STUDIO_HOSTNAME:?Required staging hostname}"
-case "$STUDIO_IMAGE_REPOSITORY" in */datta-content-studio-staging) ;; *) exit 1 ;; esac
-# This deployment owns GBADPT's database/media. DP must use a separate stack.
-case "$STUDIO_HOSTNAME" in gbadpt.sgsdattasannidhi.org|studio-staging.sgsdattasannidhi.org) ;; *) exit 1 ;; esac
+case "$STUDIO_IMAGE_REPOSITORY" in */datta-content-studio-staging|*/datta-content-studio-dp) ;; *) exit 1 ;; esac
+# Each hostname is its own stack, database and media; the runtime file must say which.
+case "$STUDIO_HOSTNAME" in gbadpt.sgsdattasannidhi.org|studio-staging.sgsdattasannidhi.org|dp.sgsdattasannidhi.org) ;; *) exit 1 ;; esac
 config=/srv/content-studio/config
 test -s "$config/runtime.env"
 python3 "$(dirname "$0")/runtime-database.py" "$config/runtime.env" > /dev/null
 grep -qx "DISTRIBUTION_APP_ORIGIN=https://$STUDIO_HOSTNAME" "$config/runtime.env"
-if [ "$STUDIO_HOSTNAME" = gbadpt.sgsdattasannidhi.org ]; then
-  grep -qx 'STUDIO_IDENTITY=gbadpt' "$config/runtime.env"
-fi
+case "$STUDIO_HOSTNAME" in
+  gbadpt.sgsdattasannidhi.org) grep -qx 'STUDIO_IDENTITY=gbadpt' "$config/runtime.env" ;;
+  dp.sgsdattasannidhi.org) grep -qx 'STUDIO_IDENTITY=dp' "$config/runtime.env" ;;
+esac
 curl --fail --silent http://127.0.0.1:3070/distribution/api/healthz > /dev/null && old_web=true || old_web=false
 # A retained pre-release database backup is required before replacing the web.
 if $old_web; then /opt/content-studio/backup.sh; fi
